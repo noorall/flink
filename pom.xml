@@ -2335,7 +2335,7 @@ under the License.
 				<plugin>
 					<groupId>com.github.siom79.japicmp</groupId>
 					<artifactId>japicmp-maven-plugin</artifactId>
-					<version>0.17.1</version>
+					<version>0.18.5</version>
 					<configuration>
 						<oldVersion>
 							<dependency>
@@ -2365,6 +2365,38 @@ under the License.
 								<!-- MARKER: start exclusions; these will be wiped by tools/releasing/update_japicmp_configuration.sh -->
 								<exclude>org.apache.flink.api.common.functions.Function</exclude>
 								<exclude>org.apache.flink.api.java.functions.KeySelector</exclude>
+								<!-- The following exclusions are due to classes being relocated from the flink-streaming-java
+									module to the flink-runtime module. -->
+								<exclude>org.apache.flink.streaming.api.checkpoint.CheckpointedFunction</exclude>
+								<exclude>org.apache.flink.streaming.api.CheckpointingMode</exclude>
+								<exclude>org.apache.flink.streaming.api.datastream.AllWindowedStream</exclude>
+								<exclude>org.apache.flink.streaming.api.datastream.CoGroupedStreams</exclude>
+								<exclude>org.apache.flink.streaming.api.datastream.ConnectedStreams</exclude>
+								<exclude>org.apache.flink.streaming.api.datastream.DataStream</exclude>
+								<exclude>org.apache.flink.streaming.api.datastream.DataStreamSink</exclude>
+								<exclude>org.apache.flink.streaming.api.datastream.DataStreamSource</exclude>
+								<exclude>org.apache.flink.streaming.api.datastream.IterativeStream</exclude>
+								<exclude>org.apache.flink.streaming.api.datastream.JoinedStreams</exclude>
+								<exclude>org.apache.flink.streaming.api.datastream.KeyedStream</exclude>
+								<exclude>org.apache.flink.streaming.api.datastream.SideOutputDataStream</exclude>
+								<exclude>org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator</exclude>
+								<exclude>org.apache.flink.streaming.api.datastream.WindowedStream</exclude>
+								<exclude>org.apache.flink.streaming.api.environment.CheckpointConfig</exclude>
+								<exclude>org.apache.flink.streaming.api.environment.LocalStreamEnvironment</exclude>
+								<exclude>org.apache.flink.streaming.api.environment.RemoteStreamEnvironment</exclude>
+								<exclude>org.apache.flink.streaming.api.environment.StreamExecutionEnvironment</exclude>
+								<exclude>org.apache.flink.streaming.api.functions.co.CoFlatMapFunction</exclude>
+								<exclude>org.apache.flink.streaming.api.functions.co.CoMapFunction</exclude>
+								<exclude>org.apache.flink.streaming.api.functions.sink.RichSinkFunction</exclude>
+								<exclude>org.apache.flink.streaming.api.functions.sink.SinkFunction</exclude>
+								<exclude>org.apache.flink.streaming.api.functions.source.ParallelSourceFunction</exclude>
+								<exclude>org.apache.flink.streaming.api.functions.source.RichParallelSourceFunction</exclude>
+								<exclude>org.apache.flink.streaming.api.functions.source.RichSourceFunction</exclude>
+								<exclude>org.apache.flink.streaming.api.functions.source.ParallelSourceFunction</exclude>
+								<exclude>org.apache.flink.streaming.api.functions.source.SourceFunction</exclude>
+								<exclude>org.apache.flink.streaming.api.functions.windowing.AllWindowFunction</exclude>
+								<exclude>org.apache.flink.streaming.api.functions.windowing.WindowFunction</exclude>
+								<exclude>org.apache.flink.streaming.api.windowing.time.Time</exclude>
 								<!-- MARKER: end exclusions -->
 							</excludes>
 							<accessModifier>public</accessModifier>
