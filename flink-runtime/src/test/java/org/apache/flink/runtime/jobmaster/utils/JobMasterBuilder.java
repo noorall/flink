@@ -49,6 +49,7 @@ import org.apache.flink.runtime.rpc.RpcService;
 import org.apache.flink.runtime.scheduler.ExecutionGraphInfo;
 import org.apache.flink.runtime.shuffle.ShuffleMaster;
 import org.apache.flink.runtime.shuffle.ShuffleTestUtils;
+import org.apache.flink.runtime.util.LogicalGraph;
 
 import java.util.Collection;
 import java.util.Collections;
@@ -197,7 +198,7 @@ public class JobMasterBuilder {
                 jobMasterId,
                 jobMasterConfiguration,
                 jmResourceId,
-                jobGraph,
+                LogicalGraph.createLogicalGraph(jobGraph),
                 highAvailabilityServices,
                 slotPoolServiceSchedulerFactory != null
                         ? slotPoolServiceSchedulerFactory

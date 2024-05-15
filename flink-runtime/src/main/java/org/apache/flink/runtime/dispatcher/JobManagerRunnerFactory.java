@@ -18,6 +18,7 @@
 
 package org.apache.flink.runtime.dispatcher;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.core.failure.FailureEnricher;
 import org.apache.flink.runtime.heartbeat.HeartbeatServices;
@@ -28,15 +29,15 @@ import org.apache.flink.runtime.jobmaster.JobManagerSharedServices;
 import org.apache.flink.runtime.jobmaster.factories.JobManagerJobMetricGroupFactory;
 import org.apache.flink.runtime.rpc.FatalErrorHandler;
 import org.apache.flink.runtime.rpc.RpcService;
+import org.apache.flink.runtime.util.LogicalGraph;
 
 import java.util.Collection;
 
 /** Factory for a {@link JobManagerRunner}. */
-@FunctionalInterface
 public interface JobManagerRunnerFactory {
 
-    JobManagerRunner createJobManagerRunner(
-            JobGraph jobGraph,
+    default JobManagerRunner createJobManagerRunner(
+            LogicalGraph graph,
             Configuration configuration,
             RpcService rpcService,
             HighAvailabilityServices highAvailabilityServices,
@@ -46,5 +47,23 @@ public interface JobManagerRunnerFactory {
             FatalErrorHandler fatalErrorHandler,
             Collection<FailureEnricher> failureEnrichers,
             long initializationTimestamp)
-            throws Exception;
+            throws Exception {
+        throw new UnsupportedOperationException();
+    }
+
+    @VisibleForTesting
+    default JobManagerRunner createJobManagerRunner(
+            JobGraph graph,
+            Configuration configuration,
+            RpcService rpcService,
+            HighAvailabilityServices highAvailabilityServices,
+            HeartbeatServices heartbeatServices,
+            JobManagerSharedServices jobManagerServices,
+            JobManagerJobMetricGroupFactory jobManagerJobMetricGroupFactory,
+            FatalErrorHandler fatalErrorHandler,
+            Collection<FailureEnricher> failureEnrichers,
+            long initializationTimestamp)
+            throws Exception {
+        throw new UnsupportedOperationException();
+    }
 }

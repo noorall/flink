@@ -19,11 +19,15 @@
 package org.apache.flink.runtime.client;
 
 import org.apache.flink.api.common.JobID;
+import org.apache.flink.api.common.cache.DistributedCache;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.core.fs.Path;
 import org.apache.flink.runtime.blob.BlobClient;
 import org.apache.flink.runtime.blob.PermanentBlobKey;
 import org.apache.flink.runtime.jobgraph.JobGraph;
+import org.apache.flink.runtime.jobgraph.JobGraphUtils;
+import org.apache.flink.runtime.util.LogicalGraph;
+import org.apache.flink.streaming.api.graph.StreamGraph;
 import org.apache.flink.util.FlinkException;
 import org.apache.flink.util.function.SupplierWithException;
 
@@ -31,6 +35,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -42,24 +47,32 @@ public enum ClientUtils {
      * Extracts all files required for the execution from the given {@link JobGraph} and uploads
      * them using the {@link BlobClient} from the given {@link Supplier}.
      *
-     * @param jobGraph jobgraph requiring files
+     * @param graph jobgraph or streamgraph requiring files
      * @param clientSupplier supplier of blob client to upload files with
      * @throws FlinkException if the upload fails
      */
     public static void extractAndUploadJobGraphFiles(
-            JobGraph jobGraph, SupplierWithException<BlobClient, IOException> clientSupplier)
+            LogicalGraph graph, SupplierWithException<BlobClient, IOException> clientSupplier)
             throws FlinkException {
-        List<Path> userJars = jobGraph.getUserJars();
-        Collection<Tuple2<String, Path>> userArtifacts =
-                jobGraph.getUserArtifacts().entrySet().stream()
-                        .map(
-                                entry ->
-                                        Tuple2.of(
-                                                entry.getKey(),
-                                                new Path(entry.getValue().filePath)))
-                        .collect(Collectors.toList());
+        if (graph.isJobGraph()) {
+            JobGraph jobGraph = graph.getJobGraph();
+            List<Path> userJars = jobGraph.getUserJars();
+            Collection<Tuple2<String, Path>> userArtifacts =
+                    jobGraph.getUserArtifacts().entrySet().stream()
+                            .map(
+                                    entry ->
+                                            Tuple2.of(
+                                                    entry.getKey(),
+                                                    new Path(entry.getValue().filePath)))
+                            .collect(Collectors.toList());
 
-        uploadJobGraphFiles(jobGraph, userJars, userArtifacts, clientSupplier);
+            uploadJobGraphFiles(jobGraph, userJars, userArtifacts, clientSupplier);
+        } else {
+            StreamGraph streamGraph = graph.getStreamGraph();
+            List<Path> userJars = streamGraph.getUserJars();
+
+            uploadStreamGraphFiles(streamGraph, userJars, clientSupplier);
+        }
     }
 
     /**
@@ -89,6 +102,38 @@ public enum ClientUtils {
         jobGraph.writeUserArtifactEntriesToConfiguration();
     }
 
+    public static void uploadStreamGraphFiles(
+            StreamGraph streamGraph,
+            Collection<Path> userJars,
+            SupplierWithException<BlobClient, IOException> clientSupplier)
+            throws FlinkException {
+
+        final Map<String, DistributedCache.DistributedCacheEntry> distributedCacheEntries =
+                JobGraphUtils.prepareUserArtifactEntries(
+                        streamGraph.getUserArtifacts().stream()
+                                .collect(Collectors.toMap(e -> e.f0, e -> e.f1)),
+                        streamGraph.getJobId());
+
+        List<Tuple2<String, Path>> userArtifacts =
+                distributedCacheEntries.entrySet().stream()
+                        .map(
+                                entry ->
+                                        Tuple2.of(
+                                                entry.getKey(),
+                                                new Path(entry.getValue().filePath)))
+                        .collect(Collectors.toList());
+
+        if (!userJars.isEmpty() || !userArtifacts.isEmpty()) {
+            try (BlobClient client = clientSupplier.get()) {
+                uploadAndSetUserJars(streamGraph, userJars, client);
+                uploadAndSetUserArtifacts(streamGraph, userArtifacts, client);
+            } catch (IOException ioe) {
+                throw new FlinkException("Could not upload job files.", ioe);
+            }
+        }
+        streamGraph.writeUserArtifactEntriesToConfiguration();
+    }
+
     /**
      * Uploads the given user jars using the given {@link BlobClient}, and sets the appropriate
      * blobkeys on the given {@link JobGraph}.
@@ -106,6 +151,14 @@ public enum ClientUtils {
         setUserJarBlobKeys(blobKeys, jobGraph);
     }
 
+    private static void uploadAndSetUserJars(
+            StreamGraph streamGraph, Collection<Path> userJars, BlobClient blobClient)
+            throws IOException {
+        Collection<PermanentBlobKey> blobKeys =
+                uploadUserJars(streamGraph.getJobId(), userJars, blobClient);
+        setUserJarBlobKeys(blobKeys, streamGraph);
+    }
+
     private static Collection<PermanentBlobKey> uploadUserJars(
             JobID jobId, Collection<Path> userJars, BlobClient blobClient) throws IOException {
         Collection<PermanentBlobKey> blobKeys = new ArrayList<>(userJars.size());
@@ -119,6 +172,11 @@ public enum ClientUtils {
     private static void setUserJarBlobKeys(
             Collection<PermanentBlobKey> blobKeys, JobGraph jobGraph) {
         blobKeys.forEach(jobGraph::addUserJarBlobKey);
+    }
+
+    private static void setUserJarBlobKeys(
+            Collection<PermanentBlobKey> blobKeys, StreamGraph streamGraph) {
+        blobKeys.forEach(streamGraph::addUserJarBlobKey);
     }
 
     /**
@@ -138,6 +196,16 @@ public enum ClientUtils {
         Collection<Tuple2<String, PermanentBlobKey>> blobKeys =
                 uploadUserArtifacts(jobGraph.getJobID(), artifactPaths, blobClient);
         setUserArtifactBlobKeys(jobGraph, blobKeys);
+    }
+
+    private static void uploadAndSetUserArtifacts(
+            StreamGraph streamGraph,
+            Collection<Tuple2<String, Path>> artifactPaths,
+            BlobClient blobClient)
+            throws IOException {
+        Collection<Tuple2<String, PermanentBlobKey>> blobKeys =
+                uploadUserArtifacts(streamGraph.getJobId(), artifactPaths, blobClient);
+        setUserArtifactBlobKeys(streamGraph, blobKeys);
     }
 
     private static Collection<Tuple2<String, PermanentBlobKey>> uploadUserArtifacts(
@@ -160,6 +228,14 @@ public enum ClientUtils {
             throws IOException {
         for (Tuple2<String, PermanentBlobKey> blobKey : blobKeys) {
             jobGraph.setUserArtifactBlobKey(blobKey.f0, blobKey.f1);
+        }
+    }
+
+    private static void setUserArtifactBlobKeys(
+            StreamGraph streamGraph, Collection<Tuple2<String, PermanentBlobKey>> blobKeys)
+            throws IOException {
+        for (Tuple2<String, PermanentBlobKey> blobKey : blobKeys) {
+            streamGraph.setUserArtifactBlobKey(blobKey.f0, blobKey.f1);
         }
     }
 }

@@ -28,6 +28,7 @@ import org.apache.flink.runtime.messages.Acknowledge;
 import org.apache.flink.runtime.rpc.FencedRpcGateway;
 import org.apache.flink.runtime.rpc.RpcTimeout;
 import org.apache.flink.runtime.webmonitor.RestfulGateway;
+import org.apache.flink.streaming.api.graph.StreamGraph;
 
 import java.util.Collection;
 import java.util.concurrent.CompletableFuture;
@@ -43,6 +44,11 @@ public interface DispatcherGateway extends FencedRpcGateway<DispatcherId>, Restf
      * @return A future acknowledge if the submission succeeded
      */
     CompletableFuture<Acknowledge> submitJob(JobGraph jobGraph, @RpcTimeout Time timeout);
+
+    default CompletableFuture<Acknowledge> submitJob(
+            StreamGraph streamGraph, @RpcTimeout Time timeout) {
+        throw new UnsupportedOperationException();
+    };
 
     CompletableFuture<Acknowledge> submitFailedJob(
             JobID jobId, String jobName, Throwable exception);

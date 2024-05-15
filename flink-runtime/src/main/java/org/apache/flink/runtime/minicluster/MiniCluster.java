@@ -96,6 +96,7 @@ import org.apache.flink.runtime.security.token.DelegationTokenManager;
 import org.apache.flink.runtime.security.token.DelegationTokenReceiverRepository;
 import org.apache.flink.runtime.taskexecutor.TaskExecutor;
 import org.apache.flink.runtime.taskexecutor.TaskManagerRunner;
+import org.apache.flink.runtime.util.LogicalGraph;
 import org.apache.flink.runtime.webmonitor.retriever.LeaderRetriever;
 import org.apache.flink.runtime.webmonitor.retriever.MetricQueryServiceRetriever;
 import org.apache.flink.runtime.webmonitor.retriever.impl.RpcGatewayRetriever;
@@ -1134,7 +1135,7 @@ public class MiniCluster implements AutoCloseableAsync {
                 blobServerAddress -> {
                     try {
                         ClientUtils.extractAndUploadJobGraphFiles(
-                                job,
+                                LogicalGraph.createLogicalGraph(job),
                                 () ->
                                         new BlobClient(
                                                 blobServerAddress,
