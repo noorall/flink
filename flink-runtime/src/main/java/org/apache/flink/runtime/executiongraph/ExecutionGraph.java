@@ -40,6 +40,7 @@ import org.apache.flink.runtime.jobgraph.tasks.CheckpointCoordinatorConfiguratio
 import org.apache.flink.runtime.metrics.groups.JobManagerJobMetricGroup;
 import org.apache.flink.runtime.query.KvStateLocationRegistry;
 import org.apache.flink.runtime.scheduler.InternalFailuresListener;
+import org.apache.flink.runtime.scheduler.VertexParallelismStore;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingTopology;
 import org.apache.flink.runtime.state.CheckpointStorage;
 import org.apache.flink.runtime.state.StateBackend;
@@ -227,6 +228,14 @@ public interface ExecutionGraph extends AccessExecutionGraph {
                 VertexInputInfoComputationUtils.computeVertexInputInfos(
                         ejv, getAllIntermediateResults()::get));
     }
+
+    void onAddNewJobVertices(
+            List<JobVertex> topologicallySorted,
+            JobManagerJobMetricGroup jobManagerJobMetricGroup,
+            VertexParallelismStore newVerticesParallelismStore)
+            throws JobException;
+
+    void notifyNoMoreJobVerticesToBeAdded();
 
     /**
      * Initialize the given execution job vertex, mainly includes creating execution vertices

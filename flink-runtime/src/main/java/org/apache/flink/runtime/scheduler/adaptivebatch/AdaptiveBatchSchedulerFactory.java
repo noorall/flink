@@ -26,6 +26,7 @@ import org.apache.flink.api.common.ExecutionMode;
 import org.apache.flink.api.common.time.Time;
 import org.apache.flink.configuration.BatchExecutionOptions;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.DeploymentOptions;
 import org.apache.flink.configuration.ExecutionOptions;
 import org.apache.flink.configuration.JobManagerOptions;
 import org.apache.flink.configuration.JobManagerOptions.HybridPartitionDataConsumeConstraint;
@@ -46,9 +47,6 @@ import org.apache.flink.runtime.jobgraph.IntermediateDataSet;
 import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.jobgraph.JobType;
 import org.apache.flink.runtime.jobgraph.JobVertex;
-import org.apache.flink.runtime.jobgraph.JobVertexID;
-import org.apache.flink.runtime.jobgraph.forwardgroup.ForwardGroup;
-import org.apache.flink.runtime.jobgraph.forwardgroup.ForwardGroupComputeUtil;
 import org.apache.flink.runtime.jobmaster.ExecutionDeploymentTracker;
 import org.apache.flink.runtime.jobmaster.slotpool.PhysicalSlotProvider;
 import org.apache.flink.runtime.jobmaster.slotpool.PhysicalSlotProviderImpl;
@@ -73,7 +71,11 @@ import org.apache.flink.runtime.scheduler.strategy.PartialFinishedInputConsumabl
 import org.apache.flink.runtime.scheduler.strategy.SchedulingStrategyFactory;
 import org.apache.flink.runtime.scheduler.strategy.VertexwiseSchedulingStrategy;
 import org.apache.flink.runtime.shuffle.ShuffleMaster;
+import org.apache.flink.runtime.util.LogicalGraph;
 import org.apache.flink.runtime.util.SlotSelectionStrategyUtils;
+import org.apache.flink.streaming.api.graph.StreamEdge;
+import org.apache.flink.streaming.api.graph.StreamNode;
+import org.apache.flink.streaming.api.transformations.StreamExchangeMode;
 import org.apache.flink.util.Preconditions;
 import org.apache.flink.util.concurrent.ScheduledExecutor;
 import org.apache.flink.util.concurrent.ScheduledExecutorServiceAdapter;
@@ -82,7 +84,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
-import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 
@@ -98,7 +99,7 @@ public class AdaptiveBatchSchedulerFactory implements SchedulerNGFactory {
     @Override
     public SchedulerNG createInstance(
             Logger log,
-            JobGraph jobGraph,
+            LogicalGraph logicalGraph,
             Executor ioExecutor,
             Configuration jobMasterConfiguration,
             SlotPoolService slotPoolService,
@@ -131,25 +132,24 @@ public class AdaptiveBatchSchedulerFactory implements SchedulerNGFactory {
         final ExecutionSlotAllocatorFactory allocatorFactory =
                 createExecutionSlotAllocatorFactory(jobMasterConfiguration, slotPool);
 
-        ExecutionConfig executionConfig =
-                jobGraph.getSerializedExecutionConfig().deserializeValue(userCodeLoader);
+        ExecutionConfig executionConfig = logicalGraph.getExecutionConfig(userCodeLoader);
 
         final RestartBackoffTimeStrategy restartBackoffTimeStrategy =
                 RestartBackoffTimeStrategyFactoryLoader.createRestartBackoffTimeStrategyFactory(
                                 executionConfig.getRestartStrategy(),
-                                jobGraph.getJobConfiguration(),
+                                logicalGraph.getJobConfiguration(),
                                 jobMasterConfiguration,
-                                jobGraph.isCheckpointingEnabled())
+                                logicalGraph.isCheckpointingEnabled())
                         .create();
         log.info(
                 "Using restart back off time strategy {} for {} ({}).",
                 restartBackoffTimeStrategy,
-                jobGraph.getName(),
-                jobGraph.getJobID());
+                logicalGraph.getJobName(),
+                logicalGraph.getJobId());
 
         return createScheduler(
                 log,
-                jobGraph,
+                logicalGraph,
                 executionConfig,
                 ioExecutor,
                 jobMasterConfiguration,
@@ -179,7 +179,7 @@ public class AdaptiveBatchSchedulerFactory implements SchedulerNGFactory {
     @VisibleForTesting
     public static AdaptiveBatchScheduler createScheduler(
             Logger log,
-            JobGraph jobGraph,
+            LogicalGraph logicalGraph,
             ExecutionConfig executionConfig,
             Executor ioExecutor,
             Configuration jobMasterConfiguration,
@@ -205,9 +205,9 @@ public class AdaptiveBatchSchedulerFactory implements SchedulerNGFactory {
             throws Exception {
 
         checkState(
-                jobGraph.getJobType() == JobType.BATCH,
+                logicalGraph.getJobType() == JobType.BATCH,
                 "Adaptive batch scheduler only supports batch jobs");
-        checkAllExchangesAreSupported(jobGraph);
+        checkAllExchangesAreSupported(logicalGraph);
 
         final boolean enableSpeculativeExecution =
                 jobMasterConfiguration.get(BatchExecutionOptions.SPECULATIVE_ENABLED);
@@ -239,13 +239,26 @@ public class AdaptiveBatchSchedulerFactory implements SchedulerNGFactory {
         int defaultMaxParallelism =
                 getDefaultMaxParallelism(jobMasterConfiguration, executionConfig);
 
-        final Map<JobVertexID, ForwardGroup> forwardGroupsByJobVertexId =
-                ForwardGroupComputeUtil.computeForwardGroupsAndCheckParallelism(
-                        jobGraph.getVerticesSortedTopologicallyFromSources());
+        AdaptiveExecutionHandler handler;
+        if (BatchExecutionOptions.enableAdaptiveExecution(jobMasterConfiguration)) {
+            checkState(jobMasterConfiguration.get(DeploymentOptions.SUBMIT_STREAM_GRAPH_ENABLED));
+
+            handler =
+                    new DefaultAdaptiveExecutionHandler(
+                            logicalGraph.getStreamGraph(), userCodeLoader, jobMasterConfiguration);
+        } else {
+            JobGraph jobGraph =
+                    logicalGraph.isJobGraph()
+                            ? logicalGraph.getJobGraph()
+                            : logicalGraph
+                                    .getStreamGraph()
+                                    .getJobGraphAndAttachUserArtifacts(userCodeLoader);
+            handler = new DummyAdaptiveExecutionHandler(jobGraph);
+        }
 
         return new AdaptiveBatchScheduler(
                 log,
-                jobGraph,
+                handler,
                 ioExecutor,
                 jobMasterConfiguration,
                 componentMainThreadExecutor -> {},
@@ -270,8 +283,7 @@ public class AdaptiveBatchSchedulerFactory implements SchedulerNGFactory {
                 vertexParallelismAndInputInfosDecider,
                 defaultMaxParallelism,
                 blocklistOperations,
-                hybridPartitionDataConsumeConstraint,
-                forwardGroupsByJobVertexId);
+                hybridPartitionDataConsumeConstraint);
     }
 
     public static InputConsumableDecider.Factory loadInputConsumableDeciderFactory(
@@ -337,23 +349,34 @@ public class AdaptiveBatchSchedulerFactory implements SchedulerNGFactory {
         }
     }
 
-    private static void checkAllExchangesAreSupported(final JobGraph jobGraph) {
-        for (JobVertex jobVertex : jobGraph.getVertices()) {
-            for (IntermediateDataSet dataSet : jobVertex.getProducedDataSets()) {
-                checkState(
-                        dataSet.getResultType().isBlockingOrBlockingPersistentResultPartition()
-                                || dataSet.getResultType().isHybridResultPartition(),
-                        String.format(
-                                "At the moment, adaptive batch scheduler requires batch workloads "
-                                        + "to be executed with types of all edges being BLOCKING or HYBRID_FULL/HYBRID_SELECTIVE. "
-                                        + "To do that, you need to configure '%s' to '%s' or '%s/%s'. "
-                                        + "Note that for DataSet jobs which do not recognize the aforementioned shuffle mode, "
-                                        + "the ExecutionMode needs to be %s to force BLOCKING shuffle",
-                                ExecutionOptions.BATCH_SHUFFLE_MODE.key(),
-                                BatchShuffleMode.ALL_EXCHANGES_BLOCKING,
-                                BatchShuffleMode.ALL_EXCHANGES_HYBRID_FULL,
-                                BatchShuffleMode.ALL_EXCHANGES_HYBRID_SELECTIVE,
-                                ExecutionMode.BATCH_FORCED));
+    private static void checkAllExchangesAreSupported(final LogicalGraph logicalGraph) {
+        String errMsg =
+                String.format(
+                        "At the moment, adaptive batch scheduler requires batch workloads "
+                                + "to be executed with types of all edges being BLOCKING or HYBRID_FULL/HYBRID_SELECTIVE. "
+                                + "To do that, you need to configure '%s' to '%s' or '%s/%s'. "
+                                + "Note that for DataSet jobs which do not recognize the aforementioned shuffle mode, "
+                                + "the ExecutionMode needs to be %s to force BLOCKING shuffle",
+                        ExecutionOptions.BATCH_SHUFFLE_MODE.key(),
+                        BatchShuffleMode.ALL_EXCHANGES_BLOCKING,
+                        BatchShuffleMode.ALL_EXCHANGES_HYBRID_FULL,
+                        BatchShuffleMode.ALL_EXCHANGES_HYBRID_SELECTIVE,
+                        ExecutionMode.BATCH_FORCED);
+        if (logicalGraph.isJobGraph()) {
+            for (JobVertex jobVertex : logicalGraph.getJobGraph().getVertices()) {
+                for (IntermediateDataSet dataSet : jobVertex.getProducedDataSets()) {
+                    checkState(
+                            dataSet.getResultType().isBlockingOrBlockingPersistentResultPartition()
+                                    || dataSet.getResultType().isHybridResultPartition(),
+                            errMsg);
+                }
+            }
+        } else {
+            for (StreamNode streamNode : logicalGraph.getStreamGraph().getStreamNodes()) {
+                for (StreamEdge edge : streamNode.getOutEdges()) {
+                    checkState(
+                            !edge.getExchangeMode().equals(StreamExchangeMode.PIPELINED), errMsg);
+                }
             }
         }
     }

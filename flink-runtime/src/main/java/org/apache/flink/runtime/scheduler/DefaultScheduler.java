@@ -253,6 +253,10 @@ public class DefaultScheduler extends SchedulerBase implements SchedulerOperatio
         schedulingStrategy.onExecutionStateChange(executionVertexId, ExecutionState.FINISHED);
     }
 
+    protected ClassLoader getUserCodeLoader() {
+        return userCodeLoader;
+    }
+
     @Override
     protected void onTaskFailed(final Execution execution) {
         checkState(execution.getState() == ExecutionState.FAILED);

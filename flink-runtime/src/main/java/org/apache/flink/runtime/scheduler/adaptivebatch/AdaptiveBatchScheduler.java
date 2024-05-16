@@ -34,6 +34,7 @@ import org.apache.flink.runtime.checkpoint.CheckpointsCleaner;
 import org.apache.flink.runtime.concurrent.ComponentMainThreadExecutor;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.execution.SuppressRestartsException;
+import org.apache.flink.runtime.executiongraph.DefaultExecutionGraphBuilder;
 import org.apache.flink.runtime.executiongraph.Execution;
 import org.apache.flink.runtime.executiongraph.ExecutionJobVertex;
 import org.apache.flink.runtime.executiongraph.ExecutionVertex;
@@ -52,14 +53,15 @@ import org.apache.flink.runtime.jobgraph.DistributionPattern;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
 import org.apache.flink.runtime.jobgraph.JobEdge;
-import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.jobgraph.JobVertex;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.jobgraph.forwardgroup.ForwardGroup;
+import org.apache.flink.runtime.jobgraph.forwardgroup.ForwardGroupComputeUtil;
 import org.apache.flink.runtime.jobgraph.jsonplan.JsonPlanGenerator;
 import org.apache.flink.runtime.jobgraph.topology.DefaultLogicalResult;
 import org.apache.flink.runtime.jobgraph.topology.DefaultLogicalTopology;
 import org.apache.flink.runtime.jobgraph.topology.DefaultLogicalVertex;
+import org.apache.flink.runtime.jobmaster.event.ResultConsumableEvent;
 import org.apache.flink.runtime.metrics.groups.JobManagerJobMetricGroup;
 import org.apache.flink.runtime.scheduler.DefaultExecutionDeployer;
 import org.apache.flink.runtime.scheduler.DefaultScheduler;
@@ -103,13 +105,13 @@ import static org.apache.flink.util.Preconditions.checkState;
  * This scheduler decides the parallelism of JobVertex according to the data volume it consumes. A
  * dynamically built up ExecutionGraph is used for this purpose.
  */
-public class AdaptiveBatchScheduler extends DefaultScheduler {
+public class AdaptiveBatchScheduler extends DefaultScheduler implements JobGraphUpdateListener {
 
     private final DefaultLogicalTopology logicalTopology;
 
     private final VertexParallelismAndInputInfosDecider vertexParallelismAndInputInfosDecider;
 
-    private final Map<JobVertexID, ForwardGroup> forwardGroupsByJobVertexId;
+    private Map<JobVertexID, ForwardGroup> forwardGroupsByJobVertexId;
 
     private final Map<IntermediateDataSetID, BlockingResultInfo> blockingResultInfos;
 
@@ -120,9 +122,13 @@ public class AdaptiveBatchScheduler extends DefaultScheduler {
 
     private final SpeculativeExecutionHandler speculativeExecutionHandler;
 
+    private final AdaptiveExecutionHandler adaptiveExecutionHandler;
+
+    private final int defaultMaxParallelism;
+
     public AdaptiveBatchScheduler(
             final Logger log,
-            final JobGraph jobGraph,
+            final AdaptiveExecutionHandler adaptiveExecutionHandler,
             final Executor ioExecutor,
             final Configuration jobMasterConfiguration,
             final Consumer<ComponentMainThreadExecutor> startUpAction,
@@ -147,13 +153,12 @@ public class AdaptiveBatchScheduler extends DefaultScheduler {
             final VertexParallelismAndInputInfosDecider vertexParallelismAndInputInfosDecider,
             final int defaultMaxParallelism,
             final BlocklistOperations blocklistOperations,
-            final HybridPartitionDataConsumeConstraint hybridPartitionDataConsumeConstraint,
-            final Map<JobVertexID, ForwardGroup> forwardGroupsByJobVertexId)
+            final HybridPartitionDataConsumeConstraint hybridPartitionDataConsumeConstraint)
             throws Exception {
 
         super(
                 log,
-                jobGraph,
+                adaptiveExecutionHandler.getJobGraph(),
                 ioExecutor,
                 jobMasterConfiguration,
                 startUpAction,
@@ -176,15 +181,23 @@ public class AdaptiveBatchScheduler extends DefaultScheduler {
                 shuffleMaster,
                 rpcTimeout,
                 computeVertexParallelismStoreForDynamicGraph(
-                        jobGraph.getVertices(), defaultMaxParallelism),
+                        adaptiveExecutionHandler.getJobGraph().getVertices(),
+                        defaultMaxParallelism),
                 new DefaultExecutionDeployer.Factory());
 
-        this.logicalTopology = DefaultLogicalTopology.fromJobGraph(jobGraph);
+        this.adaptiveExecutionHandler = checkNotNull(adaptiveExecutionHandler);
+        adaptiveExecutionHandler.registerJobGraphUpdateListener(this);
+
+        this.defaultMaxParallelism = defaultMaxParallelism;
+
+        this.logicalTopology = DefaultLogicalTopology.fromJobGraph(getJobGraph());
 
         this.vertexParallelismAndInputInfosDecider =
                 checkNotNull(vertexParallelismAndInputInfosDecider);
 
-        this.forwardGroupsByJobVertexId = checkNotNull(forwardGroupsByJobVertexId);
+        this.forwardGroupsByJobVertexId =
+                ForwardGroupComputeUtil.computeForwardGroupsAndCheckParallelism(
+                        getJobGraph().getVerticesSortedTopologicallyFromSources());
 
         this.blockingResultInfos = new HashMap<>();
 
@@ -217,6 +230,41 @@ public class AdaptiveBatchScheduler extends DefaultScheduler {
                     log);
         } else {
             return new DummySpeculativeExecutionHandler();
+        }
+    }
+
+    @Override
+    public void onNewJobVerticesAdded(
+            List<JobVertex> newVertices, boolean waitingMoreJobVerticesToBeAdded) throws Exception {
+        log.info("Received newly created job vertices: {}", newVertices);
+
+        VertexParallelismStore vertexParallelismStore =
+                computeVertexParallelismStoreForDynamicGraph(
+                        adaptiveExecutionHandler.getJobGraph().getVertices(),
+                        defaultMaxParallelism);
+        // 1. init vertex on master
+        DefaultExecutionGraphBuilder.initJobVerticesOnMaster(
+                newVertices,
+                getUserCodeLoader(),
+                log,
+                vertexParallelismStore,
+                getJobGraph().getName(),
+                getJobGraph().getJobID());
+
+        // 2. attach newly added job vertices
+        getExecutionGraph()
+                .onAddNewJobVertices(newVertices, jobManagerJobMetricGroup, vertexParallelismStore);
+
+        // 3. update forward groups and json plan
+        forwardGroupsByJobVertexId =
+                ForwardGroupComputeUtil.computeForwardGroupsAndCheckParallelism(
+                        getJobGraph().getVerticesSortedTopologicallyFromSources());
+        getExecutionGraph().setJsonPlan(JsonPlanGenerator.generatePlan(getJobGraph()));
+
+        // 4. notify if no more job vertices waiting to be added, which can make the job final state
+        // static.
+        if (!waitingMoreJobVerticesToBeAdded) {
+            getExecutionGraph().notifyNoMoreJobVerticesToBeAdded();
         }
     }
 
@@ -256,6 +304,7 @@ public class AdaptiveBatchScheduler extends DefaultScheduler {
                                         + " vertex version has been modified.");
                         return;
                     }
+                    notifyJobVertexConsumableEventIfPossible(execution.getVertex().getJobVertex());
                     initializeVerticesIfPossible();
                     super.onTaskFinished(execution, ioMetrics);
                 });
@@ -456,6 +505,15 @@ public class AdaptiveBatchScheduler extends DefaultScheduler {
                 .reduce(
                         CompletableFuture.completedFuture(ExecutionConfig.PARALLELISM_DEFAULT),
                         (a, b) -> a.thenCombine(b, Math::max));
+    }
+
+    private void notifyJobVertexConsumableEventIfPossible(ExecutionJobVertex jobVertex) {
+        Optional<List<BlockingResultInfo>> consumedResultsInfo =
+                tryGetConsumedResultsInfo(jobVertex);
+        consumedResultsInfo.ifPresent(
+                resultInfo ->
+                        adaptiveExecutionHandler.handleJobEvent(
+                                new ResultConsumableEvent(jobVertex.getJobVertexId(), resultInfo)));
     }
 
     @VisibleForTesting

@@ -18,8 +18,10 @@
 
 package org.apache.flink.runtime.util;
 
+import org.apache.flink.api.common.ExecutionConfig;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.operators.ResourceSpec;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.blob.PermanentBlobKey;
 import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.jobgraph.JobType;
@@ -82,6 +84,27 @@ public class LogicalGraph {
 
     public boolean isEmpty() {
         return !graph.isLeft() && !graph.isRight();
+    }
+
+    public ExecutionConfig getExecutionConfig(ClassLoader userClassLoader) throws Exception {
+        return graph.isLeft()
+                ? graph.left().getSerializedExecutionConfig().deserializeValue(userClassLoader)
+                : graph.right().getExecutionConfig();
+    }
+
+    public Configuration getJobConfiguration() {
+        return graph.isLeft()
+                ? graph.left().getJobConfiguration()
+                : graph.right().getJobConfiguration();
+    }
+
+    public boolean isCheckpointingEnabled() {
+        JobCheckpointingSettings snapshotSettings = getJobCheckpointingSettings();
+        if (snapshotSettings == null) {
+            return false;
+        }
+
+        return snapshotSettings.getCheckpointCoordinatorConfiguration().isCheckpointingEnabled();
     }
 
     public long getInitialClientHeartbeatTimeout() {

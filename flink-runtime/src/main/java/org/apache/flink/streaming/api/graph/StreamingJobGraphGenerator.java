@@ -157,6 +157,30 @@ public class StreamingJobGraphGenerator {
         }
     }
 
+    // Note the returned new created job vertex should has
+    public static List<JobVertex> tryCreateJobVerticesAndUpdateJobGraph(
+            ClassLoader userClassLoader, StreamGraph streamGraph, List<Integer> streamNodes) {
+        // TODO
+        return Collections.emptyList();
+    }
+
+    public static boolean hasMoreJobVerticesToBeAdded() {
+        // TODO
+        return false;
+    }
+
+    public static Optional<JobVertexID> findJobVertexIdByStreamNodeId(int StreamNodeId) {
+        return Optional.empty();
+    }
+
+    public static Optional<Integer> findStartStreamNodeIdByJobVertexId(JobVertexID jobVertexId) {
+        return Optional.empty();
+    }
+
+    public static List<Integer> findEndStreamNodeIdsByJobVertexId(JobVertexID jobVertexId) {
+        return new ArrayList<>();
+    }
+
     // ------------------------------------------------------------------------
 
     private final ClassLoader userClassloader;

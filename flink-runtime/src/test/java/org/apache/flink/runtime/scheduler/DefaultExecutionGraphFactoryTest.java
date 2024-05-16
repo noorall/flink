@@ -36,6 +36,7 @@ import org.apache.flink.runtime.executiongraph.ExecutionGraph;
 import org.apache.flink.runtime.io.network.partition.NoOpJobMasterPartitionTracker;
 import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.jobgraph.JobVertex;
+import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.jobgraph.OperatorID;
 import org.apache.flink.runtime.jobgraph.SavepointRestoreSettings;
 import org.apache.flink.runtime.jobmaster.DefaultExecutionDeploymentTracker;
@@ -62,7 +63,9 @@ import javax.annotation.Nonnull;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ScheduledExecutorService;
 
@@ -163,9 +166,20 @@ public class DefaultExecutionGraphFactoryTest extends TestLogger {
                         TaskDeploymentDescriptorFactory.PartitionLocationConstraint.CAN_BE_UNKNOWN,
                         0L,
                         new DefaultVertexAttemptNumberStore(),
-                        vertexId ->
-                                new DefaultVertexParallelismInfo(
-                                        1, 1337, integer -> Optional.empty()),
+                        new VertexParallelismStore() {
+                            @Override
+                            public VertexParallelismInformation getParallelismInfo(
+                                    JobVertexID vertexId) {
+                                return new DefaultVertexParallelismInfo(
+                                        1, 1337, integer -> Optional.empty());
+                            }
+
+                            @Override
+                            public Map<JobVertexID, VertexParallelismInformation>
+                                    getAllParallelismInfo() {
+                                return Collections.emptyMap();
+                            }
+                        },
                         (execution, previousState, newState) -> {},
                         rp -> false,
                         log);

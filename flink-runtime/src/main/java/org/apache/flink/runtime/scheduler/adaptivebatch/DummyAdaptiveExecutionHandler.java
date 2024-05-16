@@ -16,23 +16,34 @@
  * limitations under the License.
  */
 
-package org.apache.flink.runtime.jobmaster.factories;
+package org.apache.flink.runtime.scheduler.adaptivebatch;
 
-import org.apache.flink.runtime.metrics.groups.JobManagerJobMetricGroup;
-import org.apache.flink.runtime.metrics.groups.UnregisteredMetricGroups;
-import org.apache.flink.runtime.util.LogicalGraph;
+import org.apache.flink.runtime.jobgraph.JobGraph;
+import org.apache.flink.runtime.jobmaster.event.JobEvent;
 
-import javax.annotation.Nonnull;
+import static org.apache.flink.util.Preconditions.checkNotNull;
 
-/**
- * {@link JobManagerJobMetricGroupFactory} which returns an unregistered {@link
- * JobManagerJobMetricGroup}.
- */
-public enum UnregisteredJobManagerJobMetricGroupFactory implements JobManagerJobMetricGroupFactory {
-    INSTANCE;
+/** A dummy implementation of {@link AdaptiveExecutionHandler} */
+public class DummyAdaptiveExecutionHandler implements AdaptiveExecutionHandler {
+
+    private final JobGraph jobGraph;
+
+    public DummyAdaptiveExecutionHandler(JobGraph jobGraph) {
+        this.jobGraph = checkNotNull(jobGraph);
+    }
 
     @Override
-    public JobManagerJobMetricGroup create(@Nonnull LogicalGraph logicalGraph) {
-        return UnregisteredMetricGroups.createUnregisteredJobManagerJobMetricGroup();
+    public JobGraph getJobGraph() {
+        return jobGraph;
+    }
+
+    @Override
+    public void handleJobEvent(JobEvent jobEvent) {
+        // do nothing
+    }
+
+    @Override
+    public void registerJobGraphUpdateListener(JobGraphUpdateListener listener) {
+        // do nothing
     }
 }

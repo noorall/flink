@@ -42,6 +42,18 @@ public class BatchExecutionOptions {
                             "If true, Flink will automatically decide the parallelism of operators in batch jobs.");
 
     @Documentation.Section({Documentation.Sections.EXPERT_SCHEDULING})
+    public static final ConfigOption<Boolean> ADAPTIVE_JOIN_TYPE_ENABLED =
+            key("execution.batch.adaptive.join-type.enabled")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withDescription(
+                            "If true, Flink will automatically decide whether change join type to broadcast join in batch jobs.");
+
+    public static boolean enableAdaptiveExecution(Configuration configuration) {
+        return configuration.get(ADAPTIVE_JOIN_TYPE_ENABLED);
+    }
+
+    @Documentation.Section({Documentation.Sections.EXPERT_SCHEDULING})
     public static final ConfigOption<Integer> ADAPTIVE_AUTO_PARALLELISM_MIN_PARALLELISM =
             key("execution.batch.adaptive.auto-parallelism.min-parallelism")
                     .intType()

@@ -65,6 +65,7 @@ import org.apache.flink.runtime.metrics.groups.JobManagerJobMetricGroup;
 import org.apache.flink.runtime.operators.coordination.CoordinatorStore;
 import org.apache.flink.runtime.operators.coordination.CoordinatorStoreImpl;
 import org.apache.flink.runtime.query.KvStateLocationRegistry;
+import org.apache.flink.runtime.scheduler.DefaultVertexParallelismStore;
 import org.apache.flink.runtime.scheduler.InternalFailuresListener;
 import org.apache.flink.runtime.scheduler.SsgNetworkMemoryCalculationUtils;
 import org.apache.flink.runtime.scheduler.VertexParallelismInformation;
@@ -195,6 +196,8 @@ public class DefaultExecutionGraph implements ExecutionGraph, InternalExecutionG
     /** Number of total job vertices. */
     private int numJobVerticesTotal;
 
+    private boolean waitingJobVerticesToBeAdded = true;
+
     private final PartitionGroupReleaseStrategy.Factory partitionGroupReleaseStrategyFactory;
 
     private PartitionGroupReleaseStrategy partitionGroupReleaseStrategy;
@@ -245,7 +248,7 @@ public class DefaultExecutionGraph implements ExecutionGraph, InternalExecutionG
 
     private final VertexAttemptNumberStore initialAttemptCounts;
 
-    private final VertexParallelismStore parallelismStore;
+    private VertexParallelismStore parallelismStore;
 
     // ------ Fields that are relevant to the execution and need to be cleared before archiving
     // -------
@@ -823,7 +826,7 @@ public class DefaultExecutionGraph implements ExecutionGraph, InternalExecutionG
 
     @Override
     public void notifyNewlyInitializedJobVertices(List<ExecutionJobVertex> vertices) {
-        executionTopology.notifyExecutionGraphUpdated(this, vertices);
+        executionTopology.notifyExecutionGraphUpdatedByNewlyInitializedJobVertices(this, vertices);
     }
 
     @Override
@@ -850,6 +853,34 @@ public class DefaultExecutionGraph implements ExecutionGraph, InternalExecutionG
 
         partitionGroupReleaseStrategy =
                 partitionGroupReleaseStrategyFactory.createInstance(getSchedulingTopology());
+    }
+
+    @Override
+    public void onAddNewJobVertices(
+            List<JobVertex> topologicallySorted,
+            JobManagerJobMetricGroup jobManagerJobMetricGroup,
+            VertexParallelismStore newVerticesParallelismStore)
+            throws JobException {
+        DefaultVertexParallelismStore store = new DefaultVertexParallelismStore();
+
+        parallelismStore.getAllParallelismInfo().forEach(store::setParallelismInfo);
+        topologicallySorted.forEach(
+                vertex ->
+                        store.setParallelismInfo(
+                                vertex.getID(),
+                                newVerticesParallelismStore.getParallelismInfo(vertex.getID())));
+        parallelismStore = store;
+
+        attachJobVertices(topologicallySorted, jobManagerJobMetricGroup);
+
+        executionTopology.notifyExecutionGraphByNewlyAddedJobVertices(
+                DefaultExecutionTopology.computeLogicalPipelinedRegionsByJobVertexId(
+                        topologicallySorted));
+    }
+
+    @Override
+    public void notifyNoMoreJobVerticesToBeAdded() {
+        waitingJobVerticesToBeAdded = false;
     }
 
     /** Attach job vertices without initializing them. */
@@ -1184,7 +1215,7 @@ public class DefaultExecutionGraph implements ExecutionGraph, InternalExecutionG
     public void jobVertexFinished() {
         assertRunningInJobMasterMainThread();
         final int numFinished = ++numFinishedJobVertices;
-        if (numFinished == numJobVerticesTotal) {
+        if (numFinished == numJobVerticesTotal && !waitingJobVerticesToBeAdded) {
             FutureUtils.assertNoException(
                     waitForAllExecutionsTermination().thenAccept(ignored -> jobFinished()));
         }

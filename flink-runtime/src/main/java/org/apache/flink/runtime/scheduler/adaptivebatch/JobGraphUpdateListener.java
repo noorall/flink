@@ -16,25 +16,25 @@
  * limitations under the License.
  */
 
-package org.apache.flink.runtime.scheduler;
+package org.apache.flink.runtime.scheduler.adaptivebatch;
 
-import org.apache.flink.runtime.jobgraph.JobVertexID;
+import org.apache.flink.runtime.jobgraph.JobVertex;
 
-import java.util.Map;
+import java.util.List;
 
 /**
- * Contains the max parallelism per vertex, along with metadata about how these maxes were
- * calculated.
+ * This interface defines operations for components that are interested in being notified when new
+ * job vertices are added to the job graph.
  */
-public interface VertexParallelismStore {
+public interface JobGraphUpdateListener {
     /**
-     * Returns a given vertex's parallelism information.
+     * Invoked when new {@link JobVertex} instances are added to the JobGraph of a specific job.
+     * This allows interested components to react to the addition of new vertices to the job
+     * topology.
      *
-     * @param vertexId vertex for which the parallelism information should be returned
-     * @return a parallelism information for the given vertex
-     * @throws IllegalStateException if there is no parallelism information for the given vertex
+     * @param newVertices A list of newly added JobVertex instances.
+     * @param waitingMoreJobVerticesToBeAdded if there are more job vertices waiting to be added.
      */
-    VertexParallelismInformation getParallelismInfo(JobVertexID vertexId);
-
-    Map<JobVertexID, VertexParallelismInformation> getAllParallelismInfo();
+    void onNewJobVerticesAdded(List<JobVertex> newVertices, boolean waitingMoreJobVerticesToBeAdded)
+            throws Exception;
 }
