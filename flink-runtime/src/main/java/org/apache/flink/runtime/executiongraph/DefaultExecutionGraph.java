@@ -56,6 +56,7 @@ import org.apache.flink.runtime.io.network.partition.JobMasterPartitionTracker;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
+import org.apache.flink.runtime.jobgraph.JobEdge;
 import org.apache.flink.runtime.jobgraph.JobVertex;
 import org.apache.flink.runtime.jobgraph.JobVertex.FinalizeOnMasterContext;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
@@ -109,6 +110,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -876,6 +878,17 @@ public class DefaultExecutionGraph implements ExecutionGraph, InternalExecutionG
         executionTopology.notifyExecutionGraphByNewlyAddedJobVertices(
                 DefaultExecutionTopology.computeLogicalPipelinedRegionsByJobVertexId(
                         topologicallySorted));
+
+        for (JobVertex jobVertex : topologicallySorted) {
+            for (JobEdge input : jobVertex.getInputs()) {
+                if (Objects.requireNonNull(getJobVertex(input.getSource().getProducer().getID()))
+                        .isInitialized()) {
+                    intermediateResults
+                            .get(input.getSourceId())
+                            .setIntermediateDataSet(input.getSource());
+                }
+            }
+        }
     }
 
     @Override

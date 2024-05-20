@@ -45,7 +45,7 @@ import static org.apache.flink.util.Preconditions.checkState;
 
 public class IntermediateResult {
 
-    private final IntermediateDataSet intermediateDataSet;
+    private IntermediateDataSet intermediateDataSet;
 
     private final IntermediateDataSetID id;
 
@@ -230,6 +230,10 @@ public class IntermediateResult {
 
     public boolean isBroadcast() {
         return intermediateDataSet.isBroadcast();
+    }
+
+    public void setIntermediateDataSet(IntermediateDataSet intermediateDataSet) {
+        this.intermediateDataSet = intermediateDataSet;
     }
 
     public int getConnectionIndex() {

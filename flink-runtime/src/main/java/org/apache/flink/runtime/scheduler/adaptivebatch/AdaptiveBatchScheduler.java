@@ -266,6 +266,26 @@ public class AdaptiveBatchScheduler extends DefaultScheduler implements JobGraph
         if (!waitingMoreJobVerticesToBeAdded) {
             getExecutionGraph().notifyNoMoreJobVerticesToBeAdded();
         }
+
+        // 5. update result partition info
+        for (JobVertex newVertex : newVertices) {
+            for (JobEdge input : newVertex.getInputs()) {
+                if (blockingResultInfos.containsKey(input.getSourceId())) {
+                    BlockingResultInfo resultInfo = blockingResultInfos.get(input.getSourceId());
+                    Map<Integer, long[]> bytesByPartitionIndex =
+                            resultInfo.getSubpartitionBytesByPartitionIndex();
+
+                    IntermediateResult result =
+                            getExecutionGraph()
+                                    .getAllIntermediateResults()
+                                    .get(input.getSourceId());
+
+                    BlockingResultInfo newInfo = createFromIntermediateResult(result);
+                    bytesByPartitionIndex.forEach(
+                            (k, v) -> newInfo.recordPartitionInfo(k, new ResultPartitionBytes(v)));
+                }
+            }
+        }
     }
 
     @Override
