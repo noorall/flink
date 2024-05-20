@@ -410,6 +410,11 @@ class StateTrackingMockExecutionGraph implements ExecutionGraph {
         throw new UnsupportedOperationException();
     }
 
+    @Override
+    public void notifyNoMoreJobVerticesToBeAdded() {
+        throw new UnsupportedOperationException();
+    }
+
     public void registerExecution(TestingAccessExecution execution) {
         executions.put(execution.getAttemptId(), execution);
     }
