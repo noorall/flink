@@ -19,13 +19,11 @@
 package org.apache.flink.runtime.client;
 
 import org.apache.flink.api.common.JobID;
-import org.apache.flink.api.common.cache.DistributedCache;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.core.fs.Path;
 import org.apache.flink.runtime.blob.BlobClient;
 import org.apache.flink.runtime.blob.PermanentBlobKey;
 import org.apache.flink.runtime.jobgraph.JobGraph;
-import org.apache.flink.runtime.jobgraph.JobGraphUtils;
 import org.apache.flink.runtime.util.LogicalGraph;
 import org.apache.flink.streaming.api.graph.StreamGraph;
 import org.apache.flink.util.FlinkException;
@@ -35,7 +33,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-import java.util.Map;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -58,7 +55,7 @@ public enum ClientUtils {
             JobGraph jobGraph = graph.getJobGraph();
             List<Path> userJars = jobGraph.getUserJars();
             Collection<Tuple2<String, Path>> userArtifacts =
-                    jobGraph.getUserArtifacts().entrySet().stream()
+                    graph.getUserArtifacts().entrySet().stream()
                             .map(
                                     entry ->
                                             Tuple2.of(
@@ -70,8 +67,16 @@ public enum ClientUtils {
         } else {
             StreamGraph streamGraph = graph.getStreamGraph();
             List<Path> userJars = streamGraph.getUserJars();
+            Collection<Tuple2<String, Path>> userArtifacts =
+                    graph.getUserArtifacts().entrySet().stream()
+                            .map(
+                                    entry ->
+                                            Tuple2.of(
+                                                    entry.getKey(),
+                                                    new Path(entry.getValue().filePath)))
+                            .collect(Collectors.toList());
 
-            uploadStreamGraphFiles(streamGraph, userJars, clientSupplier);
+            uploadStreamGraphFiles(streamGraph, userJars, userArtifacts, clientSupplier);
         }
     }
 
@@ -105,24 +110,9 @@ public enum ClientUtils {
     public static void uploadStreamGraphFiles(
             StreamGraph streamGraph,
             Collection<Path> userJars,
+            Collection<Tuple2<String, org.apache.flink.core.fs.Path>> userArtifacts,
             SupplierWithException<BlobClient, IOException> clientSupplier)
             throws FlinkException {
-
-        final Map<String, DistributedCache.DistributedCacheEntry> distributedCacheEntries =
-                JobGraphUtils.prepareUserArtifactEntries(
-                        streamGraph.getUserArtifacts().stream()
-                                .collect(Collectors.toMap(e -> e.f0, e -> e.f1)),
-                        streamGraph.getJobId());
-
-        List<Tuple2<String, Path>> userArtifacts =
-                distributedCacheEntries.entrySet().stream()
-                        .map(
-                                entry ->
-                                        Tuple2.of(
-                                                entry.getKey(),
-                                                new Path(entry.getValue().filePath)))
-                        .collect(Collectors.toList());
-
         if (!userJars.isEmpty() || !userArtifacts.isEmpty()) {
             try (BlobClient client = clientSupplier.get()) {
                 uploadAndSetUserJars(streamGraph, userJars, client);

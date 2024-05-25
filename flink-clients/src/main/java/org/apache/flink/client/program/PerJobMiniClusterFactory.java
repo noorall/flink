@@ -28,6 +28,7 @@ import org.apache.flink.runtime.minicluster.MiniCluster;
 import org.apache.flink.runtime.minicluster.MiniClusterConfiguration;
 import org.apache.flink.runtime.minicluster.MiniClusterJobClient;
 import org.apache.flink.runtime.minicluster.RpcServiceSharing;
+import org.apache.flink.runtime.util.LogicalGraph;
 import org.apache.flink.util.MathUtils;
 import org.apache.flink.util.function.FunctionUtils;
 
@@ -70,13 +71,18 @@ public final class PerJobMiniClusterFactory {
     /** Starts a {@link MiniCluster} and submits a job. */
     public CompletableFuture<JobClient> submitJob(
             JobGraph jobGraph, ClassLoader userCodeClassloader) throws Exception {
+        return submitJob(LogicalGraph.createLogicalGraph(jobGraph), userCodeClassloader);
+    }
+
+    public CompletableFuture<JobClient> submitJob(
+            LogicalGraph logicalGraph, ClassLoader userCodeClassloader) throws Exception {
         MiniClusterConfiguration miniClusterConfig =
-                getMiniClusterConfig(jobGraph.getMaximumParallelism());
+                getMiniClusterConfig(logicalGraph.getMaximumParallelism());
         MiniCluster miniCluster = miniClusterFactory.apply(miniClusterConfig);
         miniCluster.start();
 
         return miniCluster
-                .submitJob(jobGraph)
+                .submitJob(logicalGraph)
                 .thenApplyAsync(
                         FunctionUtils.uncheckedFunction(
                                 submissionResult -> {

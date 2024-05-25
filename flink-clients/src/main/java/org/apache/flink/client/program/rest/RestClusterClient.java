@@ -121,6 +121,7 @@ import org.apache.flink.runtime.rest.messages.queue.AsynchronouslyCreatedResourc
 import org.apache.flink.runtime.rest.messages.queue.QueueStatus;
 import org.apache.flink.runtime.rest.util.RestClientException;
 import org.apache.flink.runtime.rest.util.RestConstants;
+import org.apache.flink.runtime.util.LogicalGraph;
 import org.apache.flink.runtime.webmonitor.retriever.LeaderRetriever;
 import org.apache.flink.util.AbstractID;
 import org.apache.flink.util.ExceptionUtils;
@@ -482,6 +483,142 @@ public class RestClusterClient<T> implements ClusterClient<T> {
                             throw new CompletionException(
                                     new JobSubmissionException(
                                             jobGraph.getJobID(),
+                                            "Failed to submit JobGraph.",
+                                            ExceptionUtils.stripCompletionException(throwable)));
+                        });
+    }
+
+    @Override
+    public CompletableFuture<JobID> submitJob(LogicalGraph logicalGraph) {
+        CompletableFuture<java.nio.file.Path> jobGraphFileFuture =
+                CompletableFuture.supplyAsync(
+                        () -> {
+                            try {
+                                final java.nio.file.Path jobGraphFile =
+                                        Files.createTempFile(
+                                                "flink-graph-" + logicalGraph.getJobId(), ".bin");
+                                try (ObjectOutputStream objectOut =
+                                        new ObjectOutputStream(
+                                                Files.newOutputStream(jobGraphFile))) {
+                                    objectOut.writeObject(
+                                            logicalGraph.isJobGraph()
+                                                    ? logicalGraph.getJobGraph()
+                                                    : logicalGraph.getStreamGraph());
+                                }
+                                return jobGraphFile;
+                            } catch (IOException e) {
+                                throw new CompletionException(
+                                        new FlinkException("Failed to serialize JobGraph.", e));
+                            }
+                        },
+                        executorService);
+
+        CompletableFuture<Tuple2<JobSubmitRequestBody, Collection<FileUpload>>> requestFuture =
+                jobGraphFileFuture.thenApply(
+                        jobGraphFile -> {
+                            List<String> jarFileNames = new ArrayList<>(8);
+                            List<JobSubmitRequestBody.DistributedCacheFile> artifactFileNames =
+                                    new ArrayList<>(8);
+                            Collection<FileUpload> filesToUpload = new ArrayList<>(8);
+
+                            filesToUpload.add(
+                                    new FileUpload(
+                                            jobGraphFile, RestConstants.CONTENT_TYPE_BINARY));
+
+                            for (Path jar : logicalGraph.getUserJars()) {
+                                jarFileNames.add(jar.getName());
+                                filesToUpload.add(
+                                        new FileUpload(
+                                                Paths.get(jar.toUri()),
+                                                RestConstants.CONTENT_TYPE_JAR));
+                            }
+
+                            for (Map.Entry<String, DistributedCache.DistributedCacheEntry>
+                                    artifacts : logicalGraph.getUserArtifacts().entrySet()) {
+                                final Path artifactFilePath =
+                                        new Path(artifacts.getValue().filePath);
+                                try {
+                                    // Only local artifacts need to be uploaded.
+                                    if (!artifactFilePath.getFileSystem().isDistributedFS()) {
+                                        artifactFileNames.add(
+                                                new JobSubmitRequestBody.DistributedCacheFile(
+                                                        artifacts.getKey(),
+                                                        artifactFilePath.getName()));
+                                        filesToUpload.add(
+                                                new FileUpload(
+                                                        Paths.get(artifactFilePath.getPath()),
+                                                        RestConstants.CONTENT_TYPE_BINARY));
+                                    }
+                                } catch (IOException e) {
+                                    throw new CompletionException(
+                                            new FlinkException(
+                                                    "Failed to get the FileSystem of artifact "
+                                                            + artifactFilePath
+                                                            + ".",
+                                                    e));
+                                }
+                            }
+
+                            final JobSubmitRequestBody requestBody =
+                                    new JobSubmitRequestBody(
+                                            jobGraphFile.getFileName().toString(),
+                                            jarFileNames,
+                                            artifactFileNames);
+
+                            return Tuple2.of(
+                                    requestBody, Collections.unmodifiableCollection(filesToUpload));
+                        });
+
+        final CompletableFuture<JobSubmitResponseBody> submissionFuture =
+                requestFuture.thenCompose(
+                        requestAndFileUploads -> {
+                            LOG.info(
+                                    "Submitting job '{}' ({}).",
+                                    logicalGraph.getJobName(),
+                                    logicalGraph.getJobId());
+                            return sendRetriableRequest(
+                                    JobSubmitHeaders.getInstance(),
+                                    EmptyMessageParameters.getInstance(),
+                                    requestAndFileUploads.f0,
+                                    requestAndFileUploads.f1,
+                                    isConnectionProblemOrServiceUnavailable(),
+                                    (receiver, error) -> {
+                                        if (error != null) {
+                                            LOG.warn(
+                                                    "Attempt to submit job '{}' ({}) to '{}' has failed.",
+                                                    logicalGraph.getJobName(),
+                                                    logicalGraph.getJobId(),
+                                                    receiver,
+                                                    error);
+                                        } else {
+                                            LOG.info(
+                                                    "Successfully submitted job '{}' ({}) to '{}'.",
+                                                    logicalGraph.getJobName(),
+                                                    logicalGraph.getJobId(),
+                                                    receiver);
+                                        }
+                                    });
+                        });
+
+        submissionFuture
+                .exceptionally(ignored -> null) // ignore errors
+                .thenCompose(ignored -> jobGraphFileFuture)
+                .thenAccept(
+                        jobGraphFile -> {
+                            try {
+                                Files.delete(jobGraphFile);
+                            } catch (IOException e) {
+                                LOG.warn("Could not delete temporary file {}.", jobGraphFile, e);
+                            }
+                        });
+
+        return submissionFuture
+                .thenApply(ignore -> logicalGraph.getJobId())
+                .exceptionally(
+                        (Throwable throwable) -> {
+                            throw new CompletionException(
+                                    new JobSubmissionException(
+                                            logicalGraph.getJobId(),
                                             "Failed to submit JobGraph.",
                                             ExceptionUtils.stripCompletionException(throwable)));
                         });

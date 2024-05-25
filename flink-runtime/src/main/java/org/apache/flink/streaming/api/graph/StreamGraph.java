@@ -47,6 +47,7 @@ import org.apache.flink.runtime.checkpoint.MasterTriggerRestoreHook;
 import org.apache.flink.runtime.clusterframework.types.ResourceProfile;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 import org.apache.flink.runtime.jobgraph.JobGraph;
+import org.apache.flink.runtime.jobgraph.JobGraphUtils;
 import org.apache.flink.runtime.jobgraph.JobType;
 import org.apache.flink.runtime.jobgraph.SavepointRestoreSettings;
 import org.apache.flink.runtime.jobgraph.tasks.CheckpointCoordinatorConfiguration;
@@ -99,6 +100,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.apache.flink.runtime.jobgraph.JobGraph.INITIAL_CLIENT_HEARTBEAT_TIMEOUT;
 import static org.apache.flink.runtime.jobgraph.tasks.CheckpointCoordinatorConfiguration.MINIMAL_CHECKPOINT_TIME;
@@ -468,10 +470,27 @@ public class StreamGraph implements Pipeline, Serializable {
         this.timerServiceProvider = checkNotNull(timerServiceProvider);
     }
 
-    public Collection<Tuple2<String, DistributedCache.DistributedCacheEntry>> getUserArtifacts() {
-        return Optional.ofNullable(jobConfiguration.get(PipelineOptions.CACHED_FILES))
-                .map(DistributedCache::parseCachedFilesFromString)
-                .orElse(new ArrayList<>());
+    public void prepareUserArtifacts() {
+        final Map<String, DistributedCache.DistributedCacheEntry> distributedCacheEntries =
+                JobGraphUtils.prepareUserArtifactEntries(
+                        Optional.ofNullable(jobConfiguration.get(PipelineOptions.CACHED_FILES))
+                                .map(DistributedCache::parseCachedFilesFromString)
+                                .orElse(new ArrayList<>()).stream()
+                                .collect(Collectors.toMap(e -> e.f0, e -> e.f1)),
+                        getJobId());
+
+        for (Map.Entry<String, DistributedCache.DistributedCacheEntry> entry :
+                distributedCacheEntries.entrySet()) {
+            addUserArtifact(entry.getKey(), entry.getValue());
+        }
+    }
+
+    public int getMaximumParallelism() {
+        int maxParallelism = -1;
+        for (StreamNode node : streamNodes.values()) {
+            maxParallelism = Math.max(node.getParallelism(), maxParallelism);
+        }
+        return maxParallelism;
     }
 
     public void addUserJarBlobKey(PermanentBlobKey key) {
@@ -491,6 +510,18 @@ public class StreamGraph implements Pipeline, Serializable {
      */
     public List<PermanentBlobKey> getUserJarBlobKeys() {
         return this.userJarBlobKeys;
+    }
+
+    private void addUserArtifact(String name, DistributedCache.DistributedCacheEntry file) {
+        if (file == null) {
+            throw new IllegalArgumentException();
+        }
+
+        userArtifacts.putIfAbsent(name, file);
+    }
+
+    public Map<String, DistributedCache.DistributedCacheEntry> getUserArtifacts() {
+        return userArtifacts;
     }
 
     public void setUserArtifactBlobKey(String entryName, PermanentBlobKey blobKey)

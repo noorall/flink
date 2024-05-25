@@ -22,12 +22,10 @@ import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.ExecutionConfig;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.RuntimeExecutionMode;
-import org.apache.flink.api.common.cache.DistributedCache;
 import org.apache.flink.api.common.operators.ResourceSpec;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.configuration.DeploymentOptions;
 import org.apache.flink.configuration.ExecutionOptions;
 import org.apache.flink.configuration.IllegalConfigurationException;
 import org.apache.flink.core.execution.CheckpointingMode;
@@ -40,7 +38,6 @@ import org.apache.flink.runtime.jobgraph.InputOutputFormatVertex;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 import org.apache.flink.runtime.jobgraph.JobEdge;
 import org.apache.flink.runtime.jobgraph.JobGraph;
-import org.apache.flink.runtime.jobgraph.JobGraphUtils;
 import org.apache.flink.runtime.jobgraph.JobType;
 import org.apache.flink.runtime.jobgraph.JobVertex;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
@@ -281,21 +278,6 @@ public class StreamingJobGraphGenerator {
         configureCheckpointing();
 
         jobGraph.setSavepointRestoreSettings(streamGraph.getSavepointRestoreSettings());
-
-        if (!streamGraph.getJobConfiguration().get(DeploymentOptions.SUBMIT_STREAM_GRAPH_ENABLED)) {
-            // skip prepare user artifact because these are already uploaded in client if
-            // submit job by stream graph
-            final Map<String, DistributedCache.DistributedCacheEntry> distributedCacheEntries =
-                    JobGraphUtils.prepareUserArtifactEntries(
-                            streamGraph.getUserArtifacts().stream()
-                                    .collect(Collectors.toMap(e -> e.f0, e -> e.f1)),
-                            jobGraph.getJobID());
-
-            for (Map.Entry<String, DistributedCache.DistributedCacheEntry> entry :
-                    distributedCacheEntries.entrySet()) {
-                jobGraph.addUserArtifact(entry.getKey(), entry.getValue());
-            }
-        }
 
         // set the ExecutionConfig last when it has been finalized
         try {

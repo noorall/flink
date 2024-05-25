@@ -18,12 +18,17 @@
 
 package org.apache.flink.runtime.util;
 
+import org.apache.flink.api.common.ExecutionConfig;
 import org.apache.flink.api.common.JobID;
+import org.apache.flink.api.common.cache.DistributedCache;
 import org.apache.flink.api.common.operators.ResourceSpec;
+import org.apache.flink.configuration.Configuration;
+import org.apache.flink.core.fs.Path;
 import org.apache.flink.runtime.blob.PermanentBlobKey;
 import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.jobgraph.JobType;
 import org.apache.flink.runtime.jobgraph.JobVertex;
+import org.apache.flink.runtime.jobgraph.SavepointRestoreSettings;
 import org.apache.flink.runtime.jobgraph.tasks.JobCheckpointingSettings;
 import org.apache.flink.streaming.api.graph.StreamGraph;
 import org.apache.flink.streaming.api.graph.StreamNode;
@@ -31,6 +36,7 @@ import org.apache.flink.types.Either;
 
 import java.net.URL;
 import java.util.List;
+import java.util.Map;
 
 import static org.apache.flink.util.Preconditions.checkState;
 
@@ -82,6 +88,55 @@ public class LogicalGraph {
 
     public boolean isEmpty() {
         return !graph.isLeft() && !graph.isRight();
+    }
+
+    public ExecutionConfig getExecutionConfig(ClassLoader userClassLoader) throws Exception {
+        return graph.isLeft()
+                ? graph.left().getSerializedExecutionConfig().deserializeValue(userClassLoader)
+                : graph.right().getExecutionConfig();
+    }
+
+    public SavepointRestoreSettings getSavepointRestoreSettings() {
+        return graph.isLeft()
+                ? graph.left().getSavepointRestoreSettings()
+                : graph.right().getSavepointRestoreSettings();
+    }
+
+    public void setSavepointRestoreSettings(SavepointRestoreSettings savepointRestoreSettings) {
+        if (graph.isLeft()) {
+            graph.left().setSavepointRestoreSettings(savepointRestoreSettings);
+        } else {
+            graph.right().setSavepointRestoreSettings(savepointRestoreSettings);
+        }
+    }
+
+    public List<Path> getUserJars() {
+        return graph.isLeft() ? graph.left().getUserJars() : graph.right().getUserJars();
+    }
+
+    public Map<String, DistributedCache.DistributedCacheEntry> getUserArtifacts() {
+        return graph.isLeft() ? graph.left().getUserArtifacts() : graph.right().getUserArtifacts();
+    }
+
+    public int getMaximumParallelism() {
+        return graph.isLeft()
+                ? graph.left().getMaximumParallelism()
+                : graph.right().getMaximumParallelism();
+    }
+
+    public Configuration getJobConfiguration() {
+        return graph.isLeft()
+                ? graph.left().getJobConfiguration()
+                : graph.right().getJobConfiguration();
+    }
+
+    public boolean isCheckpointingEnabled() {
+        JobCheckpointingSettings snapshotSettings = getJobCheckpointingSettings();
+        if (snapshotSettings == null) {
+            return false;
+        }
+
+        return snapshotSettings.getCheckpointCoordinatorConfiguration().isCheckpointingEnabled();
     }
 
     public long getInitialClientHeartbeatTimeout() {

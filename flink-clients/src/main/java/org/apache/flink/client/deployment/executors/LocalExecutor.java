@@ -27,9 +27,9 @@ import org.apache.flink.configuration.DeploymentOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.core.execution.JobClient;
 import org.apache.flink.core.execution.PipelineExecutor;
-import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.minicluster.MiniCluster;
 import org.apache.flink.runtime.minicluster.MiniClusterConfiguration;
+import org.apache.flink.runtime.util.LogicalGraph;
 
 import java.net.MalformedURLException;
 import java.util.concurrent.CompletableFuture;
@@ -78,13 +78,13 @@ public class LocalExecutor implements PipelineExecutor {
         // we only support attached execution with the local executor.
         checkState(configuration.get(DeploymentOptions.ATTACHED));
 
-        final JobGraph jobGraph = getJobGraph(pipeline, effectiveConfig, userCodeClassloader);
-
         return PerJobMiniClusterFactory.createWithFactory(effectiveConfig, miniClusterFactory)
-                .submitJob(jobGraph, userCodeClassloader);
+                .submitJob(
+                        getLogicalGraph(pipeline, configuration, userCodeClassloader),
+                        userCodeClassloader);
     }
 
-    private JobGraph getJobGraph(
+    private LogicalGraph getLogicalGraph(
             Pipeline pipeline, Configuration configuration, ClassLoader userCodeClassloader)
             throws MalformedURLException {
         // This is a quirk in how LocalEnvironment used to work. It sets the default parallelism
@@ -99,8 +99,19 @@ public class LocalExecutor implements PipelineExecutor {
                     configuration.get(TaskManagerOptions.MINI_CLUSTER_NUM_TASK_MANAGERS);
 
             plan.setDefaultParallelism(slotsPerTaskManager * numTaskManagers);
-        }
 
-        return PipelineExecutorUtils.getJobGraph(pipeline, configuration, userCodeClassloader);
+            return LogicalGraph.createLogicalGraph(
+                    PipelineExecutorUtils.getJobGraph(
+                            pipeline, configuration, userCodeClassloader));
+        } else {
+            if (configuration.get(DeploymentOptions.SUBMIT_STREAM_GRAPH_ENABLED)) {
+                return LogicalGraph.createLogicalGraph(
+                        PipelineExecutorUtils.getStreamGraph(pipeline, configuration));
+            } else {
+                return LogicalGraph.createLogicalGraph(
+                        PipelineExecutorUtils.getJobGraph(
+                                pipeline, configuration, userCodeClassloader));
+            }
+        }
     }
 }

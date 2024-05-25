@@ -35,6 +35,7 @@ import org.apache.flink.runtime.messages.Acknowledge;
 import org.apache.flink.runtime.minicluster.MiniCluster;
 import org.apache.flink.runtime.operators.coordination.CoordinationRequest;
 import org.apache.flink.runtime.operators.coordination.CoordinationResponse;
+import org.apache.flink.runtime.util.LogicalGraph;
 import org.apache.flink.util.AbstractID;
 import org.apache.flink.util.ExceptionUtils;
 import org.apache.flink.util.SerializedValue;
@@ -76,6 +77,11 @@ public class MiniClusterClient implements ClusterClient<MiniClusterClient.MiniCl
     @Override
     public CompletableFuture<JobID> submitJob(@Nonnull JobGraph jobGraph) {
         return miniCluster.submitJob(jobGraph).thenApply(JobSubmissionResult::getJobID);
+    }
+
+    @Override
+    public CompletableFuture<JobID> submitJob(LogicalGraph logicalGraph) {
+        return miniCluster.submitJob(logicalGraph).thenApply(JobSubmissionResult::getJobID);
     }
 
     @Override

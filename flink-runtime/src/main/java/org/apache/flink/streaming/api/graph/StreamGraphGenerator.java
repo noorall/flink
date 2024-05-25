@@ -294,6 +294,7 @@ public class StreamGraphGenerator {
             }
         }
 
+        streamGraph.prepareUserArtifacts();
         final StreamGraph builtStreamGraph = streamGraph;
 
         alreadyTransformed.clear();

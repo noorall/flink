@@ -27,11 +27,12 @@ import org.apache.flink.client.deployment.ClusterDescriptor;
 import org.apache.flink.client.program.ClusterClient;
 import org.apache.flink.client.program.ClusterClientProvider;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.DeploymentOptions;
 import org.apache.flink.core.execution.CacheSupportedPipelineExecutor;
 import org.apache.flink.core.execution.JobClient;
 import org.apache.flink.core.execution.PipelineExecutor;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
-import org.apache.flink.runtime.jobgraph.JobGraph;
+import org.apache.flink.runtime.util.LogicalGraph;
 import org.apache.flink.util.AbstractID;
 import org.apache.flink.util.function.FunctionUtils;
 
@@ -68,8 +69,17 @@ public class AbstractSessionClusterExecutor<
             @Nonnull final Configuration configuration,
             @Nonnull final ClassLoader userCodeClassloader)
             throws Exception {
-        final JobGraph jobGraph =
-                PipelineExecutorUtils.getJobGraph(pipeline, configuration, userCodeClassloader);
+        LogicalGraph logicalGraph;
+        if (configuration.get(DeploymentOptions.SUBMIT_STREAM_GRAPH_ENABLED)) {
+            logicalGraph =
+                    LogicalGraph.createLogicalGraph(
+                            PipelineExecutorUtils.getStreamGraph(pipeline, configuration));
+        } else {
+            logicalGraph =
+                    LogicalGraph.createLogicalGraph(
+                            PipelineExecutorUtils.getJobGraph(
+                                    pipeline, configuration, userCodeClassloader));
+        }
 
         try (final ClusterDescriptor<ClusterID> clusterDescriptor =
                 clusterClientFactory.createClusterDescriptor(configuration)) {
@@ -80,7 +90,7 @@ public class AbstractSessionClusterExecutor<
                     clusterDescriptor.retrieve(clusterID);
             ClusterClient<ClusterID> clusterClient = clusterClientProvider.getClusterClient();
             return clusterClient
-                    .submitJob(jobGraph)
+                    .submitJob(logicalGraph)
                     .thenApplyAsync(
                             FunctionUtils.uncheckedFunction(
                                     jobId -> {

@@ -1065,40 +1065,60 @@ public class MiniCluster implements AutoCloseableAsync {
     }
 
     public CompletableFuture<JobSubmissionResult> submitJob(JobGraph jobGraph) {
-        // When MiniCluster uses the local RPC, the provided JobGraph is passed directly to the
-        // Dispatcher. This means that any mutations to the JG can affect the Dispatcher behaviour,
-        // so we rather clone it to guard against this.
-        final JobGraph clonedJobGraph = InstantiationUtil.cloneUnchecked(jobGraph);
-        checkRestoreModeForChangelogStateBackend(clonedJobGraph);
+        return submitJob(LogicalGraph.createLogicalGraph(jobGraph));
+    }
+
+    public CompletableFuture<JobSubmissionResult> submitJob(LogicalGraph logicalGraph) {
+        // When MiniCluster uses the local RPC, the provided logical graph is passed directly to the
+        // Dispatcher. This means that any mutations to the graph can affect the Dispatcher
+        // behaviour, so we rather clone it to guard against this.
+        final LogicalGraph clonedLogicalGraph = cloneLogicalGraph(logicalGraph);
+        checkRestoreModeForChangelogStateBackend(logicalGraph);
         final CompletableFuture<DispatcherGateway> dispatcherGatewayFuture =
                 getDispatcherGatewayFuture();
         final CompletableFuture<InetSocketAddress> blobServerAddressFuture =
                 createBlobServerAddress(dispatcherGatewayFuture);
         final CompletableFuture<Void> jarUploadFuture =
-                uploadAndSetJobFiles(blobServerAddressFuture, clonedJobGraph);
+                uploadAndSetJobFiles(blobServerAddressFuture, clonedLogicalGraph);
         final CompletableFuture<Acknowledge> acknowledgeCompletableFuture =
                 jarUploadFuture
                         .thenCombine(
                                 dispatcherGatewayFuture,
                                 (Void ack, DispatcherGateway dispatcherGateway) ->
-                                        dispatcherGateway.submitJob(clonedJobGraph, rpcTimeout))
+                                        clonedLogicalGraph.isJobGraph()
+                                                ? dispatcherGateway.submitJob(
+                                                        clonedLogicalGraph.getJobGraph(),
+                                                        rpcTimeout)
+                                                : dispatcherGateway.submitJob(
+                                                        clonedLogicalGraph.getStreamGraph(),
+                                                        rpcTimeout))
                         .thenCompose(Function.identity());
         return acknowledgeCompletableFuture.thenApply(
-                (Acknowledge ignored) -> new JobSubmissionResult(clonedJobGraph.getJobID()));
+                (Acknowledge ignored) -> new JobSubmissionResult(clonedLogicalGraph.getJobId()));
+    }
+
+    private LogicalGraph cloneLogicalGraph(LogicalGraph logicalGraph) {
+        if (logicalGraph.isJobGraph()) {
+            return LogicalGraph.createLogicalGraph(
+                    InstantiationUtil.cloneUnchecked(logicalGraph.getJobGraph()));
+        } else {
+            return LogicalGraph.createLogicalGraph(
+                    InstantiationUtil.cloneUnchecked(logicalGraph.getStreamGraph()));
+        }
     }
 
     // HACK: temporary hack to make the randomized changelog state backend tests work with forced
     // full snapshots. This option should be removed once changelog state backend supports forced
     // full snapshots
-    private void checkRestoreModeForChangelogStateBackend(JobGraph jobGraph) {
+    private void checkRestoreModeForChangelogStateBackend(LogicalGraph graph) {
         final SavepointRestoreSettings savepointRestoreSettings =
-                jobGraph.getSavepointRestoreSettings();
+                graph.getSavepointRestoreSettings();
         if (overrideRestoreModeForChangelogStateBackend
                 && savepointRestoreSettings.getRestoreMode() == RestoreMode.NO_CLAIM) {
             final Configuration conf = new Configuration();
             SavepointRestoreSettings.toConfiguration(savepointRestoreSettings, conf);
             conf.set(StateRecoveryOptions.RESTORE_MODE, RestoreMode.LEGACY);
-            jobGraph.setSavepointRestoreSettings(SavepointRestoreSettings.fromConfiguration(conf));
+            graph.setSavepointRestoreSettings(SavepointRestoreSettings.fromConfiguration(conf));
         }
     }
 
@@ -1131,12 +1151,12 @@ public class MiniCluster implements AutoCloseableAsync {
 
     private CompletableFuture<Void> uploadAndSetJobFiles(
             final CompletableFuture<InetSocketAddress> blobServerAddressFuture,
-            final JobGraph job) {
+            final LogicalGraph job) {
         return blobServerAddressFuture.thenAccept(
                 blobServerAddress -> {
                     try {
                         ClientUtils.extractAndUploadJobGraphFiles(
-                                LogicalGraph.createLogicalGraph(job),
+                                job,
                                 () ->
                                         new BlobClient(
                                                 blobServerAddress,
