@@ -28,6 +28,7 @@ import org.apache.flink.runtime.blob.PermanentBlobKey;
 import org.apache.flink.runtime.blob.VoidBlobStore;
 import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.jobgraph.JobGraphTestUtils;
+import org.apache.flink.runtime.util.LogicalGraph;
 import org.apache.flink.testutils.junit.utils.TempDirUtils;
 import org.apache.flink.util.InstantiationUtil;
 
@@ -84,7 +85,7 @@ public class ClientUtilsTest {
         assertThat(jobGraph.getUserJarBlobKeys()).isEmpty();
 
         ClientUtils.extractAndUploadJobGraphFiles(
-                jobGraph,
+                LogicalGraph.createLogicalGraph(jobGraph),
                 () ->
                         new BlobClient(
                                 new InetSocketAddress("localhost", blobServer.getPort()),
@@ -136,7 +137,7 @@ public class ClientUtilsTest {
                 .isEmpty();
 
         ClientUtils.extractAndUploadJobGraphFiles(
-                jobGraph,
+                LogicalGraph.createLogicalGraph(jobGraph),
                 () ->
                         new BlobClient(
                                 new InetSocketAddress("localhost", blobServer.getPort()),

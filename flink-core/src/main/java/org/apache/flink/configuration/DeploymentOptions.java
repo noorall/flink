@@ -61,6 +61,12 @@ public class DeploymentOptions {
                     .withDescription(
                             "Specifies if the pipeline is submitted in attached or detached mode.");
 
+    public static final ConfigOption<Boolean> SUBMIT_STREAM_GRAPH_ENABLED =
+            key("execution.submit-stream-graph.enabled")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withDescription("Specifies if the job is submitted by stream graph.");
+
     public static final ConfigOption<Boolean> SHUTDOWN_IF_ATTACHED =
             key("execution.shutdown-on-attached-exit")
                     .booleanType()

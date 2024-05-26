@@ -25,13 +25,14 @@ import org.apache.flink.api.dag.Pipeline;
 import org.apache.flink.client.cli.ClientOptions;
 import org.apache.flink.client.deployment.executors.PipelineExecutorUtils;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.DeploymentOptions;
 import org.apache.flink.configuration.PipelineOptionsInternal;
 import org.apache.flink.core.execution.JobClient;
 import org.apache.flink.core.execution.PipelineExecutor;
 import org.apache.flink.runtime.blob.BlobClient;
 import org.apache.flink.runtime.client.ClientUtils;
 import org.apache.flink.runtime.dispatcher.DispatcherGateway;
-import org.apache.flink.runtime.jobgraph.JobGraph;
+import org.apache.flink.runtime.util.LogicalGraph;
 import org.apache.flink.util.FlinkException;
 import org.apache.flink.util.function.FunctionUtils;
 
@@ -46,6 +47,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
+import static org.apache.flink.util.Preconditions.checkState;
 
 /**
  * A base class for {@link PipelineExecutor executors} that invoke directly methods of the {@link
@@ -119,9 +121,18 @@ public class EmbeddedExecutor implements PipelineExecutor {
         final Time timeout =
                 Time.milliseconds(configuration.get(ClientOptions.CLIENT_TIMEOUT).toMillis());
 
-        final JobGraph jobGraph =
-                PipelineExecutorUtils.getJobGraph(pipeline, configuration, userCodeClassloader);
-        final JobID actualJobId = jobGraph.getJobID();
+        LogicalGraph logicalGraph;
+        if (configuration.get(DeploymentOptions.SUBMIT_STREAM_GRAPH_ENABLED)) {
+            logicalGraph =
+                    LogicalGraph.createLogicalGraph(
+                            PipelineExecutorUtils.getStreamGraph(pipeline, configuration));
+        } else {
+            logicalGraph =
+                    LogicalGraph.createLogicalGraph(
+                            PipelineExecutorUtils.getJobGraph(
+                                    pipeline, configuration, userCodeClassloader));
+        }
+        final JobID actualJobId = logicalGraph.getJobId();
 
         this.submittedJobIds.add(actualJobId);
         LOG.info("Job {} is submitted.", actualJobId);
@@ -131,7 +142,7 @@ public class EmbeddedExecutor implements PipelineExecutor {
         }
 
         final CompletableFuture<JobID> jobSubmissionFuture =
-                submitJob(configuration, dispatcherGateway, jobGraph, timeout);
+                submitJob(configuration, dispatcherGateway, logicalGraph, timeout);
 
         return jobSubmissionFuture
                 .thenApplyAsync(
@@ -159,11 +170,12 @@ public class EmbeddedExecutor implements PipelineExecutor {
     private static CompletableFuture<JobID> submitJob(
             final Configuration configuration,
             final DispatcherGateway dispatcherGateway,
-            final JobGraph jobGraph,
+            final LogicalGraph logicalGraph,
             final Time rpcTimeout) {
-        checkNotNull(jobGraph);
+        checkNotNull(logicalGraph);
+        checkState(logicalGraph.isEmpty());
 
-        LOG.info("Submitting Job with JobId={}.", jobGraph.getJobID());
+        LOG.info("Submitting Job with JobId={}.", logicalGraph.getJobId());
 
         return dispatcherGateway
                 .getBlobServerPort(rpcTimeout)
@@ -175,14 +187,18 @@ public class EmbeddedExecutor implements PipelineExecutor {
                         blobServerAddress -> {
                             try {
                                 ClientUtils.extractAndUploadJobGraphFiles(
-                                        jobGraph,
+                                        logicalGraph,
                                         () -> new BlobClient(blobServerAddress, configuration));
                             } catch (FlinkException e) {
                                 throw new CompletionException(e);
                             }
 
-                            return dispatcherGateway.submitJob(jobGraph, rpcTimeout);
+                            return logicalGraph.isJobGraph()
+                                    ? dispatcherGateway.submitJob(
+                                            logicalGraph.getJobGraph(), rpcTimeout)
+                                    : dispatcherGateway.submitJob(
+                                            logicalGraph.getStreamGraph(), rpcTimeout);
                         })
-                .thenApply(ack -> jobGraph.getJobID());
+                .thenApply(ack -> logicalGraph.getJobId());
     }
 }

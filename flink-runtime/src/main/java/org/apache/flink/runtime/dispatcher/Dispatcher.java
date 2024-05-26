@@ -22,7 +22,6 @@ import org.apache.flink.annotation.Internal;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
-import org.apache.flink.api.common.operators.ResourceSpec;
 import org.apache.flink.api.common.time.Time;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.BlobServerOptions;
@@ -93,7 +92,9 @@ import org.apache.flink.runtime.rpc.FencedRpcEndpoint;
 import org.apache.flink.runtime.rpc.RpcService;
 import org.apache.flink.runtime.rpc.RpcServiceUtils;
 import org.apache.flink.runtime.scheduler.ExecutionGraphInfo;
+import org.apache.flink.runtime.util.LogicalGraph;
 import org.apache.flink.runtime.webmonitor.retriever.GatewayRetriever;
+import org.apache.flink.streaming.api.graph.StreamGraph;
 import org.apache.flink.util.CollectionUtil;
 import org.apache.flink.util.ExceptionUtils;
 import org.apache.flink.util.FlinkException;
@@ -404,11 +405,13 @@ public abstract class Dispatcher extends FencedRpcEndpoint<DispatcherId>
     private void runRecoveredJob(final JobGraph recoveredJob) {
         checkNotNull(recoveredJob);
 
-        initJobClientExpiredTime(recoveredJob);
+        initJobClientExpiredTime(LogicalGraph.createLogicalGraph(recoveredJob));
 
         try (MdcCloseable ignored =
                 MdcUtils.withContext(MdcUtils.asContextData(recoveredJob.getJobID()))) {
-            runJob(createJobMasterRunner(recoveredJob), ExecutionType.RECOVERY);
+            runJob(
+                    createJobMasterRunner(LogicalGraph.createLogicalGraph(recoveredJob)),
+                    ExecutionType.RECOVERY);
         } catch (Throwable throwable) {
             onFatalError(
                     new DispatcherException(
@@ -418,9 +421,10 @@ public abstract class Dispatcher extends FencedRpcEndpoint<DispatcherId>
         }
     }
 
-    private void initJobClientExpiredTime(JobGraph jobGraph) {
-        JobID jobID = jobGraph.getJobID();
-        long initialClientHeartbeatTimeout = jobGraph.getInitialClientHeartbeatTimeout();
+    private void initJobClientExpiredTime(LogicalGraph graph) {
+        JobID jobID = graph.getJobId();
+        long initialClientHeartbeatTimeout = graph.getInitialClientHeartbeatTimeout();
+
         if (initialClientHeartbeatTimeout > 0) {
             log.info(
                     "Begin to detect the client's aliveness for job {}. The heartbeat timeout is {}",
@@ -516,9 +520,18 @@ public abstract class Dispatcher extends FencedRpcEndpoint<DispatcherId>
 
     @Override
     public CompletableFuture<Acknowledge> submitJob(JobGraph jobGraph, Time timeout) {
-        final JobID jobID = jobGraph.getJobID();
+        return submitJob(LogicalGraph.createLogicalGraph(jobGraph));
+    }
+
+    @Override
+    public CompletableFuture<Acknowledge> submitJob(StreamGraph streamGraph, Time timeout) {
+        return submitJob(LogicalGraph.createLogicalGraph(streamGraph));
+    }
+
+    private CompletableFuture<Acknowledge> submitJob(LogicalGraph graph) {
+        final JobID jobID = graph.getJobId();
         try (MdcCloseable ignored = MdcUtils.withContext(MdcUtils.asContextData(jobID))) {
-            log.info("Received JobGraph submission '{}' ({}).", jobGraph.getName(), jobID);
+            log.info("Received JobGraph submission '{}' ({}).", graph.getJobName(), jobID);
         }
         return isInGloballyTerminalState(jobID)
                 .thenComposeAsync(
@@ -528,7 +541,7 @@ public abstract class Dispatcher extends FencedRpcEndpoint<DispatcherId>
                                         "Ignoring JobGraph submission '{}' ({}) because the job already "
                                                 + "reached a globally-terminal state (i.e. {}) in a "
                                                 + "previous execution.",
-                                        jobGraph.getName(),
+                                        graph.getJobName(),
                                         jobID,
                                         Arrays.stream(JobStatus.values())
                                                 .filter(JobStatus::isGloballyTerminalState)
@@ -542,7 +555,7 @@ public abstract class Dispatcher extends FencedRpcEndpoint<DispatcherId>
                                 // job with the given jobID is not terminated, yet
                                 return FutureUtils.completedExceptionally(
                                         DuplicateJobSubmissionException.of(jobID));
-                            } else if (isPartialResourceConfigured(jobGraph)) {
+                            } else if (graph.isPartialResourceConfigured()) {
                                 return FutureUtils.completedExceptionally(
                                         new JobSubmissionException(
                                                 jobID,
@@ -550,7 +563,7 @@ public abstract class Dispatcher extends FencedRpcEndpoint<DispatcherId>
                                                         + "have resources configured. The limitation will be "
                                                         + "removed in future versions."));
                             } else {
-                                return internalSubmitJob(jobGraph);
+                                return internalSubmitJob(graph);
                             }
                         },
                         getMainThreadExecutor(jobID));
@@ -584,39 +597,25 @@ public abstract class Dispatcher extends FencedRpcEndpoint<DispatcherId>
         return jobResultStore.hasJobResultEntryAsync(jobId);
     }
 
-    private boolean isPartialResourceConfigured(JobGraph jobGraph) {
-        boolean hasVerticesWithUnknownResource = false;
-        boolean hasVerticesWithConfiguredResource = false;
-
-        for (JobVertex jobVertex : jobGraph.getVertices()) {
-            if (jobVertex.getMinResources() == ResourceSpec.UNKNOWN) {
-                hasVerticesWithUnknownResource = true;
-            } else {
-                hasVerticesWithConfiguredResource = true;
-            }
-
-            if (hasVerticesWithUnknownResource && hasVerticesWithConfiguredResource) {
-                return true;
-            }
+    private CompletableFuture<Acknowledge> internalSubmitJob(LogicalGraph logicalGraph) {
+        if (logicalGraph.isJobGraph()) {
+            applyParallelismOverrides(logicalGraph.getJobGraph());
         }
-
-        return false;
-    }
-
-    private CompletableFuture<Acknowledge> internalSubmitJob(JobGraph jobGraph) {
-        applyParallelismOverrides(jobGraph);
-        log.info("Submitting job '{}' ({}).", jobGraph.getName(), jobGraph.getJobID());
+        log.info("Submitting job '{}' ({}).", logicalGraph.getJobName(), logicalGraph.getJobId());
 
         // track as an outstanding job
-        submittedAndWaitingTerminationJobIDs.add(jobGraph.getJobID());
+        submittedAndWaitingTerminationJobIDs.add(logicalGraph.getJobId());
 
-        return waitForTerminatingJob(jobGraph.getJobID(), jobGraph, this::persistAndRunJob)
-                .handle((ignored, throwable) -> handleTermination(jobGraph.getJobID(), throwable))
+        return waitForTerminatingJob(logicalGraph.getJobId(), logicalGraph, this::persistAndRunJob)
+                .handle(
+                        (ignored, throwable) ->
+                                handleTermination(logicalGraph.getJobId(), throwable))
                 .thenCompose(Function.identity())
                 .whenComplete(
                         (ignored, throwable) ->
                                 // job is done processing, whether failed or finished
-                                submittedAndWaitingTerminationJobIDs.remove(jobGraph.getJobID()));
+                                submittedAndWaitingTerminationJobIDs.remove(
+                                        logicalGraph.getJobId()));
     }
 
     private CompletableFuture<Acknowledge> handleTermination(
@@ -648,16 +647,18 @@ public abstract class Dispatcher extends FencedRpcEndpoint<DispatcherId>
         return CompletableFuture.completedFuture(Acknowledge.get());
     }
 
-    private void persistAndRunJob(JobGraph jobGraph) throws Exception {
-        jobGraphWriter.putJobGraph(jobGraph);
-        initJobClientExpiredTime(jobGraph);
-        runJob(createJobMasterRunner(jobGraph), ExecutionType.SUBMISSION);
+    private void persistAndRunJob(LogicalGraph graph) throws Exception {
+        if (graph.isJobGraph()) {
+            jobGraphWriter.putJobGraph(graph.getJobGraph());
+        }
+        initJobClientExpiredTime(graph);
+        runJob(createJobMasterRunner(graph), ExecutionType.SUBMISSION);
     }
 
-    private JobManagerRunner createJobMasterRunner(JobGraph jobGraph) throws Exception {
-        Preconditions.checkState(!jobManagerRunnerRegistry.isRegistered(jobGraph.getJobID()));
+    private JobManagerRunner createJobMasterRunner(LogicalGraph logicalGraph) throws Exception {
+        Preconditions.checkState(!jobManagerRunnerRegistry.isRegistered(logicalGraph.getJobId()));
         return jobManagerRunnerFactory.createJobManagerRunner(
-                jobGraph,
+                logicalGraph,
                 configuration,
                 getRpcService(),
                 highAvailabilityServices,
@@ -1555,7 +1556,7 @@ public abstract class Dispatcher extends FencedRpcEndpoint<DispatcherId>
     }
 
     private CompletableFuture<Void> waitForTerminatingJob(
-            JobID jobId, JobGraph jobGraph, ThrowingConsumer<JobGraph, ?> action) {
+            JobID jobId, LogicalGraph logicalGraph, ThrowingConsumer<LogicalGraph, ?> action) {
         final CompletableFuture<Void> jobManagerTerminationFuture =
                 getJobTerminationFuture(jobId)
                         .exceptionally(
@@ -1574,7 +1575,7 @@ public abstract class Dispatcher extends FencedRpcEndpoint<DispatcherId>
                 FunctionUtils.uncheckedConsumer(
                         (ignored) -> {
                             jobManagerRunnerTerminationFutures.remove(jobId);
-                            action.accept(jobGraph);
+                            action.accept(logicalGraph);
                         }));
     }
 

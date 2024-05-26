@@ -101,6 +101,8 @@ import org.apache.flink.runtime.taskmanager.TaskExecutionState;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation.ResolutionMode;
 import org.apache.flink.runtime.taskmanager.UnresolvedTaskManagerLocation;
+import org.apache.flink.runtime.util.LogicalGraph;
+import org.apache.flink.streaming.api.graph.StreamGraph;
 import org.apache.flink.util.ExceptionUtils;
 import org.apache.flink.util.FlinkException;
 import org.apache.flink.util.FlinkRuntimeException;
@@ -161,6 +163,9 @@ public class JobMaster extends FencedRpcEndpoint<JobMasterId>
     private final ResourceID resourceId;
 
     private final JobGraph jobGraph;
+
+    // This field only will be set when submit job by streamGraph.
+    private @Nullable StreamGraph streamGraph;
 
     private final Time rpcTimeout;
 
@@ -236,7 +241,7 @@ public class JobMaster extends FencedRpcEndpoint<JobMasterId>
             JobMasterId jobMasterId,
             JobMasterConfiguration jobMasterConfiguration,
             ResourceID resourceId,
-            JobGraph jobGraph,
+            LogicalGraph graph,
             HighAvailabilityServices highAvailabilityService,
             SlotPoolServiceSchedulerFactory slotPoolServiceSchedulerFactory,
             JobManagerSharedServices jobManagerSharedServices,
@@ -258,7 +263,15 @@ public class JobMaster extends FencedRpcEndpoint<JobMasterId>
                 rpcService,
                 RpcServiceUtils.createRandomName(JOB_MANAGER_NAME),
                 jobMasterId,
-                MdcUtils.asContextData(jobGraph.getJobID()));
+                MdcUtils.asContextData(graph.getJobId()));
+
+        JobGraph jobGraph;
+        if (graph.isJobGraph()) {
+            jobGraph = graph.getJobGraph();
+        } else {
+            streamGraph = graph.getStreamGraph();
+            jobGraph = streamGraph.getJobGraphAndAttachUserArtifacts(userCodeLoader);
+        }
 
         final ExecutionDeploymentReconciliationHandler executionStateReconciliationHandler =
                 new ExecutionDeploymentReconciliationHandler() {

@@ -27,12 +27,14 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.DeploymentOptions;
 import org.apache.flink.configuration.PipelineOptionsInternal;
 import org.apache.flink.runtime.jobgraph.JobGraph;
+import org.apache.flink.streaming.api.graph.StreamGraph;
 
 import javax.annotation.Nonnull;
 
 import java.net.MalformedURLException;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
+import static org.apache.flink.util.Preconditions.checkState;
 
 /** Utility class with method related to job execution. */
 public class PipelineExecutorUtils {
@@ -79,5 +81,35 @@ public class PipelineExecutorUtils {
         jobGraph.setSavepointRestoreSettings(executionConfigAccessor.getSavepointRestoreSettings());
 
         return jobGraph;
+    }
+
+    public static StreamGraph getStreamGraph(
+            @Nonnull final Pipeline pipeline, @Nonnull final Configuration configuration)
+            throws MalformedURLException {
+        checkNotNull(pipeline);
+        checkNotNull(configuration);
+        checkState(pipeline instanceof StreamGraph);
+
+        StreamGraph streamGraph = (StreamGraph) pipeline;
+
+        final ExecutionConfigAccessor executionConfigAccessor =
+                ExecutionConfigAccessor.fromConfiguration(configuration);
+
+        configuration
+                .getOptional(PipelineOptionsInternal.PIPELINE_FIXED_JOB_ID)
+                .ifPresent(strJobID -> streamGraph.setJobId(JobID.fromHexString(strJobID)));
+
+        if (configuration.get(DeploymentOptions.ATTACHED)
+                && configuration.get(DeploymentOptions.SHUTDOWN_IF_ATTACHED)) {
+            streamGraph.setInitialClientHeartbeatTimeout(
+                    configuration.get(ClientOptions.CLIENT_HEARTBEAT_TIMEOUT).toMillis());
+        }
+
+        streamGraph.addJars(executionConfigAccessor.getJars());
+        streamGraph.setClasspaths(executionConfigAccessor.getClasspaths());
+        streamGraph.setSavepointRestoreSettings(
+                executionConfigAccessor.getSavepointRestoreSettings());
+
+        return streamGraph;
     }
 }
