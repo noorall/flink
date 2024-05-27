@@ -32,6 +32,7 @@ import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.jobgraph.OperatorID;
 import org.apache.flink.runtime.operators.coordination.OperatorCoordinator;
 import org.apache.flink.runtime.operators.util.TaskConfig;
+import org.apache.flink.streaming.runtime.partitioner.StreamPartitioner;
 import org.apache.flink.util.FlinkRuntimeException;
 import org.apache.flink.util.Preconditions;
 import org.apache.flink.util.SerializedValue;
@@ -207,11 +208,29 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
 
     @Override
     public boolean updateStreamGraph(StreamGraphUpdateRequestInfo requestInfo) {
-        // need update:
-        // chainInfos
-        // opIntermediateOutputsCaches
-        // jobGraph Configs
-        return false;
+        if (requestInfo instanceof ModifyStreamEdgeRequestInfo) {
+            changeStreamEdgePartitioner((ModifyStreamEdgeRequestInfo) requestInfo);
+        } else {
+            return false;
+        }
+        return true;
+    }
+
+    private void changeStreamEdgePartitioner(
+            ModifyStreamEdgeRequestInfo modifyStreamEdgeRequestInfo) {
+        StreamEdge streamEdge = modifyStreamEdgeRequestInfo.getStreamEdge();
+        StreamPartitioner<?> newPartitioner = modifyStreamEdgeRequestInfo.getOutputPartitioner();
+        streamEdge.setPartitioner(newPartitioner);
+        Integer sourceNodeId = streamEdge.getSourceId();
+        if (!nodeToStartNodeMap.containsKey(sourceNodeId)) {
+            return;
+        }
+        Integer startNodeId = nodeToStartNodeMap.get(sourceNodeId);
+        if (!opIntermediateOutputsCaches.get(startNodeId).containsKey(streamEdge)) {
+            return;
+        }
+        NonChainedOutput output = opIntermediateOutputsCaches.get(startNodeId).get(streamEdge);
+        output.setPartitioner(newPartitioner);
     }
 
     @Override
