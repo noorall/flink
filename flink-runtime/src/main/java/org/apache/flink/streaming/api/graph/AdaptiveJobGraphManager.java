@@ -209,28 +209,30 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
     @Override
     public boolean updateStreamGraph(StreamGraphUpdateRequestInfo requestInfo) {
         if (requestInfo instanceof ModifyStreamEdgeRequestInfo) {
-            changeStreamEdgePartitioner((ModifyStreamEdgeRequestInfo) requestInfo);
+            return changeStreamEdgePartitioner((ModifyStreamEdgeRequestInfo) requestInfo);
         } else {
             return false;
         }
-        return true;
     }
 
-    private void changeStreamEdgePartitioner(
+    private boolean changeStreamEdgePartitioner(
             ModifyStreamEdgeRequestInfo modifyStreamEdgeRequestInfo) {
         StreamEdge streamEdge = modifyStreamEdgeRequestInfo.getStreamEdge();
         StreamPartitioner<?> newPartitioner = modifyStreamEdgeRequestInfo.getOutputPartitioner();
+        if (nodeToStartNodeMap.containsKey(streamEdge.getTargetId())) {
+            return false;
+        }
         streamEdge.setPartitioner(newPartitioner);
         Integer sourceNodeId = streamEdge.getSourceId();
-        if (!nodeToStartNodeMap.containsKey(sourceNodeId)) {
-            return;
-        }
         Integer startNodeId = nodeToStartNodeMap.get(sourceNodeId);
-        if (!opIntermediateOutputsCaches.get(startNodeId).containsKey(streamEdge)) {
-            return;
+        NonChainedOutput output =
+                (startNodeId != null)
+                        ? opIntermediateOutputsCaches.get(startNodeId).get(streamEdge)
+                        : null;
+        if (output != null) {
+            output.setPartitioner(newPartitioner);
         }
-        NonChainedOutput output = opIntermediateOutputsCaches.get(startNodeId).get(streamEdge);
-        output.setPartitioner(newPartitioner);
+        return true;
     }
 
     @Override
