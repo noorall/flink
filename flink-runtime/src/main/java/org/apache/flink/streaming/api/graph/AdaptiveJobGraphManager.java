@@ -25,6 +25,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.OperatorIDPair;
 import org.apache.flink.runtime.jobgraph.InputOutputFormatContainer;
 import org.apache.flink.runtime.jobgraph.InputOutputFormatVertex;
+import org.apache.flink.runtime.jobgraph.IntermediateDataSet;
 import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.jobgraph.JobVertex;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
@@ -335,9 +336,12 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
             if (jobVertices.containsKey(edge.getTargetId())) {
                 connect(startNodeId, edge, output, physicalEdgesInOrder, jobVertices);
             } else {
-                jobVertices
-                        .get(startNodeId)
-                        .getOrCreateResultDataSet(output.getDataSetId(), output.getPartitionType());
+                JobVertex jobVertex = jobVertices.get(startNodeId);
+                IntermediateDataSet dataSet =
+                        jobVertex.getOrCreateResultDataSet(
+                                output.getDataSetId(), output.getPartitionType());
+
+                findOutputEdgesByVertexId(jobVertex.getID()).forEach(dataSet::addStreamEdge);
             }
         }
         config.setVertexNonChainedOutputs(new ArrayList<>(transitiveOutputs));
