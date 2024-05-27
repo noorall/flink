@@ -35,6 +35,7 @@ import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.jobgraph.OperatorID;
 import org.apache.flink.runtime.operators.coordination.OperatorCoordinator;
 import org.apache.flink.runtime.operators.util.TaskConfig;
+import org.apache.flink.streaming.runtime.partitioner.StreamPartitioner;
 import org.apache.flink.util.FlinkRuntimeException;
 import org.apache.flink.util.Preconditions;
 import org.apache.flink.util.SerializedValue;
@@ -60,7 +61,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import static org.apache.flink.streaming.api.graph.StreamingJobGraphGenerator.addVertexIndexPrefixInVertexName;
@@ -138,8 +138,6 @@ public class DefaultAdaptiveJobGraphManager implements AdaptiveJobGraphManager, 
 
     private final GenerateMode generateMode;
 
-    final AtomicInteger vertexIndexId;
-
     @VisibleForTesting
     public DefaultAdaptiveJobGraphManager(
             ClassLoader userClassloader,
@@ -174,8 +172,21 @@ public class DefaultAdaptiveJobGraphManager implements AdaptiveJobGraphManager, 
         this.jobGraph = new JobGraph(jobID, streamGraph.getJobName());
         this.jobGraph.setSnapshotSettings(streamGraph.getJobCheckpointingSettings());
         this.jobGraph.setSavepointRestoreSettings(streamGraph.getSavepointRestoreSettings());
+        this.jobGraph.setJobConfiguration(streamGraph.getJobConfiguration());
+        if (!streamGraph.getJobConfiguration().get(DeploymentOptions.SUBMIT_STREAM_GRAPH_ENABLED)) {
+            // skip prepare user artifact because these are already uploaded in client if
+            // submit job by stream graph
+            final Map<String, DistributedCache.DistributedCacheEntry> distributedCacheEntries =
+                    JobGraphUtils.prepareUserArtifactEntries(
+                            streamGraph.getUserArtifacts().stream()
+                                    .collect(Collectors.toMap(e -> e.f0, e -> e.f1)),
+                            this.jobGraph.getJobID());
 
-        this.vertexIndexId = new AtomicInteger(0);
+            for (Map.Entry<String, DistributedCache.DistributedCacheEntry> entry :
+                    distributedCacheEntries.entrySet()) {
+                this.jobGraph.addUserArtifact(entry.getKey(), entry.getValue());
+            }
+        }
     }
 
     @Override
@@ -192,23 +203,41 @@ public class DefaultAdaptiveJobGraphManager implements AdaptiveJobGraphManager, 
     @VisibleForTesting
     public List<JobVertex> createJobVerticesAndUpdateGraph(List<StreamNode> streamNodes) {
         Map<Integer, List<StreamEdge>> nonChainableOutputsCache = new LinkedHashMap<>();
-        Map<Integer, List<StreamEdge>> nonChainedInputsCache = new LinkedHashMap<>();
+        Map<Integer, List<StreamEdge>> nonChainableInputsCache = new LinkedHashMap<>();
         Map<Integer, OperatorChainInfo> chainInfos =
                 createOperatorChainInfos(
-                        streamNodes, nonChainableOutputsCache, nonChainedInputsCache);
+                        streamNodes, nonChainableOutputsCache, nonChainableInputsCache);
         Map<Integer, JobVertex> createdJobVertices = createJobVerticesByChainInfos(chainInfos);
         generateConfigForJobVertices(
-                createdJobVertices, chainInfos, nonChainableOutputsCache, nonChainedInputsCache);
+                createdJobVertices, chainInfos, nonChainableOutputsCache, nonChainableInputsCache);
         return new ArrayList<>(createdJobVertices.values());
     }
 
     @Override
     public boolean updateStreamGraph(StreamGraphUpdateRequestInfo requestInfo) {
-        // need update:
-        // chainInfos
-        // opIntermediateOutputsCaches
-        // jobGraph Configs
-        return false;
+        if (requestInfo instanceof ModifyStreamEdgeRequestInfo) {
+            changeStreamEdgePartitioner((ModifyStreamEdgeRequestInfo) requestInfo);
+        } else {
+            return false;
+        }
+        return true;
+    }
+
+    private void changeStreamEdgePartitioner(
+            ModifyStreamEdgeRequestInfo modifyStreamEdgeRequestInfo) {
+        StreamEdge streamEdge = modifyStreamEdgeRequestInfo.getStreamEdge();
+        StreamPartitioner<?> newPartitioner = modifyStreamEdgeRequestInfo.getOutputPartitioner();
+        streamEdge.setPartitioner(newPartitioner);
+        Integer sourceNodeId = streamEdge.getSourceId();
+        if (!nodeToStartNodeMap.containsKey(sourceNodeId)) {
+            return;
+        }
+        Integer startNodeId = nodeToStartNodeMap.get(sourceNodeId);
+        if (!opIntermediateOutputsCaches.get(startNodeId).containsKey(streamEdge)) {
+            return;
+        }
+        NonChainedOutput output = opIntermediateOutputsCaches.get(startNodeId).get(streamEdge);
+        output.setPartitioner(newPartitioner);
     }
 
     @Override
@@ -233,19 +262,19 @@ public class DefaultAdaptiveJobGraphManager implements AdaptiveJobGraphManager, 
             Map<Integer, JobVertex> jobVertices,
             Map<Integer, OperatorChainInfo> chainInfos,
             Map<Integer, List<StreamEdge>> nonChainableOutputsCache,
-            Map<Integer, List<StreamEdge>> nonChainedInputsCache) {
+            Map<Integer, List<StreamEdge>> nonChainableInputsCache) {
         if (jobGraph.isDynamic()) {
             setVertexParallelismsForDynamicGraphIfNecessary(jobVertices, chainInfos, streamGraph);
         }
         chainInfos.values().forEach(this::initStreamConfigs);
-        generateAllOutputConfigs(jobVertices, nonChainableOutputsCache, nonChainedInputsCache);
+        generateAllOutputConfigs(jobVertices, nonChainableOutputsCache, nonChainableInputsCache);
         finalizeConfig(jobVertices);
     }
 
     private void generateAllOutputConfigs(
             Map<Integer, JobVertex> jobVertices,
             Map<Integer, List<StreamEdge>> nonChainableOutputsCache,
-            Map<Integer, List<StreamEdge>> nonChainedInputsCache) {
+            Map<Integer, List<StreamEdge>> nonChainableInputsCache) {
         setAllOperatorNonChainedOutputsConfigs(
                 opIntermediateOutputsCaches,
                 nonChainableOutputsCache,
@@ -255,7 +284,7 @@ public class DefaultAdaptiveJobGraphManager implements AdaptiveJobGraphManager, 
                 hasHybridResultPartition);
         List<StreamEdge> physicalEdgesInOrder = new ArrayList<>();
         setAllVerticesNonChainedOutputsConfigs(jobVertices, physicalEdgesInOrder);
-        connectNonChainedInput(nonChainedInputsCache, physicalEdgesInOrder);
+        connectNonChainedInput(nonChainableInputsCache, physicalEdgesInOrder);
         setPhysicalEdges(physicalEdgesInOrder, vertexConfigs);
     }
 
@@ -273,24 +302,10 @@ public class DefaultAdaptiveJobGraphManager implements AdaptiveJobGraphManager, 
                 id -> streamGraph.getStreamNode(id).getManagedMemoryOperatorScopeUseCaseWeights(),
                 id -> streamGraph.getStreamNode(id).getManagedMemorySlotScopeUseCases());
 
-        if (!streamGraph.getJobConfiguration().get(DeploymentOptions.SUBMIT_STREAM_GRAPH_ENABLED)) {
-            // skip prepare user artifact because these are already uploaded in client if
-            // submit job by stream graph
-            final Map<String, DistributedCache.DistributedCacheEntry> distributedCacheEntries =
-                    JobGraphUtils.prepareUserArtifactEntries(
-                            streamGraph.getUserArtifacts().stream()
-                                    .collect(Collectors.toMap(e -> e.f0, e -> e.f1)),
-                            jobGraph.getJobID());
-
-            for (Map.Entry<String, DistributedCache.DistributedCacheEntry> entry :
-                    distributedCacheEntries.entrySet()) {
-                jobGraph.addUserArtifact(entry.getKey(), entry.getValue());
-            }
-        }
-        jobGraph.setJobConfiguration(streamGraph.getJobConfiguration());
         // TODO： generate name via JobVertex rather than through JobGraph.
         addVertexIndexPrefixInVertexName(streamGraph, jobGraph);
         setVertexDescription(jobVertices, streamGraph, chainedConfigs);
+        // TODO: only update changed config
         try {
             FutureUtils.combineAll(
                             vertexConfigs.values().stream()
@@ -357,9 +372,9 @@ public class DefaultAdaptiveJobGraphManager implements AdaptiveJobGraphManager, 
     }
 
     private void connectNonChainedInput(
-            Map<Integer, List<StreamEdge>> nonChainedInputsCache,
+            Map<Integer, List<StreamEdge>> nonChainableInputsCache,
             List<StreamEdge> physicalEdgesInOrder) {
-        for (List<StreamEdge> streamEdges : nonChainedInputsCache.values()) {
+        for (List<StreamEdge> streamEdges : nonChainableInputsCache.values()) {
             for (StreamEdge edge : streamEdges) {
                 NonChainedOutput output =
                         opIntermediateOutputsCaches.get(edge.getSourceId()).get(edge);

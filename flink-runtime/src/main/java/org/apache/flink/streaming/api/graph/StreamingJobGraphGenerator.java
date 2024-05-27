@@ -613,8 +613,7 @@ public class StreamingJobGraphGenerator {
 
     public static void setPhysicalEdges(
             List<StreamEdge> physicalEdgesInOrder, Map<Integer, StreamConfig> vertexConfigs) {
-        Map<Integer, List<StreamEdge>> physicalInEdgesInOrder =
-                new HashMap<Integer, List<StreamEdge>>();
+        Map<Integer, List<StreamEdge>> physicalInEdgesInOrder = new HashMap<>();
 
         for (StreamEdge edge : physicalEdgesInOrder) {
             int target = edge.getTargetId();
