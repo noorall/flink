@@ -107,12 +107,7 @@ public class StreamGraphHasherV2 implements StreamGraphHasher {
             // Generate the hash code. Because multiple path exist to each
             // node, we might not have all required inputs available to
             // generate the hash code.
-            if (generateNodeHash(
-                    currentNode,
-                    hashFunction,
-                    hashes,
-                    streamGraph.isChainingEnabled(),
-                    streamGraph)) {
+            if (generateNodeHash(currentNode, hashFunction, hashes, streamGraph)) {
                 // Add the child nodes
                 for (StreamEdge outEdge : currentNode.getOutEdges()) {
                     StreamNode child = streamGraph.getTargetVertex(outEdge);
@@ -131,6 +126,18 @@ public class StreamGraphHasherV2 implements StreamGraphHasher {
         return hashes;
     }
 
+    @Override
+    public boolean generateHashesByStreamNodes(
+            List<StreamNode> streamNodes, StreamGraph streamGraph, Map<Integer, byte[]> hashes) {
+        final HashFunction hashFunction = Hashing.murmur3_128(0);
+        for (StreamNode streamNode : streamNodes) {
+            if (!generateNodeHash(streamNode, hashFunction, hashes, streamGraph)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     /**
      * Generates a hash for the node and returns whether the operation was successful.
      *
@@ -147,7 +154,6 @@ public class StreamGraphHasherV2 implements StreamGraphHasher {
             StreamNode node,
             HashFunction hashFunction,
             Map<Integer, byte[]> hashes,
-            boolean isChainingEnabled,
             StreamGraph streamGraph) {
 
         // Check for user-specified ID
@@ -165,8 +171,7 @@ public class StreamGraphHasherV2 implements StreamGraphHasher {
             }
 
             Hasher hasher = hashFunction.newHasher();
-            byte[] hash =
-                    generateDeterministicHash(node, hasher, hashes, isChainingEnabled, streamGraph);
+            byte[] hash = generateDeterministicHash(node, hasher, hashes, streamGraph);
 
             if (hashes.put(node.getId(), hash) != null) {
                 // Sanity check
@@ -212,11 +217,7 @@ public class StreamGraphHasherV2 implements StreamGraphHasher {
 
     /** Generates a deterministic hash from node-local properties and input and output edges. */
     private byte[] generateDeterministicHash(
-            StreamNode node,
-            Hasher hasher,
-            Map<Integer, byte[]> hashes,
-            boolean isChainingEnabled,
-            StreamGraph streamGraph) {
+            StreamNode node, Hasher hasher, Map<Integer, byte[]> hashes, StreamGraph streamGraph) {
 
         // Include stream node to hash. We use the current size of the computed
         // hashes as the ID. We cannot use the node's ID, because it is
@@ -226,7 +227,7 @@ public class StreamGraphHasherV2 implements StreamGraphHasher {
 
         // Include chained nodes to hash
         for (StreamEdge outEdge : node.getOutEdges()) {
-            if (isChainable(outEdge, isChainingEnabled, streamGraph)) {
+            if (isChainable(outEdge, streamGraph.isChainingEnabled(), streamGraph)) {
 
                 // Use the hash size again, because the nodes are chained to
                 // this node. This does not add a hash for the chained nodes.
