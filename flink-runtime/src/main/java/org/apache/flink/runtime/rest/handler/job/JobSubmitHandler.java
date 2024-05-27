@@ -25,7 +25,6 @@ import org.apache.flink.core.fs.Path;
 import org.apache.flink.runtime.blob.BlobClient;
 import org.apache.flink.runtime.client.ClientUtils;
 import org.apache.flink.runtime.dispatcher.DispatcherGateway;
-import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.messages.Acknowledge;
 import org.apache.flink.runtime.rest.handler.AbstractRestHandler;
 import org.apache.flink.runtime.rest.handler.HandlerRequest;
@@ -34,6 +33,7 @@ import org.apache.flink.runtime.rest.messages.EmptyMessageParameters;
 import org.apache.flink.runtime.rest.messages.job.JobSubmitHeaders;
 import org.apache.flink.runtime.rest.messages.job.JobSubmitRequestBody;
 import org.apache.flink.runtime.rest.messages.job.JobSubmitResponseBody;
+import org.apache.flink.runtime.util.LogicalGraph;
 import org.apache.flink.runtime.webmonitor.retriever.GatewayRetriever;
 import org.apache.flink.util.FlinkException;
 
@@ -108,26 +108,33 @@ public final class JobSubmitHandler
                     HttpResponseStatus.BAD_REQUEST);
         }
 
-        CompletableFuture<JobGraph> jobGraphFuture = loadJobGraph(requestBody, nameToFile);
+        CompletableFuture<LogicalGraph> logicalGraphFuture =
+                loadLogicalGraph(requestBody, nameToFile);
 
         Collection<Path> jarFiles = getJarFilesToUpload(requestBody.jarFileNames, nameToFile);
 
         Collection<Tuple2<String, Path>> artifacts =
                 getArtifactFilesToUpload(requestBody.artifactFileNames, nameToFile);
 
-        CompletableFuture<JobGraph> finalizedJobGraphFuture =
-                uploadJobGraphFiles(gateway, jobGraphFuture, jarFiles, artifacts, configuration);
+        CompletableFuture<LogicalGraph> finalizedJobGraphFuture =
+                uploadJobGraphFiles(
+                        gateway, logicalGraphFuture, jarFiles, artifacts, configuration);
 
         CompletableFuture<Acknowledge> jobSubmissionFuture =
                 finalizedJobGraphFuture.thenCompose(
-                        jobGraph -> gateway.submitJob(jobGraph, timeout));
+                        logicalGraph ->
+                                logicalGraph.isJobGraph()
+                                        ? gateway.submitJob(logicalGraph.getJobGraph(), timeout)
+                                        : gateway.submitJob(
+                                                logicalGraph.getStreamGraph(), timeout));
 
         return jobSubmissionFuture.thenCombine(
-                jobGraphFuture,
-                (ack, jobGraph) -> new JobSubmitResponseBody("/jobs/" + jobGraph.getJobID()));
+                logicalGraphFuture,
+                (ack, logicalGraph) ->
+                        new JobSubmitResponseBody("/jobs/" + logicalGraph.getJobId()));
     }
 
-    private CompletableFuture<JobGraph> loadJobGraph(
+    private CompletableFuture<LogicalGraph> loadLogicalGraph(
             JobSubmitRequestBody requestBody, Map<String, Path> nameToFile)
             throws MissingFileException {
         final Path jobGraphFile =
@@ -136,11 +143,11 @@ public final class JobSubmitHandler
 
         return CompletableFuture.supplyAsync(
                 () -> {
-                    JobGraph jobGraph;
+                    LogicalGraph logicalGraph;
                     try (ObjectInputStream objectIn =
                             new ObjectInputStream(
                                     jobGraphFile.getFileSystem().open(jobGraphFile))) {
-                        jobGraph = (JobGraph) objectIn.readObject();
+                        logicalGraph = LogicalGraph.createLogicalGraph(objectIn.readObject());
                     } catch (Exception e) {
                         throw new CompletionException(
                                 new RestHandlerException(
@@ -148,7 +155,7 @@ public final class JobSubmitHandler
                                         HttpResponseStatus.BAD_REQUEST,
                                         e));
                     }
-                    return jobGraph;
+                    return logicalGraph;
                 },
                 executor);
     }
@@ -178,25 +185,33 @@ public final class JobSubmitHandler
         return artifacts;
     }
 
-    private CompletableFuture<JobGraph> uploadJobGraphFiles(
+    private CompletableFuture<LogicalGraph> uploadJobGraphFiles(
             DispatcherGateway gateway,
-            CompletableFuture<JobGraph> jobGraphFuture,
+            CompletableFuture<LogicalGraph> logicalGraphFuture,
             Collection<Path> jarFiles,
             Collection<Tuple2<String, Path>> artifacts,
             Configuration configuration) {
         CompletableFuture<Integer> blobServerPortFuture = gateway.getBlobServerPort(timeout);
 
-        return jobGraphFuture.thenCombine(
+        return logicalGraphFuture.thenCombine(
                 blobServerPortFuture,
-                (JobGraph jobGraph, Integer blobServerPort) -> {
+                (LogicalGraph logicalGraph, Integer blobServerPort) -> {
                     final InetSocketAddress address =
                             new InetSocketAddress(gateway.getHostname(), blobServerPort);
                     try {
-                        ClientUtils.uploadJobGraphFiles(
-                                jobGraph,
-                                jarFiles,
-                                artifacts,
-                                () -> new BlobClient(address, configuration));
+                        if (logicalGraph.isJobGraph()) {
+                            ClientUtils.uploadJobGraphFiles(
+                                    logicalGraph.getJobGraph(),
+                                    jarFiles,
+                                    artifacts,
+                                    () -> new BlobClient(address, configuration));
+                        } else {
+                            ClientUtils.uploadStreamGraphFiles(
+                                    logicalGraph.getStreamGraph(),
+                                    jarFiles,
+                                    artifacts,
+                                    () -> new BlobClient(address, configuration));
+                        }
                     } catch (FlinkException e) {
                         throw new CompletionException(
                                 new RestHandlerException(
@@ -204,7 +219,7 @@ public final class JobSubmitHandler
                                         HttpResponseStatus.INTERNAL_SERVER_ERROR,
                                         e));
                     }
-                    return jobGraph;
+                    return logicalGraph;
                 });
     }
 
