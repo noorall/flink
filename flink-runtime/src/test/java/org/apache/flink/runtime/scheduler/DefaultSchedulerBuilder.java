@@ -56,6 +56,7 @@ import org.apache.flink.runtime.scheduler.strategy.PipelinedRegionSchedulingStra
 import org.apache.flink.runtime.scheduler.strategy.SchedulingStrategyFactory;
 import org.apache.flink.runtime.shuffle.ShuffleMaster;
 import org.apache.flink.runtime.shuffle.ShuffleTestUtils;
+import org.apache.flink.runtime.util.LogicalGraph;
 import org.apache.flink.util.concurrent.ScheduledExecutor;
 import org.apache.flink.util.concurrent.ScheduledExecutorServiceAdapter;
 
@@ -343,7 +344,7 @@ public class DefaultSchedulerBuilder {
 
         return AdaptiveBatchSchedulerFactory.createScheduler(
                 log,
-                jobGraph,
+                LogicalGraph.createLogicalGraph(jobGraph),
                 jobGraph.getSerializedExecutionConfig().deserializeValue(userCodeLoader),
                 ioExecutor,
                 jobMasterConfiguration,

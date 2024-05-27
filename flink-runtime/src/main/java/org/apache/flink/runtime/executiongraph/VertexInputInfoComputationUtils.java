@@ -214,9 +214,8 @@ public class VertexInputInfoComputationUtils {
         } else {
             int numSubpartitions = numOfSubpartitionsSupplier.get();
             if (isBroadcast) {
-                // broadcast results have only one subpartition, and be consumed multiple times.
-                checkArgument(numSubpartitions == 1);
-                return new IndexRange(0, 0);
+                // TODO verify this change is solid
+                return new IndexRange(0, numSubpartitions - 1);
             } else {
                 checkArgument(consumerIndex < numConsumers);
                 checkArgument(numConsumers <= numSubpartitions);

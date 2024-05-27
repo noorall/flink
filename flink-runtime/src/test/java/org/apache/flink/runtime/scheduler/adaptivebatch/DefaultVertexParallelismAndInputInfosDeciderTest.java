@@ -37,6 +37,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -609,6 +610,11 @@ class DefaultVertexParallelismAndInputInfosDeciderTest {
 
         @Override
         public void resetPartitionInfo(int partitionIndex) {}
+
+        @Override
+        public Map<Integer, long[]> getSubpartitionBytesByPartitionIndex() {
+            return Collections.emptyMap();
+        }
     }
 
     private static BlockingResultInfo createFromBroadcastResult(long producedBytes) {

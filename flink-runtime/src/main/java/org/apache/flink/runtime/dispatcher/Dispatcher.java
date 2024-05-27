@@ -531,7 +531,7 @@ public abstract class Dispatcher extends FencedRpcEndpoint<DispatcherId>
     private CompletableFuture<Acknowledge> submitJob(LogicalGraph graph) {
         final JobID jobID = graph.getJobId();
         try (MdcCloseable ignored = MdcUtils.withContext(MdcUtils.asContextData(jobID))) {
-            log.info("Received JobGraph submission '{}' ({}).", graph.getJobName(), jobID);
+            log.info("Received logical graph submission '{}' ({}).", graph.getJobName(), jobID);
         }
         return isInGloballyTerminalState(jobID)
                 .thenComposeAsync(

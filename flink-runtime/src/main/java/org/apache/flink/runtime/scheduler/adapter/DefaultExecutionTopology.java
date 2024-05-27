@@ -163,12 +163,9 @@ public class DefaultExecutionTopology implements SchedulingTopology {
         return edgeManager;
     }
 
-    private static Map<JobVertexID, DefaultLogicalPipelinedRegion>
-            computeLogicalPipelinedRegionsByJobVertexId(final ExecutionGraph executionGraph) {
-        List<JobVertex> topologicallySortedJobVertices =
-                IterableUtils.toStream(executionGraph.getVerticesTopologically())
-                        .map(ExecutionJobVertex::getJobVertex)
-                        .collect(Collectors.toList());
+    public static Map<JobVertexID, DefaultLogicalPipelinedRegion>
+            computeLogicalPipelinedRegionsByJobVertexId(
+                    final List<JobVertex> topologicallySortedJobVertices) {
 
         Iterable<DefaultLogicalPipelinedRegion> logicalPipelinedRegions =
                 DefaultLogicalTopology.fromTopologicallySortedJobVertices(
@@ -186,7 +183,12 @@ public class DefaultExecutionTopology implements SchedulingTopology {
         return logicalPipelinedRegionsByJobVertexId;
     }
 
-    public void notifyExecutionGraphUpdated(
+    public void notifyExecutionGraphByNewlyAddedJobVertices(
+            Map<JobVertexID, DefaultLogicalPipelinedRegion> logicalPipelinedRegionsByJobVertexId) {
+        this.logicalPipelinedRegionsByJobVertexId.putAll(logicalPipelinedRegionsByJobVertexId);
+    }
+
+    public void notifyExecutionGraphUpdatedByNewlyInitializedJobVertices(
             final DefaultExecutionGraph executionGraph,
             final List<ExecutionJobVertex> newlyInitializedJobVertices) {
 
@@ -245,9 +247,12 @@ public class DefaultExecutionTopology implements SchedulingTopology {
                                         .map(ExecutionVertex::getID)
                                         .collect(Collectors.toList()),
                         edgeManager,
-                        computeLogicalPipelinedRegionsByJobVertexId(executionGraph));
+                        computeLogicalPipelinedRegionsByJobVertexId(
+                                IterableUtils.toStream(executionGraph.getVerticesTopologically())
+                                        .map(ExecutionJobVertex::getJobVertex)
+                                        .collect(Collectors.toList())));
 
-        schedulingTopology.notifyExecutionGraphUpdated(
+        schedulingTopology.notifyExecutionGraphUpdatedByNewlyInitializedJobVertices(
                 executionGraph,
                 IterableUtils.toStream(executionGraph.getVerticesTopologically())
                         .filter(ExecutionJobVertex::isInitialized)

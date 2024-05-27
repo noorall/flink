@@ -173,7 +173,7 @@ public class EmbeddedExecutor implements PipelineExecutor {
             final LogicalGraph logicalGraph,
             final Time rpcTimeout) {
         checkNotNull(logicalGraph);
-        checkState(logicalGraph.isEmpty());
+        checkState(!logicalGraph.isEmpty());
 
         LOG.info("Submitting Job with JobId={}.", logicalGraph.getJobId());
 

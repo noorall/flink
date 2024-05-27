@@ -189,6 +189,7 @@ public class StreamGraph implements Pipeline, Serializable {
         this.executionConfig = checkNotNull(executionConfig);
         this.checkpointConfig = checkNotNull(checkpointConfig);
         this.savepointRestoreSettings = checkNotNull(savepointRestoreSettings);
+        this.jobId = new JobID();
 
         // create an empty new stream graph.
         clear();

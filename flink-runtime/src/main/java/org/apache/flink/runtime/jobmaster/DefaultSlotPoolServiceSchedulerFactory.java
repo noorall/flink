@@ -33,7 +33,6 @@ import org.apache.flink.runtime.checkpoint.CheckpointRecoveryFactory;
 import org.apache.flink.runtime.concurrent.ComponentMainThreadExecutor;
 import org.apache.flink.runtime.executiongraph.JobStatusListener;
 import org.apache.flink.runtime.io.network.partition.JobMasterPartitionTracker;
-import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.jobgraph.JobType;
 import org.apache.flink.runtime.jobmaster.slotpool.DeclarativeSlotPoolBridgeServiceFactory;
 import org.apache.flink.runtime.jobmaster.slotpool.DeclarativeSlotPoolFactory;
@@ -51,6 +50,7 @@ import org.apache.flink.runtime.scheduler.SchedulerNGFactory;
 import org.apache.flink.runtime.scheduler.adaptive.AdaptiveSchedulerFactory;
 import org.apache.flink.runtime.scheduler.adaptivebatch.AdaptiveBatchSchedulerFactory;
 import org.apache.flink.runtime.shuffle.ShuffleMaster;
+import org.apache.flink.runtime.util.LogicalGraph;
 import org.apache.flink.util.Preconditions;
 import org.apache.flink.util.clock.SystemClock;
 
@@ -97,7 +97,7 @@ public final class DefaultSlotPoolServiceSchedulerFactory
     @Override
     public SchedulerNG createScheduler(
             Logger log,
-            JobGraph jobGraph,
+            LogicalGraph logicalGraph,
             Executor ioExecutor,
             Configuration configuration,
             SlotPoolService slotPoolService,
@@ -120,7 +120,7 @@ public final class DefaultSlotPoolServiceSchedulerFactory
             throws Exception {
         return schedulerNGFactory.createInstance(
                 log,
-                jobGraph,
+                logicalGraph,
                 ioExecutor,
                 configuration,
                 slotPoolService,

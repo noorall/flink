@@ -34,6 +34,7 @@ import org.apache.flink.runtime.checkpoint.CheckpointsCleaner;
 import org.apache.flink.runtime.concurrent.ComponentMainThreadExecutor;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.execution.SuppressRestartsException;
+import org.apache.flink.runtime.executiongraph.DefaultExecutionGraphBuilder;
 import org.apache.flink.runtime.executiongraph.Execution;
 import org.apache.flink.runtime.executiongraph.ExecutionJobVertex;
 import org.apache.flink.runtime.executiongraph.ExecutionVertex;
@@ -48,18 +49,20 @@ import org.apache.flink.runtime.executiongraph.ResultPartitionBytes;
 import org.apache.flink.runtime.executiongraph.failover.FailoverStrategy;
 import org.apache.flink.runtime.executiongraph.failover.FailureHandlingResult;
 import org.apache.flink.runtime.executiongraph.failover.RestartBackoffTimeStrategy;
+import org.apache.flink.runtime.failure.FailureEnricherUtils;
 import org.apache.flink.runtime.jobgraph.DistributionPattern;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
 import org.apache.flink.runtime.jobgraph.JobEdge;
-import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.jobgraph.JobVertex;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.jobgraph.forwardgroup.ForwardGroup;
+import org.apache.flink.runtime.jobgraph.forwardgroup.ForwardGroupComputeUtil;
 import org.apache.flink.runtime.jobgraph.jsonplan.JsonPlanGenerator;
 import org.apache.flink.runtime.jobgraph.topology.DefaultLogicalResult;
 import org.apache.flink.runtime.jobgraph.topology.DefaultLogicalTopology;
 import org.apache.flink.runtime.jobgraph.topology.DefaultLogicalVertex;
+import org.apache.flink.runtime.jobmaster.event.ExecutionJobVertexFinishedEvent;
 import org.apache.flink.runtime.metrics.groups.JobManagerJobMetricGroup;
 import org.apache.flink.runtime.scheduler.DefaultExecutionDeployer;
 import org.apache.flink.runtime.scheduler.DefaultScheduler;
@@ -103,13 +106,13 @@ import static org.apache.flink.util.Preconditions.checkState;
  * This scheduler decides the parallelism of JobVertex according to the data volume it consumes. A
  * dynamically built up ExecutionGraph is used for this purpose.
  */
-public class AdaptiveBatchScheduler extends DefaultScheduler {
+public class AdaptiveBatchScheduler extends DefaultScheduler implements JobGraphUpdateListener {
 
-    private final DefaultLogicalTopology logicalTopology;
+    private DefaultLogicalTopology logicalTopology;
 
     private final VertexParallelismAndInputInfosDecider vertexParallelismAndInputInfosDecider;
 
-    private final Map<JobVertexID, ForwardGroup> forwardGroupsByJobVertexId;
+    private Map<JobVertexID, ForwardGroup> forwardGroupsByJobVertexId;
 
     private final Map<IntermediateDataSetID, BlockingResultInfo> blockingResultInfos;
 
@@ -120,9 +123,13 @@ public class AdaptiveBatchScheduler extends DefaultScheduler {
 
     private final SpeculativeExecutionHandler speculativeExecutionHandler;
 
+    private final AdaptiveExecutionHandler adaptiveExecutionHandler;
+
+    private final int defaultMaxParallelism;
+
     public AdaptiveBatchScheduler(
             final Logger log,
-            final JobGraph jobGraph,
+            final AdaptiveExecutionHandler adaptiveExecutionHandler,
             final Executor ioExecutor,
             final Configuration jobMasterConfiguration,
             final Consumer<ComponentMainThreadExecutor> startUpAction,
@@ -147,13 +154,12 @@ public class AdaptiveBatchScheduler extends DefaultScheduler {
             final VertexParallelismAndInputInfosDecider vertexParallelismAndInputInfosDecider,
             final int defaultMaxParallelism,
             final BlocklistOperations blocklistOperations,
-            final HybridPartitionDataConsumeConstraint hybridPartitionDataConsumeConstraint,
-            final Map<JobVertexID, ForwardGroup> forwardGroupsByJobVertexId)
+            final HybridPartitionDataConsumeConstraint hybridPartitionDataConsumeConstraint)
             throws Exception {
 
         super(
                 log,
-                jobGraph,
+                adaptiveExecutionHandler.getJobGraph(),
                 ioExecutor,
                 jobMasterConfiguration,
                 startUpAction,
@@ -176,15 +182,23 @@ public class AdaptiveBatchScheduler extends DefaultScheduler {
                 shuffleMaster,
                 rpcTimeout,
                 computeVertexParallelismStoreForDynamicGraph(
-                        jobGraph.getVertices(), defaultMaxParallelism),
+                        adaptiveExecutionHandler.getJobGraph().getVertices(),
+                        defaultMaxParallelism),
                 new DefaultExecutionDeployer.Factory());
 
-        this.logicalTopology = DefaultLogicalTopology.fromJobGraph(jobGraph);
+        this.adaptiveExecutionHandler = checkNotNull(adaptiveExecutionHandler);
+        adaptiveExecutionHandler.registerJobGraphUpdateListener(this);
+
+        this.defaultMaxParallelism = defaultMaxParallelism;
+
+        this.logicalTopology = DefaultLogicalTopology.fromJobGraph(getJobGraph());
 
         this.vertexParallelismAndInputInfosDecider =
                 checkNotNull(vertexParallelismAndInputInfosDecider);
 
-        this.forwardGroupsByJobVertexId = checkNotNull(forwardGroupsByJobVertexId);
+        this.forwardGroupsByJobVertexId =
+                ForwardGroupComputeUtil.computeForwardGroupsAndCheckParallelism(
+                        getJobGraph().getVerticesSortedTopologicallyFromSources());
 
         this.blockingResultInfos = new HashMap<>();
 
@@ -195,6 +209,10 @@ public class AdaptiveBatchScheduler extends DefaultScheduler {
         speculativeExecutionHandler =
                 createSpeculativeExecutionHandler(
                         log, jobMasterConfiguration, executionVertexVersioner, blocklistOperations);
+
+        if (!adaptiveExecutionHandler.isStreamGraphConversionFinished()) {
+            getExecutionGraph().notifyWaitingMoreJobVerticesToBeAdded();
+        }
     }
 
     private SpeculativeExecutionHandler createSpeculativeExecutionHandler(
@@ -221,9 +239,70 @@ public class AdaptiveBatchScheduler extends DefaultScheduler {
     }
 
     @Override
+    public void onNewJobVerticesAdded(List<JobVertex> newVertices) throws Exception {
+        log.info("Received newly created job vertices: {}", newVertices);
+
+        VertexParallelismStore vertexParallelismStore =
+                computeVertexParallelismStoreForDynamicGraph(
+                        adaptiveExecutionHandler.getJobGraph().getVertices(),
+                        defaultMaxParallelism);
+        // 1. init vertex on master
+        DefaultExecutionGraphBuilder.initJobVerticesOnMaster(
+                newVertices,
+                getUserCodeLoader(),
+                log,
+                vertexParallelismStore,
+                getJobGraph().getName(),
+                getJobGraph().getJobID());
+
+        // 2. attach newly added job vertices
+        getExecutionGraph()
+                .onAddNewJobVertices(newVertices, jobManagerJobMetricGroup, vertexParallelismStore);
+
+        logicalTopology = DefaultLogicalTopology.fromJobGraph(getJobGraph());
+
+        // 3. update forward groups and json plan
+        forwardGroupsByJobVertexId =
+                ForwardGroupComputeUtil.computeForwardGroupsAndCheckParallelism(
+                        getJobGraph().getVerticesSortedTopologicallyFromSources());
+        getExecutionGraph().setJsonPlan(JsonPlanGenerator.generatePlan(getJobGraph()));
+
+        // 4. notify if no more job vertices waiting to be added, which can make the job final state
+        // static.
+        if (adaptiveExecutionHandler.isStreamGraphConversionFinished()) {
+            getExecutionGraph().notifyNoMoreJobVerticesToBeAdded();
+        }
+
+        // 5. update result partition info
+        for (JobVertex newVertex : newVertices) {
+            for (JobEdge input : newVertex.getInputs()) {
+                if (blockingResultInfos.containsKey(input.getSourceId())) {
+                    BlockingResultInfo resultInfo = blockingResultInfos.get(input.getSourceId());
+                    Map<Integer, long[]> bytesByPartitionIndex =
+                            resultInfo.getSubpartitionBytesByPartitionIndex();
+
+                    IntermediateResult result =
+                            getExecutionGraph()
+                                    .getAllIntermediateResults()
+                                    .get(input.getSourceId());
+
+                    BlockingResultInfo newInfo = createFromIntermediateResult(result);
+                    bytesByPartitionIndex.forEach(
+                            (k, v) -> newInfo.recordPartitionInfo(k, new ResultPartitionBytes(v)));
+                }
+            }
+        }
+    }
+
+    @Override
     protected void startSchedulingInternal() {
         speculativeExecutionHandler.init(
                 getExecutionGraph(), getMainThreadExecutor(), jobManagerJobMetricGroup);
+        try {
+            adaptiveExecutionHandler.initializeJobGraph();
+        } catch (Exception e) {
+            failJob(e, System.currentTimeMillis(), FailureEnricherUtils.EMPTY_FAILURE_LABELS);
+        }
 
         tryComputeSourceParallelismThenRunAsync(
                 (Void value, Throwable throwable) -> {
@@ -246,6 +325,8 @@ public class AdaptiveBatchScheduler extends DefaultScheduler {
 
         checkNotNull(ioMetrics);
         updateResultPartitionBytesMetrics(ioMetrics.getResultPartitionBytes());
+        notifyJobVertexFinishedIfPossible(execution.getVertex().getJobVertex());
+
         ExecutionVertexVersion currentVersion =
                 executionVertexVersioner.getExecutionVertexVersion(execution.getVertex().getID());
         tryComputeSourceParallelismThenRunAsync(
@@ -458,6 +539,16 @@ public class AdaptiveBatchScheduler extends DefaultScheduler {
                         (a, b) -> a.thenCombine(b, Math::max));
     }
 
+    private void notifyJobVertexFinishedIfPossible(ExecutionJobVertex jobVertex) {
+        Optional<List<BlockingResultInfo>> producedResultsInfo =
+                tryGetProducedResultsInfo(jobVertex);
+        producedResultsInfo.ifPresent(
+                resultInfo ->
+                        adaptiveExecutionHandler.handleJobEvent(
+                                new ExecutionJobVertexFinishedEvent(
+                                        jobVertex.getJobVertexId(), resultInfo)));
+    }
+
     @VisibleForTesting
     public void initializeVerticesIfPossible() {
         final List<ExecutionJobVertex> newlyInitializedJobVertices = new ArrayList<>();
@@ -667,6 +758,26 @@ public class AdaptiveBatchScheduler extends DefaultScheduler {
         return Optional.of(consumableResultInfo);
     }
 
+    private Optional<List<BlockingResultInfo>> tryGetProducedResultsInfo(
+            final ExecutionJobVertex jobVertex) {
+        if (!jobVertex.isFinished()) {
+            return Optional.empty();
+        }
+
+        List<BlockingResultInfo> producedResultInfo = new ArrayList<>();
+
+        DefaultLogicalVertex logicalVertex = logicalTopology.getVertex(jobVertex.getJobVertexId());
+        Iterable<DefaultLogicalResult> producedResults = logicalVertex.getProducedResults();
+
+        for (DefaultLogicalResult producedResult : producedResults) {
+            BlockingResultInfo resultInfo =
+                    checkNotNull(blockingResultInfos.get(producedResult.getId()));
+            producedResultInfo.add(resultInfo);
+        }
+
+        return Optional.of(producedResultInfo);
+    }
+
     private boolean canInitialize(final ExecutionJobVertex jobVertex) {
         if (jobVertex.isInitialized() || !jobVertex.isParallelismDecided()) {
             return false;
@@ -717,14 +828,16 @@ public class AdaptiveBatchScheduler extends DefaultScheduler {
         // global default max parallelism.
         return computeVertexParallelismStore(
                 vertices,
-                v -> {
-                    if (v.getParallelism() > 0) {
-                        return getDefaultMaxParallelism(v);
-                    } else {
-                        return defaultMaxParallelism;
-                    }
-                },
+                v -> computeMaxParallelism(v.getParallelism(), defaultMaxParallelism),
                 Function.identity());
+    }
+
+    public static int computeMaxParallelism(int parallelism, int defaultMaxParallelism) {
+        if (parallelism > 0) {
+            return getDefaultMaxParallelism(parallelism);
+        } else {
+            return defaultMaxParallelism;
+        }
     }
 
     private static BlockingResultInfo createFromIntermediateResult(IntermediateResult result) {

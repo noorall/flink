@@ -75,7 +75,7 @@ public class JobVertex implements java.io.Serializable {
     private final List<OperatorIDPair> operatorIDs;
 
     /** Produced data sets, one per writer. */
-    private final Map<IntermediateDataSetID, IntermediateDataSet> results = new LinkedHashMap<>();
+    private Map<IntermediateDataSetID, IntermediateDataSet> results = new LinkedHashMap<>();
 
     /** List of edges with incoming data. One per Reader. */
     private final List<JobEdge> inputs = new ArrayList<>();
@@ -390,6 +390,10 @@ public class JobVertex implements java.io.Serializable {
 
     public List<IntermediateDataSet> getProducedDataSets() {
         return new ArrayList<>(results.values());
+    }
+
+    public void setProducedDataSets(Map<IntermediateDataSetID, IntermediateDataSet> map) {
+        results = map;
     }
 
     public List<JobEdge> getInputs() {
