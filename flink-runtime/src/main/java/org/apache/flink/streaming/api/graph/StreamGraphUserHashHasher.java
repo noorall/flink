@@ -21,6 +21,7 @@ package org.apache.flink.streaming.api.graph;
 import org.apache.flink.util.StringUtils;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -43,5 +44,17 @@ public class StreamGraphUserHashHasher implements StreamGraphHasher {
         }
 
         return hashResult;
+    }
+
+    @Override
+    public boolean generateHashesByStreamNodes(
+            List<StreamNode> streamNodes, StreamGraph streamGraph, Map<Integer, byte[]> hashes) {
+        for (StreamNode streamNode : streamNodes) {
+            String userHash = streamNode.getUserHash();
+            if (null != userHash) {
+                hashes.put(streamNode.getId(), StringUtils.hexStringToByte(userHash));
+            }
+        }
+        return true;
     }
 }
