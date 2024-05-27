@@ -23,7 +23,7 @@ import org.apache.flink.runtime.jobgraph.JobVertex;
 
 import java.util.List;
 
-public interface AdaptiveJobGraphGenerator {
+public interface AdaptiveJobGraphManager {
 
     /**
      * Creates new job vertices from a list of stream nodes and updates the job graph accordingly.

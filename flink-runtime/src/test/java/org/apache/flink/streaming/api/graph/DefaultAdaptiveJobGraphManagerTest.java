@@ -36,9 +36,9 @@ import java.util.concurrent.Executors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** Tests for {@link DefaultAdaptiveJobGraphGenerator}. */
+/** Tests for {@link DefaultAdaptiveJobGraphManager}. */
 @SuppressWarnings("serial")
-public class DefaultAdaptiveJobGraphGeneratorTest {
+public class DefaultAdaptiveJobGraphManagerTest {
 
     @Test
     void testCreateJobVertexEagerly() {
@@ -85,15 +85,15 @@ public class DefaultAdaptiveJobGraphGeneratorTest {
                                         Hardware.getNumberCPUCores(),
                                         streamGraph.getExecutionConfig().getParallelism())),
                         new ExecutorThreadFactory("flink-operator-serialization-io"));
-        DefaultAdaptiveJobGraphGenerator adaptiveJobGraphGenerator;
+        DefaultAdaptiveJobGraphManager adaptiveJobGraphGenerator;
         try {
             adaptiveJobGraphGenerator =
-                    new DefaultAdaptiveJobGraphGenerator(
+                    new DefaultAdaptiveJobGraphManager(
                             Thread.currentThread().getContextClassLoader(),
                             streamGraph,
                             null,
                             serializationExecutor,
-                            DefaultAdaptiveJobGraphGenerator.GenerateMode.EAGERLY);
+                            DefaultAdaptiveJobGraphManager.GenerateMode.EAGERLY);
             List<StreamNode> streamNodeList = new ArrayList<>();
             for (Integer nodeId : streamGraph.getSourceIDs()) {
                 streamNodeList.add(streamGraph.getStreamNode(nodeId));
@@ -151,15 +151,15 @@ public class DefaultAdaptiveJobGraphGeneratorTest {
                                         Hardware.getNumberCPUCores(),
                                         streamGraph.getExecutionConfig().getParallelism())),
                         new ExecutorThreadFactory("flink-operator-serialization-io"));
-        DefaultAdaptiveJobGraphGenerator adaptiveJobGraphGenerator;
+        DefaultAdaptiveJobGraphManager adaptiveJobGraphGenerator;
         try {
             adaptiveJobGraphGenerator =
-                    new DefaultAdaptiveJobGraphGenerator(
+                    new DefaultAdaptiveJobGraphManager(
                             Thread.currentThread().getContextClassLoader(),
                             streamGraph,
                             null,
                             serializationExecutor,
-                            DefaultAdaptiveJobGraphGenerator.GenerateMode.LAZILY);
+                            DefaultAdaptiveJobGraphManager.GenerateMode.LAZILY);
             List<StreamNode> streamNodeList = new ArrayList<>();
             for (Integer nodeId : streamGraph.getSourceIDs()) {
                 streamNodeList.add(streamGraph.getStreamNode(nodeId));

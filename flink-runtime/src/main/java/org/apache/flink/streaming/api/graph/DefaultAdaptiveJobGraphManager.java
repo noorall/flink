@@ -60,6 +60,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import static org.apache.flink.streaming.api.graph.StreamingJobGraphGenerator.addVertexIndexPrefixInVertexName;
@@ -82,10 +83,8 @@ import static org.apache.flink.streaming.api.graph.StreamingJobGraphGenerator.se
 import static org.apache.flink.streaming.api.graph.StreamingJobGraphGenerator.tryConvertPartitionerForDynamicGraph;
 import static org.apache.flink.streaming.api.graph.StreamingJobGraphGenerator.validateHybridShuffleExecuteInBatchMode;
 
-public class DefaultAdaptiveJobGraphGenerator
-        implements AdaptiveJobGraphGenerator, JobVertexMapper {
-    private static final Logger LOG =
-            LoggerFactory.getLogger(DefaultAdaptiveJobGraphGenerator.class);
+public class DefaultAdaptiveJobGraphManager implements AdaptiveJobGraphManager, JobVertexMapper {
+    private static final Logger LOG = LoggerFactory.getLogger(DefaultAdaptiveJobGraphManager.class);
 
     private final StreamGraph streamGraph;
 
@@ -135,14 +134,14 @@ public class DefaultAdaptiveJobGraphGenerator
 
     private final Map<Integer, byte[]> legacyHashes;
 
-    // sourceNode -> <targetNodeId, NonChainedOutput>
-    // need update when edge changed
     private final Map<Integer, Map<StreamEdge, NonChainedOutput>> opIntermediateOutputsCaches;
 
     private final GenerateMode generateMode;
 
+    final AtomicInteger vertexIndexId;
+
     @VisibleForTesting
-    public DefaultAdaptiveJobGraphGenerator(
+    public DefaultAdaptiveJobGraphManager(
             ClassLoader userClassloader,
             StreamGraph streamGraph,
             @Nullable JobID jobID,
@@ -175,6 +174,8 @@ public class DefaultAdaptiveJobGraphGenerator
         this.jobGraph = new JobGraph(jobID, streamGraph.getJobName());
         this.jobGraph.setSnapshotSettings(streamGraph.getJobCheckpointingSettings());
         this.jobGraph.setSavepointRestoreSettings(streamGraph.getSavepointRestoreSettings());
+
+        this.vertexIndexId = new AtomicInteger(0);
     }
 
     @Override
