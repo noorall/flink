@@ -19,17 +19,13 @@
 package org.apache.flink.streaming.api.graph;
 
 import org.apache.flink.annotation.VisibleForTesting;
-import org.apache.flink.api.common.JobID;
-import org.apache.flink.api.common.cache.DistributedCache;
 import org.apache.flink.api.common.operators.ResourceSpec;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.configuration.DeploymentOptions;
 import org.apache.flink.runtime.OperatorIDPair;
 import org.apache.flink.runtime.jobgraph.InputOutputFormatContainer;
 import org.apache.flink.runtime.jobgraph.InputOutputFormatVertex;
 import org.apache.flink.runtime.jobgraph.JobGraph;
-import org.apache.flink.runtime.jobgraph.JobGraphUtils;
 import org.apache.flink.runtime.jobgraph.JobVertex;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.jobgraph.OperatorID;
@@ -42,8 +38,6 @@ import org.apache.flink.util.concurrent.FutureUtils;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import javax.annotation.Nullable;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -82,10 +76,8 @@ import static org.apache.flink.streaming.api.graph.StreamingJobGraphGenerator.se
 import static org.apache.flink.streaming.api.graph.StreamingJobGraphGenerator.tryConvertPartitionerForDynamicGraph;
 import static org.apache.flink.streaming.api.graph.StreamingJobGraphGenerator.validateHybridShuffleExecuteInBatchMode;
 
-public class DefaultAdaptiveJobGraphGenerator
-        implements AdaptiveJobGraphGenerator, JobVertexMapper {
-    private static final Logger LOG =
-            LoggerFactory.getLogger(DefaultAdaptiveJobGraphGenerator.class);
+public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVertexMapper {
+    private static final Logger LOG = LoggerFactory.getLogger(AdaptiveJobGraphManager.class);
 
     private final StreamGraph streamGraph;
 
@@ -142,10 +134,9 @@ public class DefaultAdaptiveJobGraphGenerator
     private final GenerateMode generateMode;
 
     @VisibleForTesting
-    public DefaultAdaptiveJobGraphGenerator(
+    public AdaptiveJobGraphManager(
             ClassLoader userClassloader,
             StreamGraph streamGraph,
-            @Nullable JobID jobID,
             Executor serializationExecutor,
             GenerateMode generateMode) {
         preValidate(streamGraph, userClassloader);
@@ -172,7 +163,10 @@ public class DefaultAdaptiveJobGraphGenerator
         this.opIntermediateOutputsCaches = new HashMap<>();
         this.jobVertexToStartNodeMap = new HashMap<>();
 
-        this.jobGraph = new JobGraph(jobID, streamGraph.getJobName());
+        this.jobGraph = new JobGraph(streamGraph.getJobId(), streamGraph.getJobName());
+        streamGraph.getUserJarBlobKeys().forEach(jobGraph::addUserJarBlobKey);
+        jobGraph.setClasspaths(streamGraph.getClasspaths());
+
         this.jobGraph.setSnapshotSettings(streamGraph.getJobCheckpointingSettings());
         this.jobGraph.setSavepointRestoreSettings(streamGraph.getSavepointRestoreSettings());
     }
@@ -180,6 +174,15 @@ public class DefaultAdaptiveJobGraphGenerator
     @Override
     public boolean isStreamGraphConversionFinished() {
         return streamGraph.getStreamNodes().size() == nodeToStartNodeMap.size();
+    }
+
+    public List<JobVertex> initializeJobGraph() {
+        List<StreamNode> sourceNodes =
+                streamGraph.getStreamNodes().stream()
+                        .filter(node -> node.getInEdges().isEmpty())
+                        .collect(Collectors.toList());
+
+        return createJobVerticesAndUpdateGraph(sourceNodes);
     }
 
     @Override
@@ -272,21 +275,6 @@ public class DefaultAdaptiveJobGraphGenerator
                 id -> streamGraph.getStreamNode(id).getManagedMemoryOperatorScopeUseCaseWeights(),
                 id -> streamGraph.getStreamNode(id).getManagedMemorySlotScopeUseCases());
 
-        if (!streamGraph.getJobConfiguration().get(DeploymentOptions.SUBMIT_STREAM_GRAPH_ENABLED)) {
-            // skip prepare user artifact because these are already uploaded in client if
-            // submit job by stream graph
-            final Map<String, DistributedCache.DistributedCacheEntry> distributedCacheEntries =
-                    JobGraphUtils.prepareUserArtifactEntries(
-                            streamGraph.getUserArtifacts().stream()
-                                    .collect(Collectors.toMap(e -> e.f0, e -> e.f1)),
-                            jobGraph.getJobID());
-
-            for (Map.Entry<String, DistributedCache.DistributedCacheEntry> entry :
-                    distributedCacheEntries.entrySet()) {
-                jobGraph.addUserArtifact(entry.getKey(), entry.getValue());
-            }
-        }
-        jobGraph.setJobConfiguration(streamGraph.getJobConfiguration());
         // TODO： generate name via JobVertex rather than through JobGraph.
         addVertexIndexPrefixInVertexName(streamGraph, jobGraph);
         setVertexDescription(jobVertices, streamGraph, chainedConfigs);
