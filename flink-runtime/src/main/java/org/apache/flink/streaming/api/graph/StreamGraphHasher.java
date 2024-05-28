@@ -35,4 +35,7 @@ public interface StreamGraphHasher {
 
     boolean generateHashesByStreamNodes(
             List<StreamNode> streamNodes, StreamGraph streamGraph, Map<Integer, byte[]> hashes);
+
+    boolean generateHashesByStreamNode(
+            StreamNode streamNode, StreamGraph streamGraph, Map<Integer, byte[]> hashes);
 }

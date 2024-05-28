@@ -40,6 +40,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static org.apache.flink.util.Preconditions.checkArgument;
 import static org.apache.flink.util.Preconditions.checkNotNull;
@@ -73,9 +74,6 @@ public class IntermediateResult {
 
     private final Map<ConsumedPartitionGroup, CachedShuffleDescriptors> shuffleDescriptorCache;
 
-    /** All consumer job vertex ids of this dataset. */
-    private final List<JobVertexID> consumerVertices = new ArrayList<>();
-
     private final List<StreamNode> consumerStreamNodes = new ArrayList<>();
 
     public IntermediateResult(
@@ -105,10 +103,6 @@ public class IntermediateResult {
         this.resultType = checkNotNull(resultType);
 
         this.shuffleDescriptorCache = new HashMap<>();
-
-        intermediateDataSet
-                .getConsumers()
-                .forEach(jobEdge -> consumerVertices.add(jobEdge.getTarget().getID()));
 
         if (intermediateDataSet.isDynamic()) {
             intermediateDataSet
@@ -149,7 +143,9 @@ public class IntermediateResult {
     }
 
     public List<JobVertexID> getConsumerVertices() {
-        return consumerVertices;
+        return intermediateDataSet.getConsumers().stream()
+                .map(jobEdge -> jobEdge.getTarget().getID())
+                .collect(Collectors.toList());
     }
 
     /**
@@ -230,7 +226,7 @@ public class IntermediateResult {
         // graph), the parallelisms will all be -1 (parallelism not decided yet)
         // 2. for vertices that are initially assigned a parallelism, the parallelisms must be the
         // same, which is guaranteed at compilation phase
-        for (JobVertexID jobVertexID : consumerVertices) {
+        for (JobVertexID jobVertexID : getConsumerVertices()) {
             checkState(
                     consumersParallelism == graph.getJobVertex(jobVertexID).getParallelism(),
                     "Consumers must have the same parallelism.");
@@ -266,7 +262,7 @@ public class IntermediateResult {
         }
 
         // sanity check, all consumer vertices must have the same max parallelism
-        for (JobVertexID jobVertexID : consumerVertices) {
+        for (JobVertexID jobVertexID : getConsumerVertices()) {
             checkState(
                     consumersMaxParallelism == graph.getJobVertex(jobVertexID).getMaxParallelism(),
                     "Consumers must have the same max parallelism.");

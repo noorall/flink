@@ -57,4 +57,14 @@ public class StreamGraphUserHashHasher implements StreamGraphHasher {
         }
         return true;
     }
+
+    @Override
+    public boolean generateHashesByStreamNode(
+            StreamNode streamNode, StreamGraph streamGraph, Map<Integer, byte[]> hashes) {
+        String userHash = streamNode.getUserHash();
+        if (null != userHash) {
+            hashes.put(streamNode.getId(), StringUtils.hexStringToByte(userHash));
+        }
+        return true;
+    }
 }

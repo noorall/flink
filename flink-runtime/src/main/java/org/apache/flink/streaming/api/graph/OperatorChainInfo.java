@@ -89,10 +89,10 @@ public class OperatorChainInfo {
             Map<Integer, byte[]> hashes,
             Map<Integer, byte[]> legacyHashes) {
         recordChainedNode(currentNodeId);
-        return generateOperatorId(currentNodeId, operatorName, hashes, legacyHashes);
+        return recordCoordinatorProvider(currentNodeId, operatorName, hashes, legacyHashes);
     }
 
-    public OperatorID generateOperatorId(
+    public OperatorID recordCoordinatorProvider(
             int currentNodeId,
             String operatorName,
             Map<Integer, byte[]> hashes,

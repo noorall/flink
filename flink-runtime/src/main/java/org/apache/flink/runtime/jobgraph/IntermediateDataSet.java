@@ -93,7 +93,7 @@ public class IntermediateDataSet implements java.io.Serializable {
     }
 
     public boolean isAllConsumerVerticesCreated() {
-        return isAllConsumerVerticesCreated;
+        return streamEdges.size() == consumers.size();
     }
 
     public void setAllConsumerVerticesCreated(boolean allConsumerVerticesCreated) {
