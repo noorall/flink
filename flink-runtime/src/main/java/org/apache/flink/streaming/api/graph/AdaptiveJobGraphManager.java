@@ -121,7 +121,7 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
      */
     private final Map<Integer, Map<Integer, List<StreamEdge>>> opChainableOutputsCaches;
 
-    private final Map<Integer, Integer> nodeToStartNodeMap;
+    private final Map<Integer, Integer> frozenNodeToStartNodeMap;
 
     private final Map<JobVertexID, Integer> jobVertexToStartNodeMap;
 
@@ -157,7 +157,7 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
         this.serializationExecutor = Preconditions.checkNotNull(serializationExecutor);
         this.chainInfos = new HashMap<>();
         this.opChainableOutputsCaches = new HashMap<>();
-        this.nodeToStartNodeMap = new HashMap<>();
+        this.frozenNodeToStartNodeMap = new HashMap<>();
         this.hashes = new HashMap<>();
         this.legacyHashes = new HashMap<>();
         this.generateMode = generateMode;
@@ -175,7 +175,7 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
 
     @Override
     public boolean isStreamGraphConversionFinished() {
-        return streamGraph.getStreamNodes().size() == nodeToStartNodeMap.size();
+        return streamGraph.getStreamNodes().size() == frozenNodeToStartNodeMap.size();
     }
 
     public List<JobVertex> initializeJobGraph() {
@@ -197,12 +197,17 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
     public List<JobVertex> createJobVerticesAndUpdateGraph(List<StreamNode> streamNodes) {
         Map<Integer, List<StreamEdge>> nonChainableOutputsCache = new LinkedHashMap<>();
         Map<Integer, List<StreamEdge>> nonChainedInputsCache = new LinkedHashMap<>();
+        List<StreamNode> validatedStreamNodes = validateStreamNodes(streamNodes);
+
         Map<Integer, OperatorChainInfo> chainInfos =
                 createOperatorChainInfos(
-                        streamNodes, nonChainableOutputsCache, nonChainedInputsCache);
+                        validatedStreamNodes, nonChainableOutputsCache, nonChainedInputsCache);
+
         Map<Integer, JobVertex> createdJobVertices = createJobVerticesByChainInfos(chainInfos);
+
         generateConfigForJobVertices(
                 createdJobVertices, chainInfos, nonChainableOutputsCache, nonChainedInputsCache);
+
         return new ArrayList<>(createdJobVertices.values());
     }
 
@@ -215,30 +220,10 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
         }
     }
 
-    private boolean changeStreamEdgePartitioner(
-            ModifyStreamEdgeRequestInfo modifyStreamEdgeRequestInfo) {
-        StreamEdge streamEdge = modifyStreamEdgeRequestInfo.getStreamEdge();
-        StreamPartitioner<?> newPartitioner = modifyStreamEdgeRequestInfo.getOutputPartitioner();
-        if (nodeToStartNodeMap.containsKey(streamEdge.getTargetId())) {
-            return false;
-        }
-        streamEdge.setPartitioner(newPartitioner);
-        Integer sourceNodeId = streamEdge.getSourceId();
-        Integer startNodeId = nodeToStartNodeMap.get(sourceNodeId);
-        NonChainedOutput output =
-                (startNodeId != null)
-                        ? opIntermediateOutputsCaches.get(startNodeId).get(streamEdge)
-                        : null;
-        if (output != null) {
-            output.setPartitioner(newPartitioner);
-        }
-        return true;
-    }
-
     @Override
     public Optional<JobVertexID> findVertexByStreamNodeId(int streamNodeId) {
-        if (nodeToStartNodeMap.containsKey(streamNodeId)) {
-            Integer startNodeId = nodeToStartNodeMap.get(streamNodeId);
+        if (frozenNodeToStartNodeMap.containsKey(streamNodeId)) {
+            Integer startNodeId = frozenNodeToStartNodeMap.get(streamNodeId);
             return Optional.of(jobVertices.get(startNodeId).getID());
         }
         return Optional.empty();
@@ -253,6 +238,41 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
         return chainInfos.get(startNodeId).getTransitiveOutEdges();
     }
 
+    private boolean changeStreamEdgePartitioner(
+            ModifyStreamEdgeRequestInfo modifyStreamEdgeRequestInfo) {
+        StreamEdge streamEdge = modifyStreamEdgeRequestInfo.getStreamEdge();
+        StreamPartitioner<?> newPartitioner = modifyStreamEdgeRequestInfo.getOutputPartitioner();
+        if (frozenNodeToStartNodeMap.containsKey(streamEdge.getTargetId())) {
+            return false;
+        }
+        streamEdge.setPartitioner(newPartitioner);
+        Integer sourceNodeId = streamEdge.getSourceId();
+        Integer startNodeId = frozenNodeToStartNodeMap.get(sourceNodeId);
+        NonChainedOutput output =
+                (startNodeId != null)
+                        ? opIntermediateOutputsCaches.get(startNodeId).get(streamEdge)
+                        : null;
+        if (output != null) {
+            output.setPartitioner(newPartitioner);
+        }
+        return true;
+    }
+
+    private List<StreamNode> validateStreamNodes(List<StreamNode> streamNodes) {
+        List<StreamNode> validatedStreamNodes = new ArrayList<>();
+        for (StreamNode streamNode : streamNodes) {
+            Integer startNodeId = streamNode.getId();
+            if (frozenNodeToStartNodeMap.containsKey(startNodeId)) {
+                continue;
+            }
+            if (!isReadyToChain(startNodeId)) {
+                continue;
+            }
+            validatedStreamNodes.add(streamNode);
+        }
+        return validatedStreamNodes;
+    }
+
     private void generateConfigForJobVertices(
             Map<Integer, JobVertex> jobVertices,
             Map<Integer, OperatorChainInfo> chainInfos,
@@ -264,6 +284,46 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
         chainInfos.values().forEach(this::initStreamConfigs);
         generateAllOutputConfigs(jobVertices, nonChainableOutputsCache, nonChainedInputsCache);
         finalizeConfig(jobVertices);
+    }
+
+    private void initStreamConfigs(OperatorChainInfo chainInfo) {
+        Integer startNodeId = chainInfo.getStartNodeId();
+        List<StreamNode> chainedNodes = chainInfo.getAllChainedNodes();
+        for (int i = 0; i < chainedNodes.size(); i++) {
+            StreamNode currentNode = chainedNodes.get(i);
+            if (opChainableOutputsCaches.get(startNodeId).get(currentNode.getId()) == null) {
+                continue;
+            }
+            StreamConfig config =
+                    new StreamConfig(
+                            currentNode.getId() == startNodeId
+                                    ? jobVertices.get(currentNode.getId()).getConfiguration()
+                                    : new Configuration());
+            if (currentNode.getId() == startNodeId) {
+                config.setChainStart();
+                config.setTransitiveChainedTaskConfigs(chainedConfigs.get(startNodeId));
+            } else {
+                chainedConfigs.computeIfAbsent(startNodeId, k -> new HashMap<>());
+                chainedConfigs.get(startNodeId).put(currentNode.getId(), config);
+            }
+            config.setChainIndex(i);
+            config.setOperatorName(currentNode.getOperatorName());
+            config.setOperatorID(new OperatorID(hashes.get(currentNode.getId())));
+            setOperatorConfig(
+                    currentNode.getId(),
+                    config,
+                    chainInfo.getChainedSources(),
+                    streamGraph,
+                    chainedConfigs);
+            vertexConfigs.put(currentNode.getId(), config);
+            setOperatorChainedOutputsConfig(
+                    config,
+                    opChainableOutputsCaches.get(startNodeId).get(currentNode.getId()),
+                    streamGraph);
+            if (opChainableOutputsCaches.get(startNodeId).get(currentNode.getId()).isEmpty()) {
+                config.setChainEnd();
+            }
+        }
     }
 
     private void generateAllOutputConfigs(
@@ -375,60 +435,10 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
             for (StreamEdge edge : streamEdges) {
                 NonChainedOutput output =
                         opIntermediateOutputsCaches.get(edge.getSourceId()).get(edge);
-                Integer sourceStartNodeId = nodeToStartNodeMap.get(edge.getSourceId());
+                Integer sourceStartNodeId = frozenNodeToStartNodeMap.get(edge.getSourceId());
                 connect(sourceStartNodeId, edge, output, physicalEdgesInOrder, jobVertices);
             }
         }
-    }
-
-    private void initStreamConfigs(OperatorChainInfo chainInfo) {
-        Integer startNodeId = chainInfo.getStartNodeId();
-        List<StreamNode> chainedNodes = chainInfo.getAllChainedNodes();
-        for (int i = 0; i < chainedNodes.size(); i++) {
-            StreamNode currentNode = chainedNodes.get(i);
-            if (opChainableOutputsCaches.get(startNodeId).get(currentNode.getId()) == null) {
-                continue;
-            }
-            StreamConfig config =
-                    new StreamConfig(
-                            currentNode.getId() == startNodeId
-                                    ? jobVertices.get(currentNode.getId()).getConfiguration()
-                                    : new Configuration());
-            if (currentNode.getId() == startNodeId) {
-                config.setChainStart();
-                config.setTransitiveChainedTaskConfigs(chainedConfigs.get(startNodeId));
-            } else {
-                chainedConfigs.computeIfAbsent(startNodeId, k -> new HashMap<>());
-                chainedConfigs.get(startNodeId).put(currentNode.getId(), config);
-            }
-            config.setChainIndex(i);
-            config.setOperatorName(currentNode.getOperatorName());
-            config.setOperatorID(new OperatorID(hashes.get(currentNode.getId())));
-            setOperatorConfig(
-                    currentNode.getId(),
-                    config,
-                    chainInfo.getChainedSources(),
-                    streamGraph,
-                    chainedConfigs);
-            vertexConfigs.put(currentNode.getId(), config);
-            setOperatorChainedOutputsConfig(
-                    config,
-                    opChainableOutputsCaches.get(startNodeId).get(currentNode.getId()),
-                    streamGraph);
-            if (opChainableOutputsCaches.get(startNodeId).get(currentNode.getId()).isEmpty()) {
-                config.setChainEnd();
-            }
-        }
-    }
-
-    private boolean generateHashesByChainInfo(OperatorChainInfo chainInfo) {
-        // Generate deterministic hashes for the nodes in order to identify them across
-        // submission if they didn't change.
-
-        legacyStreamGraphHasher.generateHashesByStreamNodes(
-                chainInfo.getAllChainedNodes(), streamGraph, legacyHashes);
-        return defaultStreamGraphHasher.generateHashesByStreamNodes(
-                chainInfo.getAllChainedNodes(), streamGraph, hashes);
     }
 
     private Map<Integer, JobVertex> createJobVerticesByChainInfos(
@@ -442,7 +452,7 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
                     .getAllChainedNodes()
                     .forEach(
                             node ->
-                                    nodeToStartNodeMap.put(
+                                    frozenNodeToStartNodeMap.put(
                                             node.getId(), chainInfo.getStartNodeId()));
         }
         return createdJobVertices;
@@ -544,20 +554,6 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
         return jobVertex;
     }
 
-    private Map<Integer, OperatorChainInfo> buildChainedInputsAndGetHeadInputs(
-            List<StreamNode> streamNodes) {
-        final Map<Integer, OperatorChainInfo> chainEntryPoints = new HashMap<>();
-        for (StreamNode streamNode : streamNodes) {
-            // TODO: process source chain
-            int sourceNodeId = streamNode.getId();
-            if (isReadyToChain(sourceNodeId)) {
-                chainEntryPoints.put(
-                        sourceNodeId, new OperatorChainInfo(sourceNodeId, streamGraph));
-            }
-        }
-        return chainEntryPoints;
-    }
-
     private Map<Integer, OperatorChainInfo> createOperatorChainInfos(
             List<StreamNode> streamNodes,
             Map<Integer, List<StreamEdge>> nonChainableOutputsCache,
@@ -580,6 +576,26 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
         return chainEntryPoints;
     }
 
+    private Map<Integer, OperatorChainInfo> buildChainedInputsAndGetHeadInputs(
+            List<StreamNode> streamNodes) {
+        final Map<Integer, OperatorChainInfo> chainEntryPoints = new HashMap<>();
+        for (StreamNode streamNode : streamNodes) {
+            // TODO: process source chain
+            int sourceNodeId = streamNode.getId();
+            // avoid a node appearing twice
+            // Vertex
+            //  |  \
+            // Edge1 Edge2
+            //   \ /
+            //   Node
+            if (isReadyToChain(sourceNodeId) && !chainEntryPoints.containsKey(sourceNodeId)) {
+                chainEntryPoints.put(
+                        sourceNodeId, new OperatorChainInfo(sourceNodeId, streamGraph));
+            }
+        }
+        return chainEntryPoints;
+    }
+
     /**
      * A node can be considered as a head node if it meets the following conditions:
      *
@@ -587,9 +603,12 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
      * 2. The node must not exist in any other JobVertex.
      */
     private boolean isReadyToChain(Integer headNodeId) {
+        if (chainInfos.containsKey(headNodeId)) {
+            return false;
+        }
         StreamNode node = streamGraph.getStreamNode(headNodeId);
         for (StreamEdge edge : node.getInEdges()) {
-            if (!hashes.containsKey(edge.getSourceId()) || jobVertices.containsKey(headNodeId)) {
+            if (!hashes.containsKey(edge.getSourceId())) {
                 return false;
             }
         }
@@ -610,9 +629,12 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
 
             StreamNode currentNode = streamGraph.getStreamNode(currentNodeId);
 
-            boolean isOutputOnlyAfterEndOfStream = currentNode.isOutputOnlyAfterEndOfStream();
+            Preconditions.checkState(
+                    generateHashesByStreamNode(currentNode),
+                    "Failed to generate hash for streamNode with ID '%s'",
+                    currentNode.getId());
 
-            chainInfo.recordChainedNode(currentNodeId);
+            boolean isOutputOnlyAfterEndOfStream = currentNode.isOutputOnlyAfterEndOfStream();
 
             if (isOutputOnlyAfterEndOfStream) {
                 outputBlockingNodesID.add(currentNode.getId());
@@ -628,7 +650,7 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
 
             for (StreamEdge inEdge : currentNode.getInEdges()) {
                 // inEdge exist in generated jobVertex
-                if (nodeToStartNodeMap.containsKey(inEdge.getSourceId())) {
+                if (frozenNodeToStartNodeMap.containsKey(inEdge.getSourceId())) {
                     nonChainableInputsCache
                             .computeIfAbsent(currentNodeId, ignored -> new ArrayList<>())
                             .add(inEdge);
@@ -651,13 +673,6 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
                 if (outputBlockingNodesID.contains(chainable.getTargetId())) {
                     outputBlockingNodesID.add(currentNodeId);
                 }
-            }
-
-            if (chainableOutputs.isEmpty()) {
-                Preconditions.checkState(
-                        generateHashesByChainInfo(chainInfo),
-                        "Failed to generate hash for chainInfo with startNodeId '%s'",
-                        chainInfo.getStartNodeId());
             }
 
             for (StreamEdge nonChainable : nonChainableOutputs) {
@@ -696,7 +711,7 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
                             chainedPreferredResources));
 
             OperatorID currentOperatorId =
-                    chainInfo.generateOperatorId(
+                    chainInfo.addNodeToChain(
                             currentNodeId,
                             streamGraph.getStreamNode(currentNodeId).getOperatorName(),
                             hashes,
@@ -732,6 +747,23 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
         } else {
             return new ArrayList<>();
         }
+    }
+
+    // TODO: remove this function soon
+    private boolean generateHashesByChainInfo(OperatorChainInfo chainInfo) {
+        // Generate deterministic hashes for the nodes in order to identify them across
+        // submission if they didn't change.
+        legacyStreamGraphHasher.generateHashesByStreamNodes(
+                chainInfo.getAllChainedNodes(), streamGraph, legacyHashes);
+        return defaultStreamGraphHasher.generateHashesByStreamNodes(
+                chainInfo.getAllChainedNodes(), streamGraph, hashes);
+    }
+
+    private boolean generateHashesByStreamNode(StreamNode streamNode) {
+        // Generate deterministic hashes for the nodes in order to identify them across
+        // submission if they didn't change.
+        legacyStreamGraphHasher.generateHashesByStreamNode(streamNode, streamGraph, legacyHashes);
+        return defaultStreamGraphHasher.generateHashesByStreamNode(streamNode, streamGraph, hashes);
     }
 
     public enum GenerateMode {
