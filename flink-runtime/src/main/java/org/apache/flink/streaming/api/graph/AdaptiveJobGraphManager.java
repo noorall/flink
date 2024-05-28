@@ -421,8 +421,7 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
                 IntermediateDataSet dataSet =
                         jobVertex.getOrCreateResultDataSet(
                                 output.getDataSetId(), output.getPartitionType());
-
-                findOutputEdgesByVertexId(jobVertex.getID()).forEach(dataSet::addStreamEdge);
+                dataSet.addStreamEdge(edge);
             }
         }
         config.setVertexNonChainedOutputs(new ArrayList<>(transitiveOutputs));
