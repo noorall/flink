@@ -171,6 +171,11 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
 
         this.jobGraph.setSnapshotSettings(streamGraph.getJobCheckpointingSettings());
         this.jobGraph.setSavepointRestoreSettings(streamGraph.getSavepointRestoreSettings());
+        jobGraph.setJobType(streamGraph.getJobType());
+        jobGraph.setDynamic(streamGraph.isDynamic());
+
+        jobGraph.enableApproximateLocalRecovery(
+                streamGraph.getCheckpointConfig().isApproximateLocalRecoveryEnabled());
     }
 
     @Override
