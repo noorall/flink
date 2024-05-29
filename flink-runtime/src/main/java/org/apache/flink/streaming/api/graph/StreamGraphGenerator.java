@@ -295,6 +295,9 @@ public class StreamGraphGenerator {
         }
 
         streamGraph.prepareUserArtifacts();
+        streamGraph.getStreamNodes().stream()
+                .filter(node -> !node.isParallelismConfigured())
+                .forEach(node -> node.setParallelism(ExecutionConfig.PARALLELISM_DEFAULT, false));
         final StreamGraph builtStreamGraph = streamGraph;
 
         alreadyTransformed.clear();
