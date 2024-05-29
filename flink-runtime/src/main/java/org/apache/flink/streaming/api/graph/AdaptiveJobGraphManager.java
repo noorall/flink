@@ -273,9 +273,12 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
             if (!isReadyToChain(startNodeId)) {
                 continue;
             }
+            if (validatedStreamNodes.contains(streamNode)) {
+                continue;
+            }
             validatedStreamNodes.add(streamNode);
         }
-        return validatedStreamNodes;
+        return new ArrayList<>(validatedStreamNodes);
     }
 
     private void generateConfigForJobVertices(
@@ -584,18 +587,9 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
             List<StreamNode> streamNodes) {
         final Map<Integer, OperatorChainInfo> chainEntryPoints = new HashMap<>();
         for (StreamNode streamNode : streamNodes) {
-            // TODO: process source chain
+            // TODO: process source chain for multi-input
             int sourceNodeId = streamNode.getId();
-            // avoid a node appearing twice
-            // Vertex
-            //  |  \
-            // Edge1 Edge2
-            //   \ /
-            //   Node
-            if (isReadyToChain(sourceNodeId) && !chainEntryPoints.containsKey(sourceNodeId)) {
-                chainEntryPoints.put(
-                        sourceNodeId, new OperatorChainInfo(sourceNodeId, streamGraph));
-            }
+            chainEntryPoints.put(sourceNodeId, new OperatorChainInfo(sourceNodeId, streamGraph));
         }
         return chainEntryPoints;
     }
