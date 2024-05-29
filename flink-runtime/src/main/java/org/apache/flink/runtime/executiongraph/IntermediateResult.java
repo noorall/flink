@@ -106,10 +106,6 @@ public class IntermediateResult {
 
         this.shuffleDescriptorCache = new HashMap<>();
 
-        intermediateDataSet
-                .getConsumers()
-                .forEach(jobEdge -> consumerVertices.add(jobEdge.getTarget().getID()));
-
         if (intermediateDataSet.isDynamic()) {
             intermediateDataSet
                     .getStreamEdges()
@@ -148,8 +144,8 @@ public class IntermediateResult {
         return partitions;
     }
 
-    public List<JobVertexID> getConsumerVertices() {
-        return consumerVertices;
+    public List<JobEdge> getConsumers() {
+        return intermediateDataSet.getConsumers();
     }
 
     /**
@@ -230,7 +226,8 @@ public class IntermediateResult {
         // graph), the parallelisms will all be -1 (parallelism not decided yet)
         // 2. for vertices that are initially assigned a parallelism, the parallelisms must be the
         // same, which is guaranteed at compilation phase
-        for (JobVertexID jobVertexID : consumerVertices) {
+        for(JobEdge edge: intermediateDataSet.getConsumers()){
+            JobVertexID jobVertexID = edge.getTarget().getID();
             checkState(
                     consumersParallelism == graph.getJobVertex(jobVertexID).getParallelism(),
                     "Consumers must have the same parallelism.");
@@ -266,7 +263,8 @@ public class IntermediateResult {
         }
 
         // sanity check, all consumer vertices must have the same max parallelism
-        for (JobVertexID jobVertexID : consumerVertices) {
+        for(JobEdge edge: intermediateDataSet.getConsumers()){
+            JobVertexID jobVertexID = edge.getTarget().getID();
             checkState(
                     consumersMaxParallelism == graph.getJobVertex(jobVertexID).getMaxParallelism(),
                     "Consumers must have the same max parallelism.");
