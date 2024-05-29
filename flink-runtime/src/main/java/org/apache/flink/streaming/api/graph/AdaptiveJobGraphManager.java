@@ -167,14 +167,14 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
 
         this.jobGraph = new JobGraph(streamGraph.getJobId(), streamGraph.getJobName());
         streamGraph.getUserJarBlobKeys().forEach(jobGraph::addUserJarBlobKey);
-        jobGraph.setClasspaths(streamGraph.getClasspaths());
 
+        this.jobGraph.setClasspaths(streamGraph.getClasspaths());
         this.jobGraph.setSnapshotSettings(streamGraph.getJobCheckpointingSettings());
         this.jobGraph.setSavepointRestoreSettings(streamGraph.getSavepointRestoreSettings());
-        jobGraph.setJobType(streamGraph.getJobType());
-        jobGraph.setDynamic(streamGraph.isDynamic());
+        this.jobGraph.setJobType(streamGraph.getJobType());
+        this.jobGraph.setDynamic(streamGraph.isDynamic());
 
-        jobGraph.enableApproximateLocalRecovery(
+        this.jobGraph.enableApproximateLocalRecovery(
                 streamGraph.getCheckpointConfig().isApproximateLocalRecoveryEnabled());
     }
 
