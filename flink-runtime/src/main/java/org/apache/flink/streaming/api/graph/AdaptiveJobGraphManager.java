@@ -19,6 +19,7 @@
 package org.apache.flink.streaming.api.graph;
 
 import org.apache.flink.annotation.VisibleForTesting;
+import org.apache.flink.api.common.ExecutionConfig;
 import org.apache.flink.api.common.operators.ResourceSpec;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.Configuration;
@@ -30,8 +31,10 @@ import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.jobgraph.JobVertex;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.jobgraph.OperatorID;
+import org.apache.flink.runtime.jobgraph.forwardgroup.ForwardGroup;
 import org.apache.flink.runtime.operators.coordination.OperatorCoordinator;
 import org.apache.flink.runtime.operators.util.TaskConfig;
+import org.apache.flink.streaming.runtime.partitioner.ForwardPartitioner;
 import org.apache.flink.streaming.runtime.partitioner.StreamPartitioner;
 import org.apache.flink.util.FlinkRuntimeException;
 import org.apache.flink.util.Preconditions;
@@ -74,7 +77,6 @@ import static org.apache.flink.streaming.api.graph.StreamingJobGraphGenerator.se
 import static org.apache.flink.streaming.api.graph.StreamingJobGraphGenerator.setPhysicalEdges;
 import static org.apache.flink.streaming.api.graph.StreamingJobGraphGenerator.setSlotSharingAndCoLocation;
 import static org.apache.flink.streaming.api.graph.StreamingJobGraphGenerator.setVertexDescription;
-import static org.apache.flink.streaming.api.graph.StreamingJobGraphGenerator.setVertexParallelismsForDynamicGraphIfNecessary;
 import static org.apache.flink.streaming.api.graph.StreamingJobGraphGenerator.tryConvertPartitionerForDynamicGraph;
 import static org.apache.flink.streaming.api.graph.StreamingJobGraphGenerator.validateHybridShuffleExecuteInBatchMode;
 
@@ -83,7 +85,7 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
 
     private final StreamGraph streamGraph;
 
-    private final Map<Integer, JobVertex> jobVertices;
+    private final Map<Integer, JobVertex> jobVerticesCache;
     private final JobGraph jobGraph;
 
     private final Map<Integer, Map<Integer, StreamConfig>> chainedConfigs;
@@ -135,6 +137,8 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
 
     private final GenerateMode generateMode;
 
+    private final Map<JobVertexID, ForwardGroup> forwardGroupsByJobVertexIdCache;
+
     @VisibleForTesting
     public AdaptiveJobGraphManager(
             ClassLoader userClassloader,
@@ -146,7 +150,7 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
         this.defaultStreamGraphHasher = new StreamGraphHasherV2();
         this.legacyStreamGraphHasher = new StreamGraphUserHashHasher();
 
-        this.jobVertices = new LinkedHashMap<>();
+        this.jobVerticesCache = new LinkedHashMap<>();
         this.chainedConfigs = new HashMap<>();
         this.vertexConfigs = new HashMap<>();
         this.chainedNames = new HashMap<>();
@@ -164,6 +168,7 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
         this.hasHybridResultPartition = new AtomicBoolean(false);
         this.opIntermediateOutputsCaches = new HashMap<>();
         this.jobVertexToStartNodeMap = new HashMap<>();
+        this.forwardGroupsByJobVertexIdCache = new HashMap<>();
 
         this.jobGraph = new JobGraph(streamGraph.getJobId(), streamGraph.getJobName());
         streamGraph.getUserJarBlobKeys().forEach(jobGraph::addUserJarBlobKey);
@@ -229,7 +234,7 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
     public Optional<JobVertexID> findVertexByStreamNodeId(int streamNodeId) {
         if (frozenNodeToStartNodeMap.containsKey(streamNodeId)) {
             Integer startNodeId = frozenNodeToStartNodeMap.get(streamNodeId);
-            return Optional.of(jobVertices.get(startNodeId).getID());
+            return Optional.of(jobVerticesCache.get(startNodeId).getID());
         }
         return Optional.empty();
     }
@@ -294,6 +299,88 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
         finalizeConfig(jobVertices);
     }
 
+    private void setVertexParallelismsForDynamicGraphIfNecessary(
+            Map<Integer, JobVertex> jobVertices,
+            Map<Integer, OperatorChainInfo> chainInfos,
+            StreamGraph streamGraph) {
+        // reset parallelism for job vertices whose parallelism is not configured
+        jobVertices.forEach(
+                (startNodeId, jobVertex) -> {
+                    final OperatorChainInfo chainInfo = chainInfos.get(startNodeId);
+                    if (!jobVertex.isParallelismConfigured()
+                            && streamGraph.isAutoParallelismEnabled()) {
+                        jobVertex.setParallelism(ExecutionConfig.PARALLELISM_DEFAULT);
+                        chainInfo
+                                .getAllChainedNodes()
+                                .forEach(
+                                        n ->
+                                                n.setParallelism(
+                                                        ExecutionConfig.PARALLELISM_DEFAULT,
+                                                        false));
+                    }
+                });
+
+        final Map<JobVertex, Set<JobVertex>> forwardProducersByJobVertex = new LinkedHashMap<>();
+
+        jobVertices.forEach(
+                (startNodeId, jobVertex) -> {
+                    Set<JobVertex> forwardProducers =
+                            forwardProducersByJobVertex.computeIfAbsent(
+                                    jobVertex, ignored -> new HashSet<>());
+                    streamGraph.getStreamNode(startNodeId).getInEdges().stream()
+                            .filter(edge -> edge.getPartitioner() instanceof ForwardPartitioner)
+                            .map(StreamEdge::getSourceId)
+                            .map(frozenNodeToStartNodeMap::get)
+                            .map(jobVerticesCache::get)
+                            .forEach(forwardProducers::add);
+                });
+
+        forwardProducersByJobVertex.forEach(
+                (jobVertex, forwardProducerSet) -> {
+                    Set<JobVertex> vertexGroup = new HashSet<>();
+                    vertexGroup.add(jobVertex);
+                    for (JobVertex producerJobVertex : forwardProducerSet) {
+                        forwardGroupsByJobVertexIdCache.get(producerJobVertex.getID())
+                                .getJobVertexIds().stream()
+                                .map(jobVertexToStartNodeMap::get)
+                                .map(jobVerticesCache::get)
+                                .forEach(vertexGroup::add);
+                    }
+                    forwardGroupsByJobVertexIdCache.put(
+                            jobVertex.getID(), new ForwardGroup(vertexGroup));
+                });
+
+        jobVertices.forEach(
+                (startNodeId, jobVertex) -> {
+                    ForwardGroup forwardGroup =
+                            forwardGroupsByJobVertexIdCache.get(jobVertex.getID());
+                    // set parallelism for vertices in forward group
+                    if (forwardGroup != null && forwardGroup.isParallelismDecided()) {
+                        jobVertex.setParallelism(forwardGroup.getParallelism());
+                        jobVertex.setParallelismConfigured(true);
+                        chainInfos
+                                .get(startNodeId)
+                                .getAllChainedNodes()
+                                .forEach(
+                                        streamNode ->
+                                                streamNode.setParallelism(
+                                                        forwardGroup.getParallelism(), true));
+                    }
+
+                    // set max parallelism for vertices in forward group
+                    if (forwardGroup != null && forwardGroup.isMaxParallelismDecided()) {
+                        jobVertex.setMaxParallelism(forwardGroup.getMaxParallelism());
+                        chainInfos
+                                .get(startNodeId)
+                                .getAllChainedNodes()
+                                .forEach(
+                                        streamNode ->
+                                                streamNode.setMaxParallelism(
+                                                        forwardGroup.getMaxParallelism()));
+                    }
+                });
+    }
+
     private void initStreamConfigs(OperatorChainInfo chainInfo) {
         Integer startNodeId = chainInfo.getStartNodeId();
         List<StreamNode> chainedNodes = chainInfo.getAllChainedNodes();
@@ -305,7 +392,7 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
             StreamConfig config =
                     new StreamConfig(
                             currentNode.getId() == startNodeId
-                                    ? jobVertices.get(currentNode.getId()).getConfiguration()
+                                    ? jobVerticesCache.get(currentNode.getId()).getConfiguration()
                                     : new Configuration());
             if (currentNode.getId() == startNodeId) {
                 config.setChainStart();
@@ -422,10 +509,10 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
         for (StreamEdge edge : transitiveOutEdges) {
             NonChainedOutput output = opIntermediateOutputsCaches.get(edge.getSourceId()).get(edge);
             transitiveOutputs.add(output);
-            if (jobVertices.containsKey(edge.getTargetId())) {
-                connect(startNodeId, edge, output, physicalEdgesInOrder, jobVertices);
+            if (jobVerticesCache.containsKey(edge.getTargetId())) {
+                connect(startNodeId, edge, output, physicalEdgesInOrder, jobVerticesCache);
             } else {
-                JobVertex jobVertex = jobVertices.get(startNodeId);
+                JobVertex jobVertex = jobVerticesCache.get(startNodeId);
                 IntermediateDataSet dataSet =
                         jobVertex.getOrCreateResultDataSet(
                                 output.getDataSetId(), output.getPartitionType());
@@ -443,14 +530,14 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
                 NonChainedOutput output =
                         opIntermediateOutputsCaches.get(edge.getSourceId()).get(edge);
                 Integer sourceStartNodeId = frozenNodeToStartNodeMap.get(edge.getSourceId());
-                connect(sourceStartNodeId, edge, output, physicalEdgesInOrder, jobVertices);
+                connect(sourceStartNodeId, edge, output, physicalEdgesInOrder, jobVerticesCache);
             }
         }
     }
 
     private Map<Integer, JobVertex> createJobVerticesByChainInfos(
             Map<Integer, OperatorChainInfo> chainInfos) {
-        Map<Integer, JobVertex> createdJobVertices = new HashMap<>();
+        Map<Integer, JobVertex> createdJobVertices = new LinkedHashMap<>();
         for (OperatorChainInfo chainInfo : chainInfos.values()) {
             JobVertex jobVertex = createJobVertex(chainInfo.getStartNodeId(), chainInfo);
             createdJobVertices.put(chainInfo.getStartNodeId(), jobVertex);
@@ -551,7 +638,7 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
             LOG.debug("Parallelism set: {} for {}", parallelism, streamNodeId);
         }
 
-        jobVertices.put(streamNodeId, jobVertex);
+        jobVerticesCache.put(streamNodeId, jobVertex);
         jobGraph.addVertex(jobVertex);
 
         jobVertex.setParallelismConfigured(
@@ -585,7 +672,7 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
 
     private Map<Integer, OperatorChainInfo> buildChainedInputsAndGetHeadInputs(
             List<StreamNode> streamNodes) {
-        final Map<Integer, OperatorChainInfo> chainEntryPoints = new HashMap<>();
+        final Map<Integer, OperatorChainInfo> chainEntryPoints = new LinkedHashMap<>();
         for (StreamNode streamNode : streamNodes) {
             // TODO: process source chain for multi-input
             int sourceNodeId = streamNode.getId();
@@ -600,11 +687,11 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
      * <p>1. The hash for all sourceNode instances has been generated. <br>
      * 2. The node must not exist in any other JobVertex.
      */
-    private boolean isReadyToChain(Integer headNodeId) {
-        if (chainInfos.containsKey(headNodeId)) {
+    private boolean isReadyToChain(Integer startNodeId) {
+        if (chainInfos.containsKey(startNodeId)) {
             return false;
         }
-        StreamNode node = streamGraph.getStreamNode(headNodeId);
+        StreamNode node = streamGraph.getStreamNode(startNodeId);
         for (StreamEdge edge : node.getInEdges()) {
             if (!hashes.containsKey(edge.getSourceId())) {
                 return false;
@@ -650,7 +737,7 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
                 // inEdge exist in generated jobVertex
                 if (frozenNodeToStartNodeMap.containsKey(inEdge.getSourceId())) {
                     nonChainableInputsCache
-                            .computeIfAbsent(currentNodeId, ignored -> new ArrayList<>())
+                            .computeIfAbsent(startNodeId, ignored -> new ArrayList<>())
                             .add(inEdge);
                 }
             }
