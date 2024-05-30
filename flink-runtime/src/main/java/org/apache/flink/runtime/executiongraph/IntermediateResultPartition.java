@@ -94,12 +94,10 @@ public class IntermediateResultPartition {
             return false;
         }
 
-        for (JobEdge edge : totalResult.getConsumers()) {
-            JobVertexID jobVertexId = edge.getTarget().getID();
+        for (JobVertexID jobVertexId : totalResult.getConsumerVertices()) {
             // for dynamic graph, if any consumer vertex is still not initialized or not transfer to
             // job vertex, this result partition can not be released
-            ExecutionJobVertex jobVertex = producer.getExecutionGraphAccessor().getJobVertex(jobVertexId);
-            if(jobVertex == null || !jobVertex.isInitialized()) {
+            if(!producer.getExecutionGraphAccessor().getJobVertex(jobVertexId).isInitialized()) {
                 return false;
             }
         }
