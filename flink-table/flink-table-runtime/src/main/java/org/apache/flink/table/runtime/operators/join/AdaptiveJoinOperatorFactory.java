@@ -18,9 +18,12 @@
 package org.apache.flink.table.runtime.operators.join;
 
 import org.apache.flink.annotation.Internal;
-import org.apache.flink.streaming.api.operators.AdaptiveJoinHandler;
+import org.apache.flink.streaming.api.operators.AdaptiveJoin;
 import org.apache.flink.streaming.api.operators.SimpleOperatorFactory;
 import org.apache.flink.streaming.api.operators.StreamOperator;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Adaptive join factory.
@@ -29,19 +32,28 @@ import org.apache.flink.streaming.api.operators.StreamOperator;
  */
 @Internal
 public class AdaptiveJoinOperatorFactory<OUT> extends SimpleOperatorFactory<OUT>
-        implements AdaptiveJoinHandler {
+        implements AdaptiveJoin {
 
     private final AdaptiveJoinOperator adaptiveJoinOperator;
 
-    private final BroadcastSide potentialBroadcastJoinSide;
+    private final List<PotentialBroadcastSide> potentialBroadcastJoinSides;
 
     public AdaptiveJoinOperatorFactory(StreamOperator<OUT> operator, int maybeBroadcastJoinSide) {
         super(operator);
         adaptiveJoinOperator = (AdaptiveJoinOperator) operator;
-        potentialBroadcastJoinSide = BroadcastSide.valueOf(maybeBroadcastJoinSide);
+        potentialBroadcastJoinSides = new ArrayList<>();
+        if (maybeBroadcastJoinSide == 0) {
+            potentialBroadcastJoinSides.add(PotentialBroadcastSide.LEFT);
+        } else if (maybeBroadcastJoinSide == 1) {
+            potentialBroadcastJoinSides.add(PotentialBroadcastSide.RIGHT);
+        } else if (maybeBroadcastJoinSide == 2) {
+            potentialBroadcastJoinSides.add(PotentialBroadcastSide.LEFT);
+            potentialBroadcastJoinSides.add(PotentialBroadcastSide.RIGHT);
+        }
     }
 
-    public void setBroadcastJoinSide(BroadcastSide side) {
+    @Override
+    public void markAsBroadcastJoin(PotentialBroadcastSide side) {
         switch (side) {
             case LEFT:
                 adaptiveJoinOperator.activateBroadcastJoin(true);
@@ -49,16 +61,13 @@ public class AdaptiveJoinOperatorFactory<OUT> extends SimpleOperatorFactory<OUT>
             case RIGHT:
                 adaptiveJoinOperator.activateBroadcastJoin(false);
                 break;
-            case NONE:
-                break;
-            case BOTH:
-                throw new IllegalStateException("Cannot be BOTH side.");
             default:
                 throw new IllegalArgumentException("invalid: " + side);
         }
     }
 
-    public AdaptiveJoinHandler.BroadcastSide getPotentialBroadcastJoinSide() {
-        return potentialBroadcastJoinSide;
+    @Override
+    public List<PotentialBroadcastSide> getPotentialBroadcastJoinSides() {
+        return potentialBroadcastJoinSides;
     }
 }

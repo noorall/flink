@@ -19,39 +19,23 @@ package org.apache.flink.streaming.api.operators;
 
 import org.apache.flink.annotation.PublicEvolving;
 
+import java.util.List;
+
 /**
  * Provides interfaces for adaptive join operations within a Flink job. This handler allows for
  * specifying and retrieving the side(s) of a join operation that can be optimized as a broadcast
  * join.
  */
 @PublicEvolving
-public interface AdaptiveJoinHandler {
+public interface AdaptiveJoin {
 
     /**
      * Represents the side of a join operation that can potentially be optimized as a broadcast
-     * join. The optimization can be applied on the LEFT side, the RIGHT side, BOTH sides, or NONE
-     * of the sides.
+     * join. The optimization can be applied on the LEFT side or the RIGHT side.
      */
-    enum BroadcastSide {
-        LEFT(0),
-        RIGHT(1),
-        BOTH(2),
-        NONE(-1);
-
-        int side;
-
-        BroadcastSide(int side) {
-            this.side = side;
-        }
-
-        public static BroadcastSide valueOf(int side) {
-            for (BroadcastSide broadcastSide : BroadcastSide.values()) {
-                if (broadcastSide.side == side) {
-                    return broadcastSide;
-                }
-            }
-            throw new IllegalArgumentException("invalid: " + side);
-        }
+    enum PotentialBroadcastSide {
+        LEFT,
+        RIGHT
     }
 
     /**
@@ -60,7 +44,7 @@ public interface AdaptiveJoinHandler {
      * @param canBeBroadcastSide the side of the join that can be optimized; must not be {@code
      *     null}.
      */
-    void setBroadcastJoinSide(BroadcastSide canBeBroadcastSide);
+    void markAsBroadcastJoin(PotentialBroadcastSide canBeBroadcastSide);
 
     /**
      * Returns the side of the join that can be optimized as a broadcast join.
@@ -68,5 +52,5 @@ public interface AdaptiveJoinHandler {
      * @return the broadcast side that has been set for optimization, or {@code BroadcastSide.NONE}
      *     if no optimization is set.
      */
-    BroadcastSide getPotentialBroadcastJoinSide();
+    List<PotentialBroadcastSide> getPotentialBroadcastJoinSides();
 }
