@@ -54,13 +54,7 @@ public class OperatorChainInfo {
     }
 
     public OperatorChainInfo(int startNodeId, StreamGraph streamGraph) {
-        this.startNodeId = startNodeId;
-        this.chainedOperatorHashes = new HashMap<>();
-        this.coordinatorProviders = new ArrayList<>();
-        this.chainedSources = new HashMap<>();
-        this.streamGraph = streamGraph;
-        this.chainedNodes = new ArrayList<>();
-        this.transitiveOutEdges = new ArrayList<>();
+        this(startNodeId, new HashMap<>(), streamGraph);
     }
 
     public Integer getStartNodeId() {

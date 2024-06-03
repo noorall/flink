@@ -24,6 +24,7 @@ import org.apache.flink.api.common.operators.ResourceSpec;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.OperatorIDPair;
+import org.apache.flink.runtime.executiongraph.VertexGroupComputeUtil;
 import org.apache.flink.runtime.jobgraph.InputOutputFormatContainer;
 import org.apache.flink.runtime.jobgraph.InputOutputFormatVertex;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSet;
@@ -31,9 +32,10 @@ import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.jobgraph.JobVertex;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.jobgraph.OperatorID;
-import org.apache.flink.runtime.jobgraph.forwardgroup.ForwardGroup;
 import org.apache.flink.runtime.operators.coordination.OperatorCoordinator;
 import org.apache.flink.runtime.operators.util.TaskConfig;
+import org.apache.flink.streaming.runtime.partitioner.ForwardForConsecutiveHashPartitioner;
+import org.apache.flink.streaming.runtime.partitioner.ForwardForUnspecifiedPartitioner;
 import org.apache.flink.streaming.runtime.partitioner.ForwardPartitioner;
 import org.apache.flink.streaming.runtime.partitioner.StreamPartitioner;
 import org.apache.flink.util.FlinkRuntimeException;
@@ -49,6 +51,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -59,6 +62,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static org.apache.flink.streaming.api.graph.StreamingJobGraphGenerator.addVertexIndexPrefixInVertexName;
@@ -79,6 +83,8 @@ import static org.apache.flink.streaming.api.graph.StreamingJobGraphGenerator.se
 import static org.apache.flink.streaming.api.graph.StreamingJobGraphGenerator.setVertexDescription;
 import static org.apache.flink.streaming.api.graph.StreamingJobGraphGenerator.tryConvertPartitionerForDynamicGraph;
 import static org.apache.flink.streaming.api.graph.StreamingJobGraphGenerator.validateHybridShuffleExecuteInBatchMode;
+import static org.apache.flink.util.Preconditions.checkNotNull;
+import static org.apache.flink.util.Preconditions.checkState;
 
 public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVertexMapper {
     private static final Logger LOG = LoggerFactory.getLogger(AdaptiveJobGraphManager.class);
@@ -104,7 +110,7 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
     private final StreamGraphHasher defaultStreamGraphHasher;
     private final StreamGraphHasher legacyStreamGraphHasher;
 
-    private AtomicBoolean hasHybridResultPartition;
+    private final AtomicBoolean hasHybridResultPartition;
 
     private final Executor serializationExecutor;
 
@@ -137,7 +143,7 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
 
     private final GenerateMode generateMode;
 
-    private final Map<JobVertexID, ForwardGroup> forwardGroupsByJobVertexIdCache;
+    private final Map<Integer, StreamNodeForwardGroup> forwardGroupsByStartNodeIdCache;
 
     @VisibleForTesting
     public AdaptiveJobGraphManager(
@@ -168,10 +174,9 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
         this.hasHybridResultPartition = new AtomicBoolean(false);
         this.opIntermediateOutputsCaches = new HashMap<>();
         this.jobVertexToStartNodeMap = new HashMap<>();
-        this.forwardGroupsByJobVertexIdCache = new HashMap<>();
+        this.forwardGroupsByStartNodeIdCache = new HashMap<>();
 
         this.jobGraph = new JobGraph(streamGraph.getJobId(), streamGraph.getJobName());
-        streamGraph.getUserJarBlobKeys().forEach(jobGraph::addUserJarBlobKey);
 
         this.jobGraph.setClasspaths(streamGraph.getClasspaths());
         this.jobGraph.setSnapshotSettings(streamGraph.getJobCheckpointingSettings());
@@ -181,6 +186,8 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
 
         this.jobGraph.enableApproximateLocalRecovery(
                 streamGraph.getCheckpointConfig().isApproximateLocalRecoveryEnabled());
+
+        streamGraph.getUserJarBlobKeys().forEach(jobGraph::addUserJarBlobKey);
     }
 
     @Override
@@ -193,7 +200,9 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
                 streamGraph.getStreamNodes().stream()
                         .filter(node -> node.getInEdges().isEmpty())
                         .collect(Collectors.toList());
-
+        if (jobGraph.isDynamic()) {
+            setVertexParallelismsForDynamicGraphIfNecessary(sourceNodes);
+        }
         return createJobVerticesAndUpdateGraph(sourceNodes);
     }
 
@@ -291,92 +300,156 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
             Map<Integer, OperatorChainInfo> chainInfos,
             Map<Integer, List<StreamEdge>> nonChainableOutputsCache,
             Map<Integer, List<StreamEdge>> nonChainedInputsCache) {
-        if (jobGraph.isDynamic()) {
-            setVertexParallelismsForDynamicGraphIfNecessary(jobVertices, chainInfos, streamGraph);
-        }
         chainInfos.values().forEach(this::initStreamConfigs);
         generateAllOutputConfigs(jobVertices, nonChainableOutputsCache, nonChainedInputsCache);
         finalizeConfig(jobVertices);
     }
 
-    private void setVertexParallelismsForDynamicGraphIfNecessary(
-            Map<Integer, JobVertex> jobVertices,
-            Map<Integer, OperatorChainInfo> chainInfos,
-            StreamGraph streamGraph) {
+    private void setVertexParallelismsForDynamicGraphIfNecessary(List<StreamNode> streamNodes) {
+        List<StreamEdge> chainableOutputs = new ArrayList<>();
+        Map<Integer, List<StreamEdge>> transitiveOutEdgesMap = new HashMap<>();
+        Map<Integer, List<StreamNode>> chainedStreamNodesMap = new LinkedHashMap<>();
+        Set<Integer> finishedChain = new HashSet<>();
+        for (StreamNode streamNode : streamNodes) {
+            traverseFullGraph(
+                    streamNode.getId(),
+                    streamNode.getId(),
+                    chainableOutputs,
+                    transitiveOutEdgesMap,
+                    chainedStreamNodesMap,
+                    finishedChain);
+        }
+        computeForwardGroupAndSetNodeParallelisms(
+                transitiveOutEdgesMap, chainedStreamNodesMap, chainableOutputs);
+    }
+
+    private void traverseFullGraph(
+            Integer startNodeId,
+            Integer currentNodeId,
+            List<StreamEdge> allChainableOutputs,
+            Map<Integer, List<StreamEdge>> transitiveOutEdgesMap,
+            Map<Integer, List<StreamNode>> chainedStreamNodesMap,
+            Set<Integer> finishedChain) {
+        if (!finishedChain.contains(startNodeId)) {
+            List<StreamEdge> chainableOutputs = new ArrayList<>();
+            List<StreamEdge> nonChainableOutputs = new ArrayList<>();
+            StreamNode currentNode = streamGraph.getStreamNode(currentNodeId);
+            for (StreamEdge streamEdge : currentNode.getOutEdges()) {
+                if (isChainable(streamEdge, streamGraph)) {
+                    chainableOutputs.add(streamEdge);
+                } else {
+                    nonChainableOutputs.add(streamEdge);
+                }
+            }
+
+            allChainableOutputs.addAll(chainableOutputs);
+
+            transitiveOutEdgesMap
+                    .computeIfAbsent(startNodeId, k -> new ArrayList<>())
+                    .addAll(nonChainableOutputs);
+
+            chainedStreamNodesMap
+                    .computeIfAbsent(startNodeId, k -> new ArrayList<>())
+                    .add(currentNode);
+
+            for (StreamEdge chainable : chainableOutputs) {
+                traverseFullGraph(
+                        startNodeId,
+                        chainable.getTargetId(),
+                        allChainableOutputs,
+                        transitiveOutEdgesMap,
+                        chainedStreamNodesMap,
+                        finishedChain);
+            }
+            for (StreamEdge nonChainable : nonChainableOutputs) {
+                traverseFullGraph(
+                        nonChainable.getTargetId(),
+                        nonChainable.getTargetId(),
+                        allChainableOutputs,
+                        transitiveOutEdgesMap,
+                        chainedStreamNodesMap,
+                        finishedChain);
+            }
+            if (currentNodeId.equals(startNodeId)) {
+                finishedChain.add(startNodeId);
+            }
+        }
+    }
+
+    private void computeForwardGroupAndSetNodeParallelisms(
+            Map<Integer, List<StreamEdge>> transitiveOutEdgesMap,
+            Map<Integer, List<StreamNode>> chainedStreamNodesMap,
+            List<StreamEdge> chainableOutputs) {
         // reset parallelism for job vertices whose parallelism is not configured
-        jobVertices.forEach(
-                (startNodeId, jobVertex) -> {
-                    final OperatorChainInfo chainInfo = chainInfos.get(startNodeId);
-                    if (!jobVertex.isParallelismConfigured()
-                            && streamGraph.isAutoParallelismEnabled()) {
-                        jobVertex.setParallelism(ExecutionConfig.PARALLELISM_DEFAULT);
-                        chainInfo
-                                .getAllChainedNodes()
-                                .forEach(
-                                        n ->
-                                                n.setParallelism(
-                                                        ExecutionConfig.PARALLELISM_DEFAULT,
-                                                        false));
+        chainedStreamNodesMap.forEach(
+                (startNodeId, chainedStreamNodes) -> {
+                    boolean isParallelismConfigured =
+                            chainedStreamNodes.stream()
+                                    .anyMatch(StreamNode::isParallelismConfigured);
+                    if (!isParallelismConfigured && streamGraph.isAutoParallelismEnabled()) {
+                        chainedStreamNodes.forEach(
+                                n -> n.setParallelism(ExecutionConfig.PARALLELISM_DEFAULT, false));
                     }
                 });
 
-        final Map<JobVertex, Set<JobVertex>> forwardProducersByJobVertex = new LinkedHashMap<>();
+        final Map<StreamNode, Set<StreamNode>> forwardProducersByStartNode = new LinkedHashMap<>();
 
-        jobVertices.forEach(
-                (startNodeId, jobVertex) -> {
-                    Set<JobVertex> forwardProducers =
-                            forwardProducersByJobVertex.computeIfAbsent(
-                                    jobVertex, ignored -> new HashSet<>());
-                    streamGraph.getStreamNode(startNodeId).getInEdges().stream()
-                            .filter(edge -> edge.getPartitioner() instanceof ForwardPartitioner)
-                            .map(StreamEdge::getSourceId)
-                            .map(frozenNodeToStartNodeMap::get)
-                            .map(jobVerticesCache::get)
-                            .forEach(forwardProducers::add);
-                });
-
-        forwardProducersByJobVertex.forEach(
-                (jobVertex, forwardProducerSet) -> {
-                    Set<JobVertex> vertexGroup = new HashSet<>();
-                    vertexGroup.add(jobVertex);
-                    for (JobVertex producerJobVertex : forwardProducerSet) {
-                        forwardGroupsByJobVertexIdCache.get(producerJobVertex.getID())
-                                .getJobVertexIds().stream()
-                                .map(jobVertexToStartNodeMap::get)
-                                .map(jobVerticesCache::get)
-                                .forEach(vertexGroup::add);
+        chainedStreamNodesMap.forEach(
+                (startNodeId, chainedStreamNodes) -> {
+                    Set<StreamNode> forwardConsumers =
+                            transitiveOutEdgesMap.get(startNodeId).stream()
+                                    .filter(
+                                            edge -> {
+                                                StreamPartitioner<?> partitioner =
+                                                        edge.getPartitioner();
+                                                if (partitioner
+                                                                instanceof
+                                                                ForwardForConsecutiveHashPartitioner
+                                                        || partitioner
+                                                                instanceof
+                                                                ForwardForUnspecifiedPartitioner) {
+                                                    return chainableOutputs.contains(edge);
+                                                }
+                                                return partitioner instanceof ForwardPartitioner;
+                                            })
+                                    .map(StreamEdge::getTargetId)
+                                    .map(streamGraph::getStreamNode)
+                                    .collect(Collectors.toSet());
+                    for (StreamNode forwardConsumer : forwardConsumers) {
+                        forwardProducersByStartNode
+                                .computeIfAbsent(forwardConsumer, ignored -> new HashSet<>())
+                                .add(streamGraph.getStreamNode(startNodeId));
                     }
-                    forwardGroupsByJobVertexIdCache.put(
-                            jobVertex.getID(), new ForwardGroup(vertexGroup));
                 });
 
-        jobVertices.forEach(
-                (startNodeId, jobVertex) -> {
-                    ForwardGroup forwardGroup =
-                            forwardGroupsByJobVertexIdCache.get(jobVertex.getID());
+        final Map<Integer, StreamNodeForwardGroup> forwardGroupsByStartNodeId =
+                StreamNodeForwardGroup.computeForwardGroup(
+                        chainedStreamNodesMap.keySet(),
+                        startNode ->
+                                forwardProducersByStartNode.getOrDefault(
+                                        startNode, Collections.emptySet()),
+                        streamGraph);
+
+        this.forwardGroupsByStartNodeIdCache.putAll(forwardGroupsByStartNodeId);
+
+        chainedStreamNodesMap.forEach(
+                (startNodeId, chainedStreamNodes) -> {
+                    StreamNodeForwardGroup streamNodeForwardGroup =
+                            forwardGroupsByStartNodeId.get(startNodeId);
                     // set parallelism for vertices in forward group
-                    if (forwardGroup != null && forwardGroup.isParallelismDecided()) {
-                        jobVertex.setParallelism(forwardGroup.getParallelism());
-                        jobVertex.setParallelismConfigured(true);
-                        chainInfos
-                                .get(startNodeId)
-                                .getAllChainedNodes()
-                                .forEach(
-                                        streamNode ->
-                                                streamNode.setParallelism(
-                                                        forwardGroup.getParallelism(), true));
+                    if (streamNodeForwardGroup != null
+                            && streamNodeForwardGroup.isParallelismDecided()) {
+                        chainedStreamNodes.forEach(
+                                streamNode ->
+                                        streamNode.setParallelism(
+                                                streamNodeForwardGroup.getParallelism(), true));
                     }
-
-                    // set max parallelism for vertices in forward group
-                    if (forwardGroup != null && forwardGroup.isMaxParallelismDecided()) {
-                        jobVertex.setMaxParallelism(forwardGroup.getMaxParallelism());
-                        chainInfos
-                                .get(startNodeId)
-                                .getAllChainedNodes()
-                                .forEach(
-                                        streamNode ->
-                                                streamNode.setMaxParallelism(
-                                                        forwardGroup.getMaxParallelism()));
+                    if (streamNodeForwardGroup != null
+                            && streamNodeForwardGroup.isMaxParallelismDecided()) {
+                        chainedStreamNodes.forEach(
+                                streamNode ->
+                                        streamNode.setParallelism(
+                                                streamNodeForwardGroup.getMaxParallelism()));
                     }
                 });
     }
@@ -854,5 +927,121 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
     public enum GenerateMode {
         LAZILY,
         EAGERLY
+    }
+
+    private static class StreamNodeForwardGroup {
+
+        private int parallelism = ExecutionConfig.PARALLELISM_DEFAULT;
+
+        private int maxParallelism = JobVertex.MAX_PARALLELISM_DEFAULT;
+
+        private final Set<Integer> startNodeIds = new HashSet<>();
+
+        public StreamNodeForwardGroup(final Set<StreamNode> startNodes) {
+            checkNotNull(startNodes);
+
+            Set<Integer> configuredParallelisms =
+                    startNodes.stream()
+                            .filter(
+                                    startNode -> {
+                                        startNodeIds.add(startNode.getId());
+                                        return startNode.getParallelism() > 0;
+                                    })
+                            .map(StreamNode::getParallelism)
+                            .collect(Collectors.toSet());
+
+            checkState(configuredParallelisms.size() <= 1);
+
+            if (configuredParallelisms.size() == 1) {
+                this.parallelism = configuredParallelisms.iterator().next();
+            }
+
+            Set<Integer> configuredMaxParallelisms =
+                    startNodes.stream()
+                            .map(StreamNode::getMaxParallelism)
+                            .filter(val -> val > 0)
+                            .collect(Collectors.toSet());
+
+            if (!configuredMaxParallelisms.isEmpty()) {
+                this.maxParallelism = Collections.min(configuredMaxParallelisms);
+                checkState(
+                        parallelism == ExecutionConfig.PARALLELISM_DEFAULT
+                                || maxParallelism >= parallelism,
+                        "There is a start node in the forward group whose maximum parallelism is smaller than the group's parallelism");
+            }
+        }
+
+        public void setParallelism(int parallelism) {
+            checkState(this.parallelism == ExecutionConfig.PARALLELISM_DEFAULT);
+            this.parallelism = parallelism;
+        }
+
+        public boolean isParallelismDecided() {
+            return parallelism > 0;
+        }
+
+        public int getParallelism() {
+            checkState(isParallelismDecided());
+            return parallelism;
+        }
+
+        public boolean isMaxParallelismDecided() {
+            return maxParallelism > 0;
+        }
+
+        public int getMaxParallelism() {
+            checkState(isMaxParallelismDecided());
+            return maxParallelism;
+        }
+
+        public int size() {
+            return startNodeIds.size();
+        }
+
+        public Set<Integer> getStartNodeIds() {
+            return startNodeIds;
+        }
+
+        public static Map<Integer, StreamNodeForwardGroup> computeForwardGroup(
+                final Set<Integer> topologicallySortedStartNodeIds,
+                final Function<StreamNode, Set<StreamNode>> forwardProducersRetriever,
+                StreamGraph streamGraph) {
+            final Map<StreamNode, Set<StreamNode>> nodeToGroup = new IdentityHashMap<>();
+            for (Integer startNodeId : topologicallySortedStartNodeIds) {
+                StreamNode currentNode = streamGraph.getStreamNode(startNodeId);
+                Set<StreamNode> currentGroup = new HashSet<>();
+                currentGroup.add(currentNode);
+                nodeToGroup.put(currentNode, currentGroup);
+                for (StreamNode producerNode : forwardProducersRetriever.apply(currentNode)) {
+                    final Set<StreamNode> producerGroup = nodeToGroup.get(producerNode);
+                    if (producerGroup == null) {
+                        throw new IllegalStateException(
+                                "Producer task "
+                                        + producerNode.getId()
+                                        + " forward group is null"
+                                        + " while calculating forward group for the consumer task "
+                                        + currentNode.getId()
+                                        + ". This should be a forward group building bug.");
+                    }
+                    if (currentGroup != producerGroup) {
+                        currentGroup =
+                                VertexGroupComputeUtil.mergeVertexGroups(
+                                        currentGroup, producerGroup, nodeToGroup);
+                    }
+                }
+            }
+            final Map<Integer, StreamNodeForwardGroup> result = new HashMap<>();
+            for (Set<StreamNode> nodeGroup :
+                    VertexGroupComputeUtil.uniqueVertexGroups(nodeToGroup)) {
+                if (nodeGroup.size() > 1) {
+                    StreamNodeForwardGroup streamNodeForwardGroup =
+                            new StreamNodeForwardGroup(nodeGroup);
+                    for (Integer startNodeId : streamNodeForwardGroup.getStartNodeIds()) {
+                        result.put(startNodeId, streamNodeForwardGroup);
+                    }
+                }
+            }
+            return result;
+        }
     }
 }
