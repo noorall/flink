@@ -953,6 +953,19 @@ public class JobMaster extends FencedRpcEndpoint<JobMasterId>
     }
 
     @Override
+    public CompletableFuture<CoordinationResponse> deliverCoordinationRequestToCoordinator(
+            int streamNodeId,
+            SerializedValue<CoordinationRequest> serializedRequest,
+            Time timeout) {
+        try {
+            final CoordinationRequest request = serializedRequest.deserializeValue(userCodeLoader);
+            return schedulerNG.deliverCoordinationRequestToCoordinator(streamNodeId, request);
+        } catch (Exception e) {
+            return FutureUtils.completedExceptionally(e);
+        }
+    }
+
+    @Override
     public CompletableFuture<?> stopTrackingAndReleasePartitions(
             Collection<ResultPartitionID> partitionIds) {
         CompletableFuture<?> future = new CompletableFuture<>();

@@ -238,6 +238,9 @@ public interface ClusterClient<T> extends AutoCloseable {
     CompletableFuture<CoordinationResponse> sendCoordinationRequest(
             JobID jobId, OperatorID operatorId, CoordinationRequest request);
 
+    CompletableFuture<CoordinationResponse> sendCoordinationRequest(
+            JobID jobId, int streamNodeId, CoordinationRequest request);
+
     /**
      * Return a set of ids of the completed cluster datasets.
      *

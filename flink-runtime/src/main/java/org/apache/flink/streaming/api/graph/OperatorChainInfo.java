@@ -100,9 +100,10 @@ public class OperatorChainInfo {
 
         operatorHashes.add(new Tuple2<>(primaryHashBytes, legacyHashes.get(currentNodeId)));
 
-        streamNode
-                .getCoordinatorProvider(operatorName, new OperatorID(hashes.get(currentNodeId)))
-                .map(coordinatorProviders::add);
+        OperatorID operatorId = new OperatorID(hashes.get(currentNodeId));
+        streamNode.setOperatorId(operatorId);
+
+        streamNode.getCoordinatorProvider(operatorName, operatorId).map(coordinatorProviders::add);
 
         return new OperatorID(primaryHashBytes);
     }

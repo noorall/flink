@@ -37,4 +37,7 @@ public interface CoordinationRequestGateway {
      */
     CompletableFuture<CoordinationResponse> sendCoordinationRequest(
             OperatorID operatorId, CoordinationRequest request);
+
+    CompletableFuture<CoordinationResponse> sendCoordinationRequest(
+            int streamNodeId, CoordinationRequest request);
 }

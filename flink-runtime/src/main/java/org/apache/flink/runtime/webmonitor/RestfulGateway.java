@@ -285,6 +285,14 @@ public interface RestfulGateway extends RpcGateway {
         throw new UnsupportedOperationException();
     }
 
+    default CompletableFuture<CoordinationResponse> deliverCoordinationRequestToCoordinator(
+            JobID jobId,
+            int streamNodeId,
+            SerializedValue<CoordinationRequest> serializedRequest,
+            @RpcTimeout Time timeout) {
+        throw new UnsupportedOperationException();
+    }
+
     /** The client reports the heartbeat to the dispatcher for aliveness. */
     default CompletableFuture<Void> reportJobClientHeartbeat(
             JobID jobId, long expiredTimestamp, Time timeout) {

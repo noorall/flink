@@ -28,10 +28,11 @@ import org.apache.flink.runtime.rest.handler.HandlerRequest;
 import org.apache.flink.runtime.rest.handler.RestHandlerException;
 import org.apache.flink.runtime.rest.messages.JobIDPathParameter;
 import org.apache.flink.runtime.rest.messages.MessageHeaders;
-import org.apache.flink.runtime.rest.messages.OperatorIDPathParameter;
 import org.apache.flink.runtime.rest.messages.job.coordination.ClientCoordinationMessageParameters;
 import org.apache.flink.runtime.rest.messages.job.coordination.ClientCoordinationRequestBody;
 import org.apache.flink.runtime.rest.messages.job.coordination.ClientCoordinationResponseBody;
+import org.apache.flink.runtime.rest.messages.job.coordination.OperatorIdFilterQueryParameter;
+import org.apache.flink.runtime.rest.messages.job.coordination.StreamNodeIdFilterQueryParameter;
 import org.apache.flink.runtime.webmonitor.RestfulGateway;
 import org.apache.flink.runtime.webmonitor.retriever.GatewayRetriever;
 import org.apache.flink.util.SerializedValue;
@@ -41,6 +42,7 @@ import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpResponseSt
 import javax.annotation.Nonnull;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -74,24 +76,61 @@ public class ClientCoordinationHandler
             @Nonnull RestfulGateway gateway)
             throws RestHandlerException {
         JobID jobId = request.getPathParameter(JobIDPathParameter.class);
-        OperatorID operatorId = request.getPathParameter(OperatorIDPathParameter.class);
+        List<OperatorID> operatorIds =
+                request.getQueryParameter(OperatorIdFilterQueryParameter.class);
+        List<Integer> streamNodeIds =
+                request.getQueryParameter(StreamNodeIdFilterQueryParameter.class);
+
+        if (operatorIds.size() > 1) {
+            throw new RestHandlerException(
+                    String.format(
+                            "The number of query operator id was %s, while the expected is a single id.",
+                            operatorIds.size()),
+                    HttpResponseStatus.BAD_REQUEST);
+        }
+
         SerializedValue<CoordinationRequest> serializedRequest =
                 request.getRequestBody().getSerializedCoordinationRequest();
-        CompletableFuture<CoordinationResponse> responseFuture =
-                gateway.deliverCoordinationRequestToCoordinator(
-                        jobId, operatorId, serializedRequest, timeout);
-        return responseFuture.thenApply(
-                coordinationResponse -> {
-                    try {
-                        return new ClientCoordinationResponseBody(
-                                new SerializedValue<>(coordinationResponse));
-                    } catch (IOException e) {
-                        throw new CompletionException(
-                                new RestHandlerException(
-                                        "Failed to serialize coordination response",
-                                        HttpResponseStatus.INTERNAL_SERVER_ERROR,
-                                        e));
-                    }
-                });
+        if (!operatorIds.isEmpty()) {
+            CompletableFuture<CoordinationResponse> responseFuture =
+                    gateway.deliverCoordinationRequestToCoordinator(
+                            jobId, operatorIds.get(0), serializedRequest, timeout);
+            return responseFuture.thenApply(
+                    coordinationResponse -> {
+                        try {
+                            return new ClientCoordinationResponseBody(
+                                    new SerializedValue<>(coordinationResponse));
+                        } catch (IOException e) {
+                            throw new CompletionException(
+                                    new RestHandlerException(
+                                            "Failed to serialize coordination response",
+                                            HttpResponseStatus.INTERNAL_SERVER_ERROR,
+                                            e));
+                        }
+                    });
+        } else if (streamNodeIds.size() != 1) {
+            throw new RestHandlerException(
+                    String.format(
+                            "The number of query stream node id was %s, while the expected count is one.",
+                            streamNodeIds.size()),
+                    HttpResponseStatus.BAD_REQUEST);
+        } else {
+            CompletableFuture<CoordinationResponse> responseFuture =
+                    gateway.deliverCoordinationRequestToCoordinator(
+                            jobId, streamNodeIds.get(0), serializedRequest, timeout);
+            return responseFuture.thenApply(
+                    coordinationResponse -> {
+                        try {
+                            return new ClientCoordinationResponseBody(
+                                    new SerializedValue<>(coordinationResponse));
+                        } catch (IOException e) {
+                            throw new CompletionException(
+                                    new RestHandlerException(
+                                            "Failed to serialize coordination response",
+                                            HttpResponseStatus.INTERNAL_SERVER_ERROR,
+                                            e));
+                        }
+                    });
+        }
     }
 }

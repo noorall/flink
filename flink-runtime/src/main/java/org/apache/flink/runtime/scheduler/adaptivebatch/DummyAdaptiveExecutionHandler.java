@@ -19,7 +19,12 @@
 package org.apache.flink.runtime.scheduler.adaptivebatch;
 
 import org.apache.flink.runtime.jobgraph.JobGraph;
+import org.apache.flink.runtime.jobgraph.OperatorID;
 import org.apache.flink.runtime.jobmaster.event.JobEvent;
+
+import javax.annotation.Nullable;
+
+import java.util.function.Function;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
@@ -27,9 +32,13 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
 public class DummyAdaptiveExecutionHandler implements AdaptiveExecutionHandler {
 
     private final JobGraph jobGraph;
+    private @Nullable Function<Integer, OperatorID> findOperatorIdByStreamNodeId;
 
-    public DummyAdaptiveExecutionHandler(JobGraph jobGraph) {
+    public DummyAdaptiveExecutionHandler(
+            JobGraph jobGraph,
+            @Nullable Function<Integer, OperatorID> findOperatorIdByStreamNodeId) {
         this.jobGraph = checkNotNull(jobGraph);
+        this.findOperatorIdByStreamNodeId = findOperatorIdByStreamNodeId;
     }
 
     @Override
@@ -54,4 +63,11 @@ public class DummyAdaptiveExecutionHandler implements AdaptiveExecutionHandler {
 
     @Override
     public void initializeJobGraph() {}
+
+    @Override
+    public OperatorID findOperatorIdByStreamNodeId(int streamNodeId) {
+        checkNotNull(findOperatorIdByStreamNodeId);
+
+        return findOperatorIdByStreamNodeId.apply(streamNodeId);
+    }
 }

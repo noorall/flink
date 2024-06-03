@@ -295,6 +295,13 @@ public interface JobMasterGateway
             SerializedValue<CoordinationRequest> serializedRequest,
             @RpcTimeout Time timeout);
 
+    default CompletableFuture<CoordinationResponse> deliverCoordinationRequestToCoordinator(
+            int streamNodeId,
+            SerializedValue<CoordinationRequest> serializedRequest,
+            @RpcTimeout Time timeout) {
+        throw new UnsupportedOperationException();
+    }
+
     /**
      * Notifies the {@link org.apache.flink.runtime.io.network.partition.JobMasterPartitionTracker}
      * to stop tracking the target result partitions and release the locally occupied resources on

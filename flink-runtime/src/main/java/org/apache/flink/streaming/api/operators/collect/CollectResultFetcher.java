@@ -53,6 +53,7 @@ public class CollectResultFetcher<T> {
     private final AbstractCollectResultBuffer<T> buffer;
 
     private final CompletableFuture<OperatorID> operatorIdFuture;
+    private final CompletableFuture<Integer> streamNodeIdFuture;
     private final String accumulatorName;
     private final int retryMillis;
     private final long resultFetchTimeout;
@@ -66,20 +67,29 @@ public class CollectResultFetcher<T> {
     public CollectResultFetcher(
             AbstractCollectResultBuffer<T> buffer,
             CompletableFuture<OperatorID> operatorIdFuture,
+            CompletableFuture<Integer> streamNodeIdFuture,
             String accumulatorName,
             long resultFetchTimeout) {
-        this(buffer, operatorIdFuture, accumulatorName, DEFAULT_RETRY_MILLIS, resultFetchTimeout);
+        this(
+                buffer,
+                operatorIdFuture,
+                streamNodeIdFuture,
+                accumulatorName,
+                DEFAULT_RETRY_MILLIS,
+                resultFetchTimeout);
     }
 
     CollectResultFetcher(
             AbstractCollectResultBuffer<T> buffer,
             CompletableFuture<OperatorID> operatorIdFuture,
+            CompletableFuture<Integer> streamNodeIdFuture,
             String accumulatorName,
             int retryMillis,
             long resultFetchTimeout) {
         this.buffer = buffer;
 
         this.operatorIdFuture = operatorIdFuture;
+        this.streamNodeIdFuture = streamNodeIdFuture;
         this.accumulatorName = accumulatorName;
         this.retryMillis = retryMillis;
         this.resultFetchTimeout = resultFetchTimeout;
@@ -166,11 +176,17 @@ public class CollectResultFetcher<T> {
         checkJobClientConfigured();
 
         OperatorID operatorId = operatorIdFuture.getNow(null);
-        Preconditions.checkNotNull(operatorId, "Unknown operator ID. This is a bug.");
-
         CollectCoordinationRequest request = new CollectCoordinationRequest(version, offset);
-        return (CollectCoordinationResponse)
-                gateway.sendCoordinationRequest(operatorId, request).get();
+        if (operatorId == null) {
+            Integer streamNodeId = streamNodeIdFuture.getNow(null);
+            Preconditions.checkNotNull(
+                    streamNodeId, "Unknown operator ID and stream node id. This is a bug.");
+            return (CollectCoordinationResponse)
+                    gateway.sendCoordinationRequest(streamNodeId, request).get();
+        } else {
+            return (CollectCoordinationResponse)
+                    gateway.sendCoordinationRequest(operatorId, request).get();
+        }
     }
 
     private Tuple2<Long, CollectCoordinationResponse> getAccumulatorResults() throws IOException {

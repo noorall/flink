@@ -34,7 +34,7 @@ public class ClientCoordinationHeaders
                 ClientCoordinationResponseBody,
                 ClientCoordinationMessageParameters> {
 
-    public static final String URL = "/jobs/:jobid/coordinators/:operatorid";
+    public static final String URL = "/jobs/:jobid/coordinators/";
 
     private static final ClientCoordinationHeaders INSTANCE = new ClientCoordinationHeaders();
 

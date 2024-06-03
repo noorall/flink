@@ -982,6 +982,14 @@ public class MiniCluster implements AutoCloseableAsync {
                                 jobId, operatorId, serializedRequest, rpcTimeout));
     }
 
+    public CompletableFuture<CoordinationResponse> deliverCoordinationRequestToCoordinator(
+            JobID jobId, int streamNodeId, SerializedValue<CoordinationRequest> serializedRequest) {
+        return runDispatcherCommand(
+                dispatcherGateway ->
+                        dispatcherGateway.deliverCoordinationRequestToCoordinator(
+                                jobId, streamNodeId, serializedRequest, rpcTimeout));
+    }
+
     public CompletableFuture<ResourceOverview> getResourceOverview() {
         return runResourceManagerCommand(
                 resourceManagerGateway ->

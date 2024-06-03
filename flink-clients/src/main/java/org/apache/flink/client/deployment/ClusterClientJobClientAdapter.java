@@ -143,6 +143,15 @@ public class ClusterClientJobClientAdapter<ClusterID>
     }
 
     @Override
+    public CompletableFuture<CoordinationResponse> sendCoordinationRequest(
+            int streamNodeId, CoordinationRequest request) {
+        return bridgeClientRequest(
+                clusterClientProvider,
+                clusterClient ->
+                        clusterClient.sendCoordinationRequest(jobID, streamNodeId, request));
+    }
+
+    @Override
     public void reportHeartbeat(long expiredTimestamp) {
         bridgeClientRequest(
                 clusterClientProvider,

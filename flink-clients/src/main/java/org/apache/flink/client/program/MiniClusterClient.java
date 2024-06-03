@@ -214,6 +214,19 @@ public class MiniClusterClient implements ClusterClient<MiniClusterClient.MiniCl
     }
 
     @Override
+    public CompletableFuture<CoordinationResponse> sendCoordinationRequest(
+            JobID jobId, int streamNodeId, CoordinationRequest request) {
+        try {
+            SerializedValue<CoordinationRequest> serializedRequest = new SerializedValue<>(request);
+            return miniCluster.deliverCoordinationRequestToCoordinator(
+                    jobId, streamNodeId, serializedRequest);
+        } catch (IOException e) {
+            LOG.error("Error while sending coordination request", e);
+            return FutureUtils.completedExceptionally(e);
+        }
+    }
+
+    @Override
     public CompletableFuture<Set<AbstractID>> listCompletedClusterDatasetIds() {
         return miniCluster.listCompletedClusterDatasetIds();
     }

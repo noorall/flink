@@ -82,6 +82,10 @@ public class CollectSinkOperatorFactory<IN> extends SimpleUdfStreamOperatorFacto
         return new CollectSinkOperatorCoordinator.Provider(operatorID, socketTimeoutMillis);
     }
 
+    public void recordStreamNodeId(int streamNodeId) {
+        operator.getStreamNodeIdFuture().complete(streamNodeId);
+    }
+
     // these configs are rarely used, so we're not exposing them to the user by docs
     public static final ConfigOption<MemorySize> MAX_BATCH_SIZE =
             ConfigOptions.key("collect-sink.batch-size.max")

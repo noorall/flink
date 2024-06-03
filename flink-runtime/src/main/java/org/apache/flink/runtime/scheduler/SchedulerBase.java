@@ -1108,6 +1108,12 @@ public abstract class SchedulerBase implements SchedulerNG, CheckpointScheduling
     public CompletableFuture<CoordinationResponse> deliverCoordinationRequestToCoordinator(
             OperatorID operator, CoordinationRequest request) throws FlinkException {
 
+        return deliverCoordinationRequestToCoordinatorInternal(operator, request);
+    }
+
+    protected CompletableFuture<CoordinationResponse>
+            deliverCoordinationRequestToCoordinatorInternal(
+                    OperatorID operator, CoordinationRequest request) throws FlinkException {
         return operatorCoordinatorHandler.deliverCoordinationRequestToCoordinator(
                 operator, request);
     }

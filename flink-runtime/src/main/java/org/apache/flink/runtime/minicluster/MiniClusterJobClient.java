@@ -159,6 +159,18 @@ public final class MiniClusterJobClient implements JobClient, CoordinationReques
     }
 
     @Override
+    public CompletableFuture<CoordinationResponse> sendCoordinationRequest(
+            int streamNodeId, CoordinationRequest request) {
+        try {
+            SerializedValue<CoordinationRequest> serializedRequest = new SerializedValue<>(request);
+            return miniCluster.deliverCoordinationRequestToCoordinator(
+                    jobID, streamNodeId, serializedRequest);
+        } catch (IOException e) {
+            return FutureUtils.completedExceptionally(e);
+        }
+    }
+
+    @Override
     public void reportHeartbeat(long expiredTimestamp) {
         miniCluster.reportHeartbeat(jobID, expiredTimestamp);
     }

@@ -1104,6 +1104,19 @@ public abstract class Dispatcher extends FencedRpcEndpoint<DispatcherId>
     }
 
     @Override
+    public CompletableFuture<CoordinationResponse> deliverCoordinationRequestToCoordinator(
+            JobID jobId,
+            int streamNodeId,
+            SerializedValue<CoordinationRequest> serializedRequest,
+            Time timeout) {
+        return performOperationOnJobMasterGateway(
+                jobId,
+                gateway ->
+                        gateway.deliverCoordinationRequestToCoordinator(
+                                streamNodeId, serializedRequest, timeout));
+    }
+
+    @Override
     public CompletableFuture<Void> reportJobClientHeartbeat(
             JobID jobId, long expiredTimestamp, Time timeout) {
         if (!getJobManagerRunner(jobId).isPresent()) {

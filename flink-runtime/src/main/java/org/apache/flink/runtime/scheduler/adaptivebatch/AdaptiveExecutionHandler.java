@@ -19,6 +19,7 @@
 package org.apache.flink.runtime.scheduler.adaptivebatch;
 
 import org.apache.flink.runtime.jobgraph.JobGraph;
+import org.apache.flink.runtime.jobgraph.OperatorID;
 import org.apache.flink.runtime.jobmaster.event.JobEvent;
 
 /**
@@ -44,4 +45,6 @@ public interface AdaptiveExecutionHandler {
     void initializeJobGraph() throws Exception;
 
     void registerJobGraphUpdateListener(JobGraphUpdateListener listener);
+
+    OperatorID findOperatorIdByStreamNodeId(int streamNodeId);
 }

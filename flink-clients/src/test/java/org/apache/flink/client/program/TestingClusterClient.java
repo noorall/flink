@@ -219,5 +219,11 @@ public class TestingClusterClient<T> implements ClusterClient<T> {
     }
 
     @Override
+    public CompletableFuture<CoordinationResponse> sendCoordinationRequest(
+            JobID jobId, int streamNodeId, CoordinationRequest request) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
     public void close() {}
 }

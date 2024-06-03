@@ -712,7 +712,38 @@ public class RestClusterClient<T> implements ClusterClient<T> {
         ClientCoordinationHeaders headers = ClientCoordinationHeaders.getInstance();
         ClientCoordinationMessageParameters params = new ClientCoordinationMessageParameters();
         params.jobPathParameter.resolve(jobId);
-        params.operatorPathParameter.resolve(operatorId);
+        params.operatorIdFilterQueryParameter.resolve(Collections.singletonList(operatorId));
+
+        SerializedValue<CoordinationRequest> serializedRequest;
+        try {
+            serializedRequest = new SerializedValue<>(request);
+        } catch (IOException e) {
+            return FutureUtils.completedExceptionally(e);
+        }
+
+        ClientCoordinationRequestBody requestBody =
+                new ClientCoordinationRequestBody(serializedRequest);
+        return sendRequest(headers, params, requestBody)
+                .thenApply(
+                        responseBody -> {
+                            try {
+                                return responseBody
+                                        .getSerializedCoordinationResponse()
+                                        .deserializeValue(getClass().getClassLoader());
+                            } catch (IOException | ClassNotFoundException e) {
+                                throw new CompletionException(
+                                        "Failed to deserialize coordination response", e);
+                            }
+                        });
+    }
+
+    @Override
+    public CompletableFuture<CoordinationResponse> sendCoordinationRequest(
+            JobID jobId, int streamNodeId, CoordinationRequest request) {
+        ClientCoordinationHeaders headers = ClientCoordinationHeaders.getInstance();
+        ClientCoordinationMessageParameters params = new ClientCoordinationMessageParameters();
+        params.jobPathParameter.resolve(jobId);
+        params.streamNodeIdFilterQueryParameter.resolve(Collections.singletonList(streamNodeId));
 
         SerializedValue<CoordinationRequest> serializedRequest;
         try {

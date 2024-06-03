@@ -136,6 +136,7 @@ public final class CollectDynamicSink implements DynamicTableSink {
                 iterator =
                         new CollectResultIterator<>(
                                 operator.getOperatorIdFuture(),
+                                operator.getStreamNodeIdFuture(),
                                 externalSerializer,
                                 accumulatorName,
                                 checkpointConfig,

@@ -37,12 +37,14 @@ public class CollectSinkOperator<IN> extends StreamSink<IN> implements OperatorE
     // we need operator id to identify the coordinator of this operator,
     // this is only used for in clients so no need to serialize
     private transient CompletableFuture<OperatorID> operatorIdFuture;
+    private transient CompletableFuture<Integer> streamNodeIdFuture;
 
     public CollectSinkOperator(
             TypeSerializer<IN> serializer, long maxBytesPerBatch, String accumulatorName) {
         super(new CollectSinkFunction<>(serializer, maxBytesPerBatch, accumulatorName));
         this.sinkFunction = (CollectSinkFunction<IN>) getUserFunction();
         this.operatorIdFuture = new CompletableFuture<>();
+        this.streamNodeIdFuture = new CompletableFuture<>();
     }
 
     @Override
@@ -67,6 +69,14 @@ public class CollectSinkOperator<IN> extends StreamSink<IN> implements OperatorE
         }
 
         return operatorIdFuture;
+    }
+
+    public CompletableFuture<Integer> getStreamNodeIdFuture() {
+        if (streamNodeIdFuture == null) {
+            streamNodeIdFuture = new CompletableFuture<>();
+        }
+
+        return streamNodeIdFuture;
     }
 
     void setOperatorEventGateway(OperatorEventGateway operatorEventGateway) {

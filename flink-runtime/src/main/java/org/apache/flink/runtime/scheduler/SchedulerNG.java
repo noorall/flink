@@ -199,6 +199,11 @@ public interface SchedulerNG extends GlobalFailureHandler, AutoCloseableAsync {
     CompletableFuture<CoordinationResponse> deliverCoordinationRequestToCoordinator(
             OperatorID operator, CoordinationRequest request) throws FlinkException;
 
+    default CompletableFuture<CoordinationResponse> deliverCoordinationRequestToCoordinator(
+            int streamNodeId, CoordinationRequest request) throws FlinkException {
+        throw new UnsupportedOperationException();
+    }
+
     /**
      * Notifies that the task has reached the end of data.
      *

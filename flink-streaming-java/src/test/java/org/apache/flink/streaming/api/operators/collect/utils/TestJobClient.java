@@ -126,6 +126,12 @@ public class TestJobClient implements JobClient, CoordinationRequestGateway {
         return CompletableFuture.completedFuture(response);
     }
 
+    @Override
+    public CompletableFuture<CoordinationResponse> sendCoordinationRequest(
+            int streamNodeId, CoordinationRequest request) {
+        throw new UnsupportedOperationException();
+    }
+
     /** Interface to provide job related info for {@link TestJobClient}. */
     public interface JobInfoProvider {
 

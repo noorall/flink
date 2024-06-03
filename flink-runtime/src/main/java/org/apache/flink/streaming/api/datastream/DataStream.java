@@ -1447,6 +1447,7 @@ public class DataStream<T> {
         CollectResultIterator<T> iterator =
                 new CollectResultIterator<>(
                         operator.getOperatorIdFuture(),
+                        operator.getStreamNodeIdFuture(),
                         serializer,
                         accumulatorName,
                         env.getCheckpointConfig(),

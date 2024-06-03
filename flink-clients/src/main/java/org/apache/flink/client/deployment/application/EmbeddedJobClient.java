@@ -162,4 +162,16 @@ public class EmbeddedJobClient implements JobClient, CoordinationRequestGateway 
             return FutureUtils.completedExceptionally(e);
         }
     }
+
+    @Override
+    public CompletableFuture<CoordinationResponse> sendCoordinationRequest(
+            int streamNodeId, CoordinationRequest request) {
+        try {
+            SerializedValue<CoordinationRequest> serializedRequest = new SerializedValue<>(request);
+            return dispatcherGateway.deliverCoordinationRequestToCoordinator(
+                    jobId, streamNodeId, serializedRequest, timeout);
+        } catch (IOException e) {
+            return FutureUtils.completedExceptionally(e);
+        }
+    }
 }

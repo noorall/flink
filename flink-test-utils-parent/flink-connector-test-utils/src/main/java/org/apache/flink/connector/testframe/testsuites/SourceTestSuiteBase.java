@@ -68,6 +68,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadLocalRandom;
@@ -795,6 +796,7 @@ public abstract class SourceTestSuiteBase<T> {
             CollectResultIterator<T> iterator =
                     new CollectResultIterator<>(
                             operator.getOperatorIdFuture(),
+                            new CompletableFuture<>(),
                             serializer,
                             accumulatorName,
                             checkpointConfig,

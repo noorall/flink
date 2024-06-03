@@ -53,6 +53,7 @@ public class CollectResultIterator<T> implements CloseableIterator<T> {
     private T bufferedResult;
 
     private CompletableFuture<OperatorID> operatorIdFuture;
+    private CompletableFuture<Integer> streamNodeIdFuture;
     private TypeSerializer<T> serializer;
     private String accumulatorName;
     private CheckpointConfig checkpointConfig;
@@ -60,11 +61,13 @@ public class CollectResultIterator<T> implements CloseableIterator<T> {
 
     public CollectResultIterator(
             CompletableFuture<OperatorID> operatorIdFuture,
+            CompletableFuture<Integer> streamNodeIdFuture,
             TypeSerializer<T> serializer,
             String accumulatorName,
             CheckpointConfig checkpointConfig,
             long resultFetchTimeout) {
         this.operatorIdFuture = operatorIdFuture;
+        this.streamNodeIdFuture = streamNodeIdFuture;
         this.serializer = serializer;
         this.accumulatorName = accumulatorName;
         this.checkpointConfig = checkpointConfig;
@@ -72,7 +75,11 @@ public class CollectResultIterator<T> implements CloseableIterator<T> {
         AbstractCollectResultBuffer<T> buffer = createBuffer(serializer, checkpointConfig);
         this.fetcher =
                 new CollectResultFetcher<>(
-                        buffer, operatorIdFuture, accumulatorName, resultFetchTimeout);
+                        buffer,
+                        operatorIdFuture,
+                        streamNodeIdFuture,
+                        accumulatorName,
+                        resultFetchTimeout);
         this.bufferedResult = null;
     }
 
@@ -86,6 +93,7 @@ public class CollectResultIterator<T> implements CloseableIterator<T> {
                 new CollectResultFetcher<>(
                         buffer,
                         operatorIdFuture,
+                        new CompletableFuture<>(),
                         accumulatorName,
                         retryMillis,
                         RpcOptions.ASK_TIMEOUT_DURATION.defaultValue().toMillis());
@@ -147,6 +155,7 @@ public class CollectResultIterator<T> implements CloseableIterator<T> {
     public CollectResultIterator<T> copy() {
         return new CollectResultIterator<>(
                 this.operatorIdFuture,
+                this.streamNodeIdFuture,
                 this.serializer,
                 this.accumulatorName,
                 this.checkpointConfig,

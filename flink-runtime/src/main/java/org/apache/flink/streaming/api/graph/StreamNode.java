@@ -34,6 +34,7 @@ import org.apache.flink.streaming.api.operators.CoordinatedOperatorFactory;
 import org.apache.flink.streaming.api.operators.SimpleOperatorFactory;
 import org.apache.flink.streaming.api.operators.StreamOperator;
 import org.apache.flink.streaming.api.operators.StreamOperatorFactory;
+import org.apache.flink.streaming.api.operators.collect.CollectSinkOperatorFactory;
 
 import javax.annotation.Nullable;
 
@@ -49,6 +50,7 @@ import java.util.Optional;
 import java.util.Set;
 
 import static org.apache.flink.util.Preconditions.checkArgument;
+import static org.apache.flink.util.Preconditions.checkNotNull;
 import static org.apache.flink.util.Preconditions.checkState;
 
 /** Class representing the operators in the streaming programs, with all their properties. */
@@ -72,6 +74,7 @@ public class StreamNode implements Serializable {
     private final Set<ManagedMemoryUseCase> managedMemorySlotScopeUseCases = new HashSet<>();
     private long bufferTimeout;
     private final String operatorName;
+    private OperatorID operatorId;
     private String operatorDescription;
     private @Nullable String slotSharingGroup;
     private @Nullable String coLocationGroup;
@@ -132,6 +135,8 @@ public class StreamNode implements Serializable {
         this.jobVertexClass = jobVertexClass;
         this.slotSharingGroup = slotSharingGroup;
         this.coLocationGroup = coLocationGroup;
+
+        recordIdToCollectSinkFactory();
     }
 
     public void addInEdge(StreamEdge inEdge) {
@@ -395,6 +400,14 @@ public class StreamNode implements Serializable {
         return inputRequirements;
     }
 
+    public OperatorID getOperatorId() {
+        return operatorId;
+    }
+
+    public void setOperatorId(OperatorID operatorId) {
+        this.operatorId = checkNotNull(operatorId);
+    }
+
     public Optional<OperatorCoordinator.Provider> getCoordinatorProvider(
             String operatorName, OperatorID operatorID) {
         if (operatorFactory != null && operatorFactory instanceof CoordinatedOperatorFactory) {
@@ -403,6 +416,12 @@ public class StreamNode implements Serializable {
                             .getCoordinatorProvider(operatorName, operatorID));
         } else {
             return Optional.empty();
+        }
+    }
+
+    private void recordIdToCollectSinkFactory() {
+        if (operatorFactory != null && operatorFactory instanceof CollectSinkOperatorFactory) {
+            ((CollectSinkOperatorFactory<?>) operatorFactory).recordStreamNodeId(id);
         }
     }
 

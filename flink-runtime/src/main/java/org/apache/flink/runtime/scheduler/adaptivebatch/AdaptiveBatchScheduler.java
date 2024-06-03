@@ -56,6 +56,7 @@ import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
 import org.apache.flink.runtime.jobgraph.JobEdge;
 import org.apache.flink.runtime.jobgraph.JobVertex;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
+import org.apache.flink.runtime.jobgraph.OperatorID;
 import org.apache.flink.runtime.jobgraph.forwardgroup.ForwardGroup;
 import org.apache.flink.runtime.jobgraph.forwardgroup.ForwardGroupComputeUtil;
 import org.apache.flink.runtime.jobgraph.jsonplan.JsonPlanGenerator;
@@ -64,6 +65,8 @@ import org.apache.flink.runtime.jobgraph.topology.DefaultLogicalTopology;
 import org.apache.flink.runtime.jobgraph.topology.DefaultLogicalVertex;
 import org.apache.flink.runtime.jobmaster.event.ExecutionJobVertexFinishedEvent;
 import org.apache.flink.runtime.metrics.groups.JobManagerJobMetricGroup;
+import org.apache.flink.runtime.operators.coordination.CoordinationRequest;
+import org.apache.flink.runtime.operators.coordination.CoordinationResponse;
 import org.apache.flink.runtime.scheduler.DefaultExecutionDeployer;
 import org.apache.flink.runtime.scheduler.DefaultScheduler;
 import org.apache.flink.runtime.scheduler.ExecutionGraphFactory;
@@ -76,6 +79,7 @@ import org.apache.flink.runtime.scheduler.strategy.ExecutionVertexID;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingStrategyFactory;
 import org.apache.flink.runtime.shuffle.ShuffleMaster;
 import org.apache.flink.runtime.source.coordinator.SourceCoordinator;
+import org.apache.flink.util.FlinkException;
 import org.apache.flink.util.concurrent.FutureUtils;
 import org.apache.flink.util.concurrent.ScheduledExecutor;
 
@@ -292,6 +296,16 @@ public class AdaptiveBatchScheduler extends DefaultScheduler implements JobGraph
                 }
             }
         }
+    }
+
+    @Override
+    public CompletableFuture<CoordinationResponse> deliverCoordinationRequestToCoordinator(
+            int streamNodeId, CoordinationRequest request) throws FlinkException {
+        OperatorID operatorId = adaptiveExecutionHandler.findOperatorIdByStreamNodeId(streamNodeId);
+        checkNotNull(operatorId);
+
+        return operatorCoordinatorHandler.deliverCoordinationRequestToCoordinator(
+                operatorId, request);
     }
 
     @Override

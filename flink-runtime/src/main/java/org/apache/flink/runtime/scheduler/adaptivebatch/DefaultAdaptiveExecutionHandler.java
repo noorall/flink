@@ -23,6 +23,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.jobgraph.JobVertex;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
+import org.apache.flink.runtime.jobgraph.OperatorID;
 import org.apache.flink.runtime.jobmaster.event.ExecutionJobVertexFinishedEvent;
 import org.apache.flink.runtime.jobmaster.event.JobEvent;
 import org.apache.flink.streaming.api.graph.AdaptiveJobGraphManager;
@@ -39,6 +40,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.Executor;
+import java.util.function.Function;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
@@ -56,17 +58,21 @@ public class DefaultAdaptiveExecutionHandler implements AdaptiveExecutionHandler
 
     private final AdaptiveJobGraphManager jobGraphManager;
 
+    private Function<Integer, OperatorID> findOperatorIdByStreamNodeId;
+
     public DefaultAdaptiveExecutionHandler(
             ClassLoader userClassloader,
             StreamGraph streamGraph,
             Executor serializationExecutor,
-            Configuration configuration) {
+            Configuration configuration,
+            Function<Integer, OperatorID> findOperatorIdByStreamNodeId) {
         this.jobGraphManager =
                 new AdaptiveJobGraphManager(
                         userClassloader,
                         streamGraph,
                         serializationExecutor,
                         AdaptiveJobGraphManager.GenerateMode.LAZILY);
+        this.findOperatorIdByStreamNodeId = checkNotNull(findOperatorIdByStreamNodeId);
         this.configuration = checkNotNull(configuration);
     }
 
@@ -191,5 +197,10 @@ public class DefaultAdaptiveExecutionHandler implements AdaptiveExecutionHandler
         if (!list.isEmpty()) {
             notifyJobGraphUpdated(list);
         }
+    }
+
+    @Override
+    public OperatorID findOperatorIdByStreamNodeId(int streamNodeId) {
+        return findOperatorIdByStreamNodeId.apply(streamNodeId);
     }
 }

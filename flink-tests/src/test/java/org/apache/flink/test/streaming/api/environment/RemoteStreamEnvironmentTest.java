@@ -303,5 +303,11 @@ public class RemoteStreamEnvironmentTest extends TestLogger {
                 JobID jobId, OperatorID operatorId, CoordinationRequest request) {
             return null;
         }
+
+        @Override
+        public CompletableFuture<CoordinationResponse> sendCoordinationRequest(
+                JobID jobId, int streamNodeId, CoordinationRequest request) {
+            return null;
+        }
     }
 }

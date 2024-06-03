@@ -44,7 +44,6 @@ import org.apache.flink.runtime.executiongraph.failover.RestartBackoffTimeStrate
 import org.apache.flink.runtime.executiongraph.failover.RestartBackoffTimeStrategyFactoryLoader;
 import org.apache.flink.runtime.io.network.partition.JobMasterPartitionTracker;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSet;
-import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.jobgraph.JobType;
 import org.apache.flink.runtime.jobgraph.JobVertex;
 import org.apache.flink.runtime.jobmaster.ExecutionDeploymentTracker;
@@ -269,19 +268,22 @@ public class AdaptiveBatchSchedulerFactory implements SchedulerNGFactory {
             handler =
                     new DefaultAdaptiveExecutionHandler(
                             userCodeLoader,
-                            logicalGraph.getStreamGraph(),
+                            streamGraph,
                             serializationExecutor,
-                            jobMasterConfiguration);
+                            jobMasterConfiguration,
+                            id -> streamGraph.getStreamNode(id).getOperatorId());
 
             log.info("Created a adaptive execution handler with stream graph.");
         } else {
-            JobGraph jobGraph =
-                    logicalGraph.isJobGraph()
-                            ? logicalGraph.getJobGraph()
-                            : logicalGraph
-                                    .getStreamGraph()
-                                    .getJobGraphAndAttachUserArtifacts(userCodeLoader);
-            handler = new DummyAdaptiveExecutionHandler(jobGraph);
+            if (logicalGraph.isJobGraph()) {
+                handler = new DummyAdaptiveExecutionHandler(logicalGraph.getJobGraph(), null);
+            } else {
+                StreamGraph streamGraph = logicalGraph.getStreamGraph();
+                handler =
+                        new DummyAdaptiveExecutionHandler(
+                                streamGraph.getJobGraphAndAttachUserArtifacts(userCodeLoader),
+                                id -> streamGraph.getStreamNode(id).getOperatorId());
+            }
         }
 
         return new AdaptiveBatchScheduler(
