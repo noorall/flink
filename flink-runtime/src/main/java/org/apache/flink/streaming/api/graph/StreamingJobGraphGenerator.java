@@ -297,7 +297,10 @@ public class StreamingJobGraphGenerator {
         }
         jobGraph.setJobConfiguration(streamGraph.getJobConfiguration());
 
-        addVertexIndexPrefixInVertexName(streamGraph, jobGraph);
+        if (streamGraph.isVertexNameIncludeIndexPrefix()) {
+            addVertexIndexPrefixInVertexName(
+                    jobGraph.getVerticesSortedTopologicallyFromSources(), new AtomicInteger(0));
+        }
 
         setVertexDescription(jobVertices, streamGraph, chainedConfigs);
 
@@ -344,19 +347,13 @@ public class StreamingJobGraphGenerator {
     }
 
     public static void addVertexIndexPrefixInVertexName(
-            StreamGraph streamGraph, JobGraph jobGraph) {
-        if (!streamGraph.isVertexNameIncludeIndexPrefix()) {
-            return;
-        }
-        final AtomicInteger vertexIndexId = new AtomicInteger(0);
-        jobGraph.getVerticesSortedTopologicallyFromSources()
-                .forEach(
-                        vertex ->
-                                vertex.setName(
-                                        String.format(
-                                                "[vertex-%d]%s",
-                                                vertexIndexId.getAndIncrement(),
-                                                vertex.getName())));
+            List<JobVertex> jobVertices, AtomicInteger vertexIndexId) {
+        jobVertices.forEach(
+                vertex ->
+                        vertex.setName(
+                                String.format(
+                                        "[vertex-%d]%s",
+                                        vertexIndexId.getAndIncrement(), vertex.getName())));
     }
 
     public static void setVertexDescription(
@@ -1763,23 +1760,36 @@ public class StreamingJobGraphGenerator {
         }
     }
 
-    public static void setSlotSharingAndCoLocation(
+    private void setSlotSharingAndCoLocation(
             Map<Integer, JobVertex> jobVertices,
             AtomicBoolean hasHybridResultPartition,
             StreamGraph streamGraph,
             JobGraph jobGraph) {
-        setSlotSharing(jobVertices, hasHybridResultPartition, streamGraph, jobGraph);
-        setCoLocation(jobVertices, streamGraph);
+        final SlotSharingGroup defaultSlotSharingGroup = new SlotSharingGroup();
+        streamGraph
+                .getSlotSharingGroupResource(StreamGraphGenerator.DEFAULT_SLOT_SHARING_GROUP)
+                .ifPresent(defaultSlotSharingGroup::setResourceProfile);
+        setSlotSharing(
+                jobVertices,
+                hasHybridResultPartition,
+                streamGraph,
+                jobGraph,
+                defaultSlotSharingGroup,
+                new HashMap<>());
+        setCoLocation(jobVertices, streamGraph, new HashMap<>());
     }
 
-    private static void setSlotSharing(
+    public static void setSlotSharing(
             Map<Integer, JobVertex> jobVertices,
             AtomicBoolean hasHybridResultPartition,
             StreamGraph streamGraph,
-            JobGraph jobGraph) {
+            JobGraph jobGraph,
+            SlotSharingGroup defaultSlotSharingGroup,
+            Map<JobVertexID, SlotSharingGroup> vertexRegionSlotSharingGroups) {
         final Map<String, SlotSharingGroup> specifiedSlotSharingGroups = new HashMap<>();
-        final Map<JobVertexID, SlotSharingGroup> vertexRegionSlotSharingGroups =
-                buildVertexRegionSlotSharingGroups(streamGraph, jobGraph);
+
+        buildVertexRegionSlotSharingGroups(
+                streamGraph, jobGraph, defaultSlotSharingGroup, vertexRegionSlotSharingGroups);
 
         for (Map.Entry<Integer, JobVertex> entry : jobVertices.entrySet()) {
 
@@ -1831,44 +1841,48 @@ public class StreamingJobGraphGenerator {
      * StreamGraph#isAllVerticesInSameSlotSharingGroupByDefault()} returns true, all regions will be
      * in the same slot sharing group.
      */
-    private static Map<JobVertexID, SlotSharingGroup> buildVertexRegionSlotSharingGroups(
-            StreamGraph streamGraph, JobGraph jobGraph) {
-        final Map<JobVertexID, SlotSharingGroup> vertexRegionSlotSharingGroups = new HashMap<>();
-        final SlotSharingGroup defaultSlotSharingGroup = new SlotSharingGroup();
-        streamGraph
-                .getSlotSharingGroupResource(StreamGraphGenerator.DEFAULT_SLOT_SHARING_GROUP)
-                .ifPresent(defaultSlotSharingGroup::setResourceProfile);
-
+    private static void buildVertexRegionSlotSharingGroups(
+            StreamGraph streamGraph,
+            JobGraph jobGraph,
+            SlotSharingGroup defaultSlotSharingGroup,
+            Map<JobVertexID, SlotSharingGroup> vertexRegionSlotSharingGroups) {
         final boolean allRegionsInSameSlotSharingGroup =
                 streamGraph.isAllVerticesInSameSlotSharingGroupByDefault();
 
         final Iterable<DefaultLogicalPipelinedRegion> regions =
                 DefaultLogicalTopology.fromJobGraph(jobGraph).getAllPipelinedRegions();
         for (DefaultLogicalPipelinedRegion region : regions) {
-            final SlotSharingGroup regionSlotSharingGroup;
-            if (allRegionsInSameSlotSharingGroup) {
-                regionSlotSharingGroup = defaultSlotSharingGroup;
-            } else {
-                regionSlotSharingGroup = new SlotSharingGroup();
-                streamGraph
-                        .getSlotSharingGroupResource(
-                                StreamGraphGenerator.DEFAULT_SLOT_SHARING_GROUP)
-                        .ifPresent(regionSlotSharingGroup::setResourceProfile);
+            SlotSharingGroup regionSlotSharingGroup = null;
+
+            for (LogicalVertex vertex : region.getVertices()) {
+                if (vertexRegionSlotSharingGroups.containsKey(vertex.getId())) {
+                    regionSlotSharingGroup = vertexRegionSlotSharingGroups.get(vertex.getId());
+                    break;
+                }
+            }
+
+            if (regionSlotSharingGroup == null) {
+                if (allRegionsInSameSlotSharingGroup) {
+                    regionSlotSharingGroup = defaultSlotSharingGroup;
+                } else {
+                    regionSlotSharingGroup = new SlotSharingGroup();
+                    streamGraph
+                            .getSlotSharingGroupResource(
+                                    StreamGraphGenerator.DEFAULT_SLOT_SHARING_GROUP)
+                            .ifPresent(regionSlotSharingGroup::setResourceProfile);
+                }
             }
 
             for (LogicalVertex vertex : region.getVertices()) {
                 vertexRegionSlotSharingGroups.put(vertex.getId(), regionSlotSharingGroup);
             }
         }
-
-        return vertexRegionSlotSharingGroups;
     }
 
-    private static void setCoLocation(
-            Map<Integer, JobVertex> jobVertices, StreamGraph streamGraph) {
-        final Map<String, Tuple2<SlotSharingGroup, CoLocationGroupImpl>> coLocationGroups =
-                new HashMap<>();
-
+    public static void setCoLocation(
+            Map<Integer, JobVertex> jobVertices,
+            StreamGraph streamGraph,
+            Map<String, Tuple2<SlotSharingGroup, CoLocationGroupImpl>> coLocationGroups) {
         for (Map.Entry<Integer, JobVertex> entry : jobVertices.entrySet()) {
 
             final StreamNode node = streamGraph.getStreamNode(entry.getKey());

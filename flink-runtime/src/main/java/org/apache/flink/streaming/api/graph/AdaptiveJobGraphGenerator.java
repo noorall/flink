@@ -22,6 +22,7 @@ import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.jobgraph.JobVertex;
 
 import java.util.List;
+import java.util.function.Function;
 
 public interface AdaptiveJobGraphGenerator {
 
@@ -52,9 +53,9 @@ public interface AdaptiveJobGraphGenerator {
     /**
      * Updates the StreamGraph based on the specified update request information.
      *
-     * @param requestInfo An object implementing {@link StreamGraphUpdateRequestInfo} that contains
-     *     all the necessary information for the stream graph update.
+     * @param updateFunc A method that implements the logic of modifying streamGraph through
+     *     StreamGraphManagerContext and returns the modified result.
      * @return {@code true} if the StreamGraph update was successful, {@code false} otherwise.
      */
-    boolean updateStreamGraph(StreamGraphUpdateRequestInfo requestInfo);
+    boolean updateStreamGraph(Function<StreamGraphManagerContext, Boolean> updateFunc);
 }

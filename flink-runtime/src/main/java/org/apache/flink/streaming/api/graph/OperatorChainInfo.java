@@ -128,4 +128,8 @@ public class OperatorChainInfo {
     public List<StreamNode> getAllChainedNodes() {
         return chainedNodes;
     }
+
+    public void addChainedSource(Integer sourceNodeId, ChainedSourceInfo chainedSourceInfo) {
+        this.chainedSources.put(sourceNodeId, chainedSourceInfo);
+    }
 }
