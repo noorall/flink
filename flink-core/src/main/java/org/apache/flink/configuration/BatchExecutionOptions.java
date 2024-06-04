@@ -45,9 +45,18 @@ public class BatchExecutionOptions {
     public static final ConfigOption<Boolean> ADAPTIVE_JOIN_TYPE_ENABLED =
             key("execution.batch.adaptive.join-type.enabled")
                     .booleanType()
-                    .defaultValue(false)
+                    .defaultValue(true)
                     .withDescription(
                             "If true, Flink will automatically decide whether change join type to broadcast join in batch jobs.");
+
+    @Documentation.Section({Documentation.Sections.EXPERT_SCHEDULING})
+    public static final ConfigOption<MemorySize> ADAPTIVE_BROADCAST_JOIN_THRESHOLD =
+            key("execution.batch.adaptive.join.broadcast-threshold")
+                    .memoryType()
+                    .defaultValue(MemorySize.ofMebiBytes(8))
+                    .withDescription(
+                            "Configures the maximum size for a input that will be broadcast to all worker "
+                                    + "nodes when performing a join.");
 
     public static boolean enableAdaptiveExecution(Configuration configuration) {
         return configuration.get(ADAPTIVE_JOIN_TYPE_ENABLED);

@@ -30,19 +30,27 @@ import org.apache.flink.runtime.jobmaster.event.ExecutionJobVertexFinishedEvent;
 import org.apache.flink.runtime.jobmaster.event.JobEvent;
 import org.apache.flink.streaming.api.graph.AdaptiveJobGraphManager;
 import org.apache.flink.streaming.api.graph.StreamEdge;
+import org.apache.flink.streaming.api.graph.StreamEdgeUpdateRequestInfo;
 import org.apache.flink.streaming.api.graph.StreamGraph;
+import org.apache.flink.streaming.api.graph.StreamGraphManagerContext;
 import org.apache.flink.streaming.api.graph.StreamNode;
+import org.apache.flink.streaming.api.operators.AdaptiveJoin;
+import org.apache.flink.streaming.runtime.partitioner.BroadcastPartitioner;
+import org.apache.flink.streaming.runtime.partitioner.ForwardPartitioner;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
@@ -61,6 +69,8 @@ public class DefaultAdaptiveExecutionHandler implements AdaptiveExecutionHandler
     private final AdaptiveJobGraphManager jobGraphManager;
 
     private Function<Integer, OperatorID> findOperatorIdByStreamNodeId;
+
+    private final Set<Integer> updatedStreamNodeIds = new HashSet<>();
 
     public DefaultAdaptiveExecutionHandler(
             ClassLoader userClassloader,
@@ -112,37 +122,137 @@ public class DefaultAdaptiveExecutionHandler implements AdaptiveExecutionHandler
 
     private void tryAdjustJoinType(ExecutionJobVertexFinishedEvent event) {
         JobVertexID jobVertexId = event.getVertexId();
-        long bytes = 0L;
-        for (BlockingResultInfo info : event.getResultInfo()) {
-            bytes += info.getNumBytesProduced();
-        }
 
         List<StreamEdge> outputEdges = jobGraphManager.findOutputEdgesByVertexId(jobVertexId);
 
         for (StreamEdge edge : outputEdges) {
-            tryTransferToBroadCastJoin(bytes, edge);
+            tryTransferToBroadCastJoin(edge);
         }
     }
 
-    private void tryTransferToBroadCastJoin(long producedBytes, StreamEdge edge) {
-        //        StreamNode node = edge.getTargetNode();
-        //        List<StreamEdge> otherEdges =
-        //                node.getInEdges().stream()
-        //                        .filter(e -> edge.getSourceId() != e.getSourceId())
-        //                        .collect(Collectors.toList());
-        //        checkState(otherEdges.size() == 1);
+    private void tryTransferToBroadCastJoin(StreamEdge edge) {
+        StreamNode node = edge.getTargetNode();
+        if (updatedStreamNodeIds.contains(node.getId())) {
+            return;
+        }
 
-        // if can not transfer
-        // return false
-        // else
-        //        logicalGraphManager.modifyToBroadcastJoin(
-        //                node, edge, otherEdges.get(0), new RescalePartitioner<>());
+        if (node.getOperatorFactory() instanceof AdaptiveJoin) {
+            log.info("Try optimize adaptive join {} to broadcast join.", node);
+            AdaptiveJoin adaptiveJoin = (AdaptiveJoin) node.getOperatorFactory();
+            List<AdaptiveJoin.PotentialBroadcastSide> potentialBroadcastJoinSides =
+                    adaptiveJoin.getPotentialBroadcastJoinSides();
 
-        //        if (false) {
-        //            jobGraphManager.updateStreamGraph(
-        //                    new ConvertToBroadcastJoinRequest(
-        //                            node, edge, otherEdges.get(0), new RescalePartitioner<>()));
-        //        }
+            if (potentialBroadcastJoinSides.isEmpty()) {
+                return;
+            }
+
+            List<StreamEdge> sameTypeEdges =
+                    node.getInEdges().stream()
+                            .filter(inEdge -> inEdge.getTypeNumber() == edge.getTypeNumber())
+                            .collect(Collectors.toList());
+
+            long producedBytes = 0L;
+            for (StreamEdge inEdge : sameTypeEdges) {
+                if (jobVertexFinishedEvents.containsKey(
+                        jobGraphManager.findVertexByStreamNodeId(inEdge.getSourceId()).get())) {
+                    for (BlockingResultInfo info :
+                            jobVertexFinishedEvents
+                                    .get(
+                                            jobGraphManager
+                                                    .findVertexByStreamNodeId(inEdge.getSourceId())
+                                                    .get())
+                                    .getResultInfo()) {
+                        producedBytes += info.getNumBytesProduced();
+                    }
+                } else {
+                    return;
+                }
+            }
+
+            if (canBeBroadcast(producedBytes, edge.getTypeNumber(), potentialBroadcastJoinSides)) {
+                List<StreamEdge> otherEdge =
+                        node.getInEdges().stream()
+                                .filter(e -> e.getTypeNumber() != edge.getTypeNumber())
+                                .collect(Collectors.toList());
+
+                if (jobGraphManager.updateStreamGraph(
+                        context -> updateToBroadcastJoin(sameTypeEdges, otherEdge, context))) {
+                    log.info("Update hash join to broadcast join successful!");
+
+                    adaptiveJoin.markAsBroadcastJoin(getBroadCastSide(edge.getTypeNumber()));
+                    updatedStreamNodeIds.add(node.getId());
+                } else {
+                    log.info("Failed to update hash join to broadcast join.");
+                }
+            }
+        }
+    }
+
+    private boolean updateToBroadcastJoin(
+            List<StreamEdge> toBroadcastEdges,
+            List<StreamEdge> toForwardEdges,
+            StreamGraphManagerContext context) {
+        List<StreamEdgeUpdateRequestInfo> toBroadcastInfo =
+                toBroadcastEdges.stream()
+                        .map(
+                                edge -> {
+                                    StreamEdgeUpdateRequestInfo info =
+                                            new StreamEdgeUpdateRequestInfo(
+                                                    edge.getId(),
+                                                    edge.getSourceId(),
+                                                    edge.getTargetId());
+
+                                    info.outputPartitioner(new BroadcastPartitioner<>());
+                                    return info;
+                                })
+                        .collect(Collectors.toList());
+
+        List<StreamEdgeUpdateRequestInfo> toForwardInfo =
+                toForwardEdges.stream()
+                        .map(
+                                edge -> {
+                                    StreamEdgeUpdateRequestInfo info =
+                                            new StreamEdgeUpdateRequestInfo(
+                                                    edge.getId(),
+                                                    edge.getSourceId(),
+                                                    edge.getTargetId());
+
+                                    info.outputPartitioner(new ForwardPartitioner<>());
+                                    return info;
+                                })
+                        .collect(Collectors.toList());
+
+        return context.modifyStreamEdge(toBroadcastInfo) && context.modifyStreamEdge(toForwardInfo);
+    }
+
+    private boolean canBeBroadcast(
+            long producedBytes,
+            int typeNumber,
+            List<AdaptiveJoin.PotentialBroadcastSide> potentialBroadcastSides) {
+        boolean isSmallEnough = isProducedBytesBelowThreshold(producedBytes);
+        boolean isBroadcastCandidate =
+                isEdgeTypeAndSideCompatible(typeNumber, potentialBroadcastSides);
+        return isSmallEnough && isBroadcastCandidate;
+    }
+
+    private boolean isProducedBytesBelowThreshold(long producedBytes) {
+        return configuration.get(BatchExecutionOptions.ADAPTIVE_BROADCAST_JOIN_THRESHOLD).getBytes()
+                >= producedBytes;
+    }
+
+    private boolean isEdgeTypeAndSideCompatible(
+            int typeNumber, List<AdaptiveJoin.PotentialBroadcastSide> potentialBroadcastSides) {
+        return potentialBroadcastSides.contains(getBroadCastSide(typeNumber));
+    }
+
+    private AdaptiveJoin.PotentialBroadcastSide getBroadCastSide(int edgeTypeNumber) {
+        if (edgeTypeNumber == 1) {
+            return AdaptiveJoin.PotentialBroadcastSide.LEFT;
+        } else if (edgeTypeNumber == 2) {
+            return AdaptiveJoin.PotentialBroadcastSide.RIGHT;
+        } else {
+            throw new IllegalArgumentException();
+        }
     }
 
     // TODO currently only support Lazily update job graph
@@ -168,6 +278,10 @@ public class DefaultAdaptiveExecutionHandler implements AdaptiveExecutionHandler
             if (isAllInputVerticesFinished) {
                 tryToTranslate.add(downNode);
             }
+        }
+
+        if (tryToTranslate.isEmpty()) {
+            return;
         }
 
         List<JobVertex> list = jobGraphManager.createJobVerticesAndUpdateGraph(tryToTranslate);

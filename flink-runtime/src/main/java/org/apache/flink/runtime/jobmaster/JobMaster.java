@@ -102,7 +102,6 @@ import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation.ResolutionMode;
 import org.apache.flink.runtime.taskmanager.UnresolvedTaskManagerLocation;
 import org.apache.flink.runtime.util.LogicalGraph;
-import org.apache.flink.streaming.api.graph.StreamGraph;
 import org.apache.flink.util.ExceptionUtils;
 import org.apache.flink.util.FlinkException;
 import org.apache.flink.util.FlinkRuntimeException;
@@ -163,9 +162,6 @@ public class JobMaster extends FencedRpcEndpoint<JobMasterId>
     private final ResourceID resourceId;
 
     private final LogicalGraph logicalGraph;
-
-    // This field only will be set when submit job by streamGraph.
-    private @Nullable StreamGraph streamGraph;
 
     private final Time rpcTimeout;
 
