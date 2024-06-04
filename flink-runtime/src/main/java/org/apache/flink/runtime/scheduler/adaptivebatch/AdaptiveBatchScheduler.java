@@ -127,6 +127,8 @@ public class AdaptiveBatchScheduler extends DefaultScheduler implements JobGraph
 
     private final int defaultMaxParallelism;
 
+    private final boolean enableAdaptiveExecution;
+
     public AdaptiveBatchScheduler(
             final Logger log,
             final AdaptiveExecutionHandler adaptiveExecutionHandler,
@@ -206,6 +208,9 @@ public class AdaptiveBatchScheduler extends DefaultScheduler implements JobGraph
                 createSpeculativeExecutionHandler(
                         log, jobMasterConfiguration, executionVertexVersioner, blocklistOperations);
 
+        this.enableAdaptiveExecution =
+                BatchExecutionOptions.enableAdaptiveExecution(jobMasterConfiguration);
+
         if (!adaptiveExecutionHandler.isStreamGraphConversionFinished()) {
             getExecutionGraph().notifyWaitingMoreJobVerticesToBeAdded();
         }
@@ -269,20 +274,28 @@ public class AdaptiveBatchScheduler extends DefaultScheduler implements JobGraph
         // 5. update result partition info
         for (JobVertex newVertex : newVertices) {
             for (JobEdge input : newVertex.getInputs()) {
-                if (blockingResultInfos.containsKey(input.getSourceId())) {
-                    BlockingResultInfo resultInfo = blockingResultInfos.get(input.getSourceId());
-                    Map<Integer, long[]> bytesByPartitionIndex =
-                            resultInfo.getSubpartitionBytesByPartitionIndex();
+                tryUpdateResultInfo(input.getSourceId(), input.getDistributionPattern());
+            }
+        }
+    }
 
-                    IntermediateResult result =
-                            getExecutionGraph()
-                                    .getAllIntermediateResults()
-                                    .get(input.getSourceId());
+    private void tryUpdateResultInfo(IntermediateDataSetID id, DistributionPattern pattern) {
+        if (blockingResultInfos.containsKey(id)) {
+            BlockingResultInfo resultInfo = blockingResultInfos.get(id);
+            if ((pattern == DistributionPattern.ALL_TO_ALL && resultInfo.isPointwise())
+                    || (pattern == DistributionPattern.POINTWISE && !resultInfo.isPointwise())) {
+                Map<Integer, long[]> bytesByPartitionIndex =
+                        resultInfo.getSubpartitionBytesByPartitionIndex();
 
-                    BlockingResultInfo newInfo = createFromIntermediateResult(result);
-                    bytesByPartitionIndex.forEach(
-                            (k, v) -> newInfo.recordPartitionInfo(k, new ResultPartitionBytes(v)));
-                }
+                IntermediateResult result = getExecutionGraph().getAllIntermediateResults().get(id);
+
+                BlockingResultInfo newInfo =
+                        createFromIntermediateResult(
+                                result, resultInfo.getSubpartitionBytesByPartitionIndex());
+                bytesByPartitionIndex.forEach(
+                        (k, v) -> newInfo.recordPartitionInfo(k, new ResultPartitionBytes(v)));
+
+                blockingResultInfos.put(id, newInfo);
             }
         }
     }
@@ -420,7 +433,8 @@ public class AdaptiveBatchScheduler extends DefaultScheduler implements JobGraph
                             result.getId(),
                             (ignored, resultInfo) -> {
                                 if (resultInfo == null) {
-                                    resultInfo = createFromIntermediateResult(result);
+                                    resultInfo =
+                                            createFromIntermediateResult(result, new HashMap<>());
                                 }
                                 resultInfo.recordPartitionInfo(
                                         partitionId.getPartitionNumber(), partitionBytes);
@@ -832,7 +846,8 @@ public class AdaptiveBatchScheduler extends DefaultScheduler implements JobGraph
         }
     }
 
-    private static BlockingResultInfo createFromIntermediateResult(IntermediateResult result) {
+    private BlockingResultInfo createFromIntermediateResult(
+            IntermediateResult result, Map<Integer, long[]> subpartitionBytesByPartitionIndex) {
         checkArgument(result != null);
         // Note that for dynamic graph, different partitions in the same result have the same number
         // of subpartitions.
@@ -840,13 +855,16 @@ public class AdaptiveBatchScheduler extends DefaultScheduler implements JobGraph
             return new PointwiseBlockingResultInfo(
                     result.getId(),
                     result.getNumberOfAssignedPartitions(),
-                    result.getPartitions()[0].getNumberOfSubpartitions());
+                    result.getPartitions()[0].getNumberOfSubpartitions(),
+                    subpartitionBytesByPartitionIndex);
         } else {
             return new AllToAllBlockingResultInfo(
                     result.getId(),
                     result.getNumberOfAssignedPartitions(),
                     result.getPartitions()[0].getNumberOfSubpartitions(),
-                    result.isBroadcast());
+                    result.isBroadcast(),
+                    !enableAdaptiveExecution,
+                    subpartitionBytesByPartitionIndex);
         }
     }
 

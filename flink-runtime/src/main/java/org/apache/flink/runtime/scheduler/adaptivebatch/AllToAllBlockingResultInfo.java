@@ -18,6 +18,7 @@
 
 package org.apache.flink.runtime.scheduler.adaptivebatch;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.runtime.executiongraph.IndexRange;
 import org.apache.flink.runtime.executiongraph.ResultPartitionBytes;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
@@ -26,7 +27,9 @@ import javax.annotation.Nullable;
 
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import static org.apache.flink.util.Preconditions.checkState;
@@ -36,6 +39,8 @@ public class AllToAllBlockingResultInfo extends AbstractBlockingResultInfo {
 
     private final boolean isBroadcast;
 
+    private final boolean aggregateSubpartitionBytes;
+
     /**
      * Aggregated subpartition bytes, which aggregates the subpartition bytes with the same
      * subpartition index in different partitions. Note that We can aggregate them because they will
@@ -43,13 +48,25 @@ public class AllToAllBlockingResultInfo extends AbstractBlockingResultInfo {
      */
     @Nullable private List<Long> aggregatedSubpartitionBytes;
 
+    @VisibleForTesting
     AllToAllBlockingResultInfo(
             IntermediateDataSetID resultId,
             int numOfPartitions,
             int numOfSubpartitions,
             boolean isBroadcast) {
-        super(resultId, numOfPartitions, numOfSubpartitions);
+        this(resultId, numOfPartitions, numOfSubpartitions, isBroadcast, true, new HashMap<>());
+    }
+
+    AllToAllBlockingResultInfo(
+            IntermediateDataSetID resultId,
+            int numOfPartitions,
+            int numOfSubpartitions,
+            boolean isBroadcast,
+            boolean aggregateSubpartitionBytes,
+            Map<Integer, long[]> subpartitionBytesByPartitionIndex) {
+        super(resultId, numOfPartitions, numOfSubpartitions, subpartitionBytesByPartitionIndex);
         this.isBroadcast = isBroadcast;
+        this.aggregateSubpartitionBytes = aggregateSubpartitionBytes;
     }
 
     @Override
@@ -75,11 +92,7 @@ public class AllToAllBlockingResultInfo extends AbstractBlockingResultInfo {
     @Override
     public long getNumBytesProduced() {
         checkState(aggregatedSubpartitionBytes != null, "Not all partition infos are ready");
-        if (isBroadcast) {
-            return aggregatedSubpartitionBytes.get(0);
-        } else {
-            return aggregatedSubpartitionBytes.stream().reduce(0L, Long::sum);
-        }
+        return aggregatedSubpartitionBytes.stream().reduce(0L, Long::sum);
     }
 
     @Override
@@ -126,7 +139,10 @@ public class AllToAllBlockingResultInfo extends AbstractBlockingResultInfo {
                                 });
                 this.aggregatedSubpartitionBytes =
                         Arrays.stream(aggregatedBytes).boxed().collect(Collectors.toList());
-                this.subpartitionBytesByPartitionIndex.clear();
+
+                if (aggregateSubpartitionBytes) {
+                    this.subpartitionBytesByPartitionIndex.clear();
+                }
             }
         }
     }
