@@ -91,7 +91,8 @@ public class FlinkAdaptiveJoinProgram implements FlinkOptimizeProgram<BatchOptim
                 break;
             default:
         }
-        if (join instanceof BatchPhysicalHashJoin) {
+        if (join instanceof BatchPhysicalHashJoin
+                && !((BatchPhysicalHashJoin) join).isBroadcast()) {
             BatchPhysicalHashJoin hashJoin = (BatchPhysicalHashJoin) join;
             join =
                     new BatchPhysicalAdaptiveJoin(
