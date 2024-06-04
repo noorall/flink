@@ -20,18 +20,34 @@ package org.apache.flink.streaming.api.graph;
 
 import org.apache.flink.streaming.runtime.partitioner.StreamPartitioner;
 
-public class ModifyStreamEdgeRequestInfo implements StreamGraphUpdateRequestInfo {
-    private final StreamEdge streamEdge;
-    private final StreamPartitioner<?> outputPartitioner;
+public class StreamEdgeUpdateRequestInfo implements StreamGraphUpdateRequestInfo {
+    private final String edgeId;
+    private final Integer sourceId;
+    private final Integer targetId;
 
-    public ModifyStreamEdgeRequestInfo(
-            StreamEdge streamEdge, StreamPartitioner<?> outputPartitioner) {
-        this.streamEdge = streamEdge;
-        this.outputPartitioner = outputPartitioner;
+    private StreamPartitioner<?> outputPartitioner;
+
+    public StreamEdgeUpdateRequestInfo(String edgeId, Integer sourceId, Integer targetId) {
+        this.edgeId = edgeId;
+        this.sourceId = sourceId;
+        this.targetId = targetId;
     }
 
-    public StreamEdge getStreamEdge() {
-        return streamEdge;
+    public StreamEdgeUpdateRequestInfo outputPartitioner(StreamPartitioner<?> outputPartitioner) {
+        this.outputPartitioner = outputPartitioner;
+        return this;
+    }
+
+    public String getEdgeId() {
+        return edgeId;
+    }
+
+    public Integer getSourceId() {
+        return sourceId;
+    }
+
+    public Integer getTargetId() {
+        return targetId;
     }
 
     public StreamPartitioner<?> getOutputPartitioner() {
