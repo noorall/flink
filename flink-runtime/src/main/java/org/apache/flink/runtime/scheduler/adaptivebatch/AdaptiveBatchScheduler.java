@@ -57,8 +57,6 @@ import org.apache.flink.runtime.jobgraph.JobEdge;
 import org.apache.flink.runtime.jobgraph.JobVertex;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.jobgraph.OperatorID;
-import org.apache.flink.runtime.jobgraph.forwardgroup.ForwardGroup;
-import org.apache.flink.runtime.jobgraph.forwardgroup.ForwardGroupComputeUtil;
 import org.apache.flink.runtime.jobgraph.jsonplan.JsonPlanGenerator;
 import org.apache.flink.runtime.jobgraph.topology.DefaultLogicalResult;
 import org.apache.flink.runtime.jobgraph.topology.DefaultLogicalTopology;
@@ -115,8 +113,6 @@ public class AdaptiveBatchScheduler extends DefaultScheduler implements JobGraph
     private DefaultLogicalTopology logicalTopology;
 
     private final VertexParallelismAndInputInfosDecider vertexParallelismAndInputInfosDecider;
-
-    private Map<JobVertexID, ForwardGroup> forwardGroupsByJobVertexId;
 
     private final Map<IntermediateDataSetID, BlockingResultInfo> blockingResultInfos;
 
@@ -200,10 +196,6 @@ public class AdaptiveBatchScheduler extends DefaultScheduler implements JobGraph
         this.vertexParallelismAndInputInfosDecider =
                 checkNotNull(vertexParallelismAndInputInfosDecider);
 
-        this.forwardGroupsByJobVertexId =
-                ForwardGroupComputeUtil.computeForwardGroupsAndCheckParallelism(
-                        getJobGraph().getVerticesSortedTopologicallyFromSources());
-
         this.blockingResultInfos = new HashMap<>();
 
         this.hybridPartitionDataConsumeConstraint = hybridPartitionDataConsumeConstraint;
@@ -265,10 +257,7 @@ public class AdaptiveBatchScheduler extends DefaultScheduler implements JobGraph
 
         logicalTopology = DefaultLogicalTopology.fromJobGraph(getJobGraph());
 
-        // 3. update forward groups and json plan
-        forwardGroupsByJobVertexId =
-                ForwardGroupComputeUtil.computeForwardGroupsAndCheckParallelism(
-                        getJobGraph().getVerticesSortedTopologicallyFromSources());
+        // 3. update json plan
         getExecutionGraph().setJsonPlan(JsonPlanGenerator.generatePlan(getJobGraph()));
 
         // 4. notify if no more job vertices waiting to be added, which can make the job final state
@@ -617,18 +606,8 @@ public class AdaptiveBatchScheduler extends DefaultScheduler implements JobGraph
 
     private ParallelismAndInputInfos tryDecideParallelismAndInputInfos(
             final ExecutionJobVertex jobVertex, List<BlockingResultInfo> inputs) {
-        int vertexInitialParallelism = jobVertex.getParallelism();
-        ForwardGroup forwardGroup = forwardGroupsByJobVertexId.get(jobVertex.getJobVertexId());
-        if (!jobVertex.isParallelismDecided()
-                && forwardGroup != null
-                && forwardGroup.isParallelismDecided()) {
-            vertexInitialParallelism = forwardGroup.getParallelism();
-            log.info(
-                    "Parallelism of JobVertex: {} ({}) is decided to be {} according to forward group's parallelism.",
-                    jobVertex.getName(),
-                    jobVertex.getJobVertexId(),
-                    vertexInitialParallelism);
-        }
+        int vertexInitialParallelism =
+                adaptiveExecutionHandler.getInitialParallelismByForwardGroup(jobVertex);
 
         int vertexMinParallelism = ExecutionConfig.PARALLELISM_DEFAULT;
         if (sourceParallelismFuturesByJobVertexId.containsKey(jobVertex.getJobVertexId())) {
@@ -664,9 +643,8 @@ public class AdaptiveBatchScheduler extends DefaultScheduler implements JobGraph
             checkState(parallelismAndInputInfos.getParallelism() == vertexInitialParallelism);
         }
 
-        if (forwardGroup != null && !forwardGroup.isParallelismDecided()) {
-            forwardGroup.setParallelism(parallelismAndInputInfos.getParallelism());
-        }
+        adaptiveExecutionHandler.updateForwardGroupByNewlyParallelism(
+                jobVertex, parallelismAndInputInfos.getParallelism());
 
         return parallelismAndInputInfos;
     }

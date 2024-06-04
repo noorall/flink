@@ -18,6 +18,7 @@
 
 package org.apache.flink.runtime.scheduler.adaptivebatch;
 
+import org.apache.flink.runtime.executiongraph.ExecutionJobVertex;
 import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.jobgraph.OperatorID;
 import org.apache.flink.runtime.jobmaster.event.JobEvent;
@@ -47,4 +48,8 @@ public interface AdaptiveExecutionHandler {
     void registerJobGraphUpdateListener(JobGraphUpdateListener listener);
 
     OperatorID findOperatorIdByStreamNodeId(int streamNodeId);
+
+    int getInitialParallelismByForwardGroup(ExecutionJobVertex jobVertex);
+
+    void updateForwardGroupByNewlyParallelism(ExecutionJobVertex jobVertex, int parallelism);
 }

@@ -20,10 +20,12 @@ package org.apache.flink.runtime.scheduler.adaptivebatch;
 
 import org.apache.flink.configuration.BatchExecutionOptions;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.runtime.executiongraph.ExecutionJobVertex;
 import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.jobgraph.JobVertex;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.jobgraph.OperatorID;
+import org.apache.flink.runtime.jobgraph.forwardgroup.StreamNodeForwardGroup;
 import org.apache.flink.runtime.jobmaster.event.ExecutionJobVertexFinishedEvent;
 import org.apache.flink.runtime.jobmaster.event.JobEvent;
 import org.apache.flink.streaming.api.graph.AdaptiveJobGraphManager;
@@ -202,5 +204,34 @@ public class DefaultAdaptiveExecutionHandler implements AdaptiveExecutionHandler
     @Override
     public OperatorID findOperatorIdByStreamNodeId(int streamNodeId) {
         return findOperatorIdByStreamNodeId.apply(streamNodeId);
+    }
+
+    @Override
+    public int getInitialParallelismByForwardGroup(ExecutionJobVertex jobVertex) {
+        int vertexInitialParallelism = jobVertex.getParallelism();
+        StreamNodeForwardGroup forwardGroup =
+                jobGraphManager.findForwardGroupByVertexId(jobVertex.getJobVertexId());
+        if (!jobVertex.isParallelismDecided()
+                && forwardGroup != null
+                && forwardGroup.isParallelismDecided()) {
+            vertexInitialParallelism = forwardGroup.getParallelism();
+            log.info(
+                    "Parallelism of JobVertex: {} ({}) is decided to be {} according to forward group's parallelism.",
+                    jobVertex.getName(),
+                    jobVertex.getJobVertexId(),
+                    vertexInitialParallelism);
+        }
+
+        return vertexInitialParallelism;
+    }
+
+    @Override
+    public void updateForwardGroupByNewlyParallelism(
+            ExecutionJobVertex jobVertex, int parallelism) {
+        StreamNodeForwardGroup forwardGroup =
+                jobGraphManager.findForwardGroupByVertexId(jobVertex.getJobVertexId());
+        if (forwardGroup != null && !forwardGroup.isParallelismDecided()) {
+            forwardGroup.setParallelism(parallelism);
+        }
     }
 }
