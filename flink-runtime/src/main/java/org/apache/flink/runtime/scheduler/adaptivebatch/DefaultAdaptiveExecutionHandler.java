@@ -67,7 +67,7 @@ public class DefaultAdaptiveExecutionHandler implements AdaptiveExecutionHandler
 
     private final AdaptiveJobGraphManager jobGraphManager;
 
-    private Function<Integer, OperatorID> findOperatorIdByStreamNodeId;
+    private final Function<Integer, OperatorID> findOperatorIdByStreamNodeId;
 
     private final Set<Integer> updatedStreamNodeIds = new HashSet<>();
 
@@ -140,12 +140,14 @@ public class DefaultAdaptiveExecutionHandler implements AdaptiveExecutionHandler
 
     private void tryTransferToBroadCastJoin(StreamEdge edge) {
         StreamNode node = edge.getTargetNode();
-        if (updatedStreamNodeIds.contains(node.getId())) {
+        if (jobGraphManager.findVertexByStreamNodeId(node.getId()).isPresent()
+                || updatedStreamNodeIds.contains(node.getId())) {
             return;
         }
 
         if (node.getOperatorFactory() instanceof AdaptiveJoin) {
             log.info("Try optimize adaptive join {} to broadcast join.", node);
+
             AdaptiveJoin adaptiveJoin = (AdaptiveJoin) node.getOperatorFactory();
             List<AdaptiveJoin.PotentialBroadcastSide> potentialBroadcastJoinSides =
                     adaptiveJoin.getPotentialBroadcastJoinSides();
@@ -161,15 +163,11 @@ public class DefaultAdaptiveExecutionHandler implements AdaptiveExecutionHandler
 
             long producedBytes = 0L;
             for (StreamEdge inEdge : sameTypeEdges) {
-                if (jobVertexFinishedEvents.containsKey(
-                        jobGraphManager.findVertexByStreamNodeId(inEdge.getSourceId()).get())) {
+                JobVertexID jobVertex =
+                        jobGraphManager.findVertexByStreamNodeId(inEdge.getSourceId()).get();
+                if (jobVertexFinishedEvents.containsKey(jobVertex)) {
                     for (BlockingResultInfo info :
-                            jobVertexFinishedEvents
-                                    .get(
-                                            jobGraphManager
-                                                    .findVertexByStreamNodeId(inEdge.getSourceId())
-                                                    .get())
-                                    .getResultInfo()) {
+                            jobVertexFinishedEvents.get(jobVertex).getResultInfo()) {
                         producedBytes += info.getNumBytesProduced();
                     }
                 } else {
