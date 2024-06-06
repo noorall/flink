@@ -20,6 +20,7 @@ package org.apache.flink.streaming.api.graph;
 
 import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.jobgraph.JobVertex;
+import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import java.util.List;
 import java.util.function.Function;
@@ -27,13 +28,14 @@ import java.util.function.Function;
 public interface AdaptiveJobGraphGenerator {
 
     /**
-     * Creates new job vertices from a list of stream nodes and updates the job graph accordingly.
+     * Responds to an external notification of a finished JobVertex by creating new job vertices,
+     * updating the JobGraph accordingly, and returning a list of the newly created JobVertex
+     * instances.
      *
-     * @param streamNodes A list of {@link StreamNode} instances for which job vertices should be
-     *     created.
-     * @return A list of newly created {@link JobVertex} instances.
+     * @param finishedJobVertexId The ID of the JobVertex that has finished.
+     * @return A list of newly created {@link JobVertex} instances that were added to the JobGraph.
      */
-    List<JobVertex> createJobVerticesAndUpdateGraph(List<StreamNode> streamNodes);
+    List<JobVertex> onJobVertexFinishedAndUpdateGraph(JobVertexID finishedJobVertexId);
 
     /**
      * Checks if the conversion from StreamGraph to JobGraph has been finished.

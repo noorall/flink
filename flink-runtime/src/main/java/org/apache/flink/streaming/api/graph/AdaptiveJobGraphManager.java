@@ -247,7 +247,13 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
     }
 
     @Override
-    @VisibleForTesting
+    public List<JobVertex> onJobVertexFinishedAndUpdateGraph(JobVertexID finishedJobVertexId) {
+        // TODO
+        return null;
+    }
+
+    //    @Override
+    //    @VisibleForTesting
     public List<JobVertex> createJobVerticesAndUpdateGraph(List<StreamNode> streamNodes) {
         Map<Integer, List<StreamEdge>> nonChainableOutputsCache = new LinkedHashMap<>();
         Map<Integer, List<StreamEdge>> nonChainedInputsCache = new LinkedHashMap<>();

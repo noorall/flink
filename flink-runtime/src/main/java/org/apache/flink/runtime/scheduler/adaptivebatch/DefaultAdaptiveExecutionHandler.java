@@ -46,7 +46,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.function.Function;
@@ -113,6 +112,15 @@ public class DefaultAdaptiveExecutionHandler implements AdaptiveExecutionHandler
                 tryAdjustJoinType(event);
             }
             tryUpdateJobGraph(event.getVertexId());
+        }
+    }
+
+    private void tryUpdateJobGraph(JobVertexID jobVertexId) throws Exception {
+        List<JobVertex> newlyCreatedJobVertices =
+                jobGraphManager.onJobVertexFinishedAndUpdateGraph(jobVertexId);
+
+        if (!newlyCreatedJobVertices.isEmpty()) {
+            notifyJobGraphUpdated(newlyCreatedJobVertices);
         }
     }
 
@@ -252,42 +260,6 @@ public class DefaultAdaptiveExecutionHandler implements AdaptiveExecutionHandler
             return AdaptiveJoin.PotentialBroadcastSide.RIGHT;
         } else {
             throw new IllegalArgumentException();
-        }
-    }
-
-    // TODO currently only support Lazily update job graph
-    private void tryUpdateJobGraph(JobVertexID newFinishedJobVertexId) throws Exception {
-        List<StreamEdge> edges = jobGraphManager.findOutputEdgesByVertexId(newFinishedJobVertexId);
-
-        List<StreamNode> tryToTranslate = new ArrayList<>();
-
-        for (StreamEdge edge : edges) {
-            StreamNode downNode = edge.getTargetNode();
-
-            boolean isAllInputVerticesFinished = true;
-            for (StreamEdge inEdge : downNode.getInEdges()) {
-                Optional<JobVertexID> upStreamVertex =
-                        jobGraphManager.findVertexByStreamNodeId(inEdge.getSourceId());
-                if (!upStreamVertex.isPresent()
-                        || !jobVertexFinishedEvents.containsKey(upStreamVertex.get())) {
-                    isAllInputVerticesFinished = false;
-                    break;
-                }
-            }
-
-            if (isAllInputVerticesFinished) {
-                tryToTranslate.add(downNode);
-            }
-        }
-
-        if (tryToTranslate.isEmpty()) {
-            return;
-        }
-
-        List<JobVertex> list = jobGraphManager.createJobVerticesAndUpdateGraph(tryToTranslate);
-
-        if (!list.isEmpty()) {
-            notifyJobGraphUpdated(list);
         }
     }
 
