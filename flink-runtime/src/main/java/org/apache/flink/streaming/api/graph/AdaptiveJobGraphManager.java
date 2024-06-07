@@ -250,7 +250,7 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
     }
 
     @Override
-    public List<JobVertex> onJobVertexFinishedAndUpdateGraph(JobVertexID finishedJobVertexId) {
+    public List<JobVertex> onJobVertexFinished(JobVertexID finishedJobVertexId) {
         this.finishedJobVertices.add(finishedJobVertexId);
         List<StreamNode> streamNodes = new ArrayList<>();
         for (StreamEdge outEdge : findOutputEdgesByVertexId(finishedJobVertexId)) {

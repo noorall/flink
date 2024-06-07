@@ -35,7 +35,7 @@ public interface AdaptiveJobGraphGenerator {
      * @param finishedJobVertexId The ID of the JobVertex that has finished.
      * @return A list of newly created {@link JobVertex} instances that were added to the JobGraph.
      */
-    List<JobVertex> onJobVertexFinishedAndUpdateGraph(JobVertexID finishedJobVertexId);
+    List<JobVertex> onJobVertexFinished(JobVertexID finishedJobVertexId);
 
     /**
      * Checks if the conversion from StreamGraph to JobGraph has been finished.
