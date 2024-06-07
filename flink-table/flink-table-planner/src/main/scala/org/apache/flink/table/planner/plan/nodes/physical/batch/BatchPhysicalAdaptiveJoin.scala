@@ -19,15 +19,15 @@ package org.apache.flink.table.planner.plan.nodes.physical.batch
 
 import org.apache.flink.table.planner.calcite.FlinkTypeFactory
 import org.apache.flink.table.planner.plan.nodes.exec.{ExecNode, InputProperty}
-import org.apache.flink.table.planner.plan.nodes.exec.batch.BatchExecAdaptiveJoin
+import org.apache.flink.table.planner.plan.nodes.exec.batch.{BatchExecAdaptiveJoin, BatchExecSortMergeJoin}
 import org.apache.flink.table.planner.utils.ShortcutUtils.unwrapTableConfig
 import org.apache.flink.table.runtime.operators.join.HashJoinType
-
 import org.apache.calcite.plan._
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.core._
 import org.apache.calcite.rex.RexNode
 import org.apache.calcite.util.Util
+import org.apache.flink.table.planner.plan.utils.{JoinTypeUtil, JoinUtil}
 
 /** Batch physical RelNode for adaptive [[Join]]. */
 class BatchPhysicalAdaptiveJoin(
@@ -75,6 +75,10 @@ class BatchPhysicalAdaptiveJoin(
   }
 
   override def translateToExecNode(): ExecNode[_] = {
+    JoinUtil.validateJoinSpec(
+      joinSpec,
+      FlinkTypeFactory.toLogicalRowType(left.getRowType),
+      FlinkTypeFactory.toLogicalRowType(right.getRowType))
 
     val mq = getCluster.getMetadataQuery
     val leftRowSize = Util.first(mq.getAverageRowSize(left), 24).toInt
@@ -92,13 +96,13 @@ class BatchPhysicalAdaptiveJoin(
       rightRowSize,
       leftRowCount,
       rightRowCount,
-      isBroadcast,
       leftIsBuild,
       tryDistinctBuildRow,
       leftEdge,
       rightEdge,
       FlinkTypeFactory.toLogicalRowType(getRowType),
       getRelDetailedDescription,
+      condition,
       originalJobType,
       maybeBroadcastJoinSide)
   }

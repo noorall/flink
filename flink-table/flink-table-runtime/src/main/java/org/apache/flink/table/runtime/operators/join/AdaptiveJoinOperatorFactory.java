@@ -18,9 +18,12 @@
 package org.apache.flink.table.runtime.operators.join;
 
 import org.apache.flink.annotation.Internal;
+import org.apache.flink.streaming.api.operators.AbstractStreamOperatorFactory;
 import org.apache.flink.streaming.api.operators.AdaptiveJoin;
 import org.apache.flink.streaming.api.operators.SimpleOperatorFactory;
 import org.apache.flink.streaming.api.operators.StreamOperator;
+import org.apache.flink.streaming.api.operators.SwitchBroadcastSide;
+import org.apache.flink.table.runtime.generated.GeneratedClass;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -34,13 +37,22 @@ import java.util.List;
 public class AdaptiveJoinOperatorFactory<OUT> extends SimpleOperatorFactory<OUT>
         implements AdaptiveJoin {
 
-    private final AdaptiveJoinOperator adaptiveJoinOperator;
+    private List<PotentialBroadcastSide> potentialBroadcastJoinSides;
 
-    private final List<PotentialBroadcastSide> potentialBroadcastJoinSides;
+    private GeneratedClass<? extends StreamOperator<OUT>> generatedClass;
 
-    public AdaptiveJoinOperatorFactory(StreamOperator<OUT> operator, int maybeBroadcastJoinSide) {
-        super(operator);
-        adaptiveJoinOperator = (AdaptiveJoinOperator) operator;
+    private AbstractStreamOperatorFactory<OUT> originalFactory;
+
+    private AbstractStreamOperatorFactory<OUT> broadcastFactory;
+
+    private boolean isBroadcastJoin;
+
+    public AdaptiveJoinOperatorFactory(AbstractStreamOperatorFactory<OUT> originalFactory,
+                                       AbstractStreamOperatorFactory<OUT> broadcastFactory,
+                                       int maybeBroadcastJoinSide) {
+        super(((SimpleOperatorFactory<OUT>)originalFactory).getOperator());
+        this.originalFactory = originalFactory;
+        this.broadcastFactory = broadcastFactory;
         potentialBroadcastJoinSides = new ArrayList<>();
         if (maybeBroadcastJoinSide == 0) {
             potentialBroadcastJoinSides.add(PotentialBroadcastSide.LEFT);
@@ -54,16 +66,24 @@ public class AdaptiveJoinOperatorFactory<OUT> extends SimpleOperatorFactory<OUT>
 
     @Override
     public void markAsBroadcastJoin(PotentialBroadcastSide side) {
+        StreamOperator<OUT> streamOperator;
         switch (side) {
             case LEFT:
-                adaptiveJoinOperator.activateBroadcastJoin(true);
+                streamOperator = ((SimpleOperatorFactory<OUT>)broadcastFactory).getOperator();
+                ((SwitchBroadcastSide) streamOperator)
+                        .activateBroadcastJoin(true);
+                isBroadcastJoin = true;
                 break;
             case RIGHT:
-                adaptiveJoinOperator.activateBroadcastJoin(false);
+                streamOperator = ((SimpleOperatorFactory<OUT>)broadcastFactory).getOperator();
+                ((SwitchBroadcastSide) streamOperator)
+                        .activateBroadcastJoin(false);
+                isBroadcastJoin = true;
                 break;
             default:
                 throw new IllegalArgumentException("invalid: " + side);
         }
+        setOperator(streamOperator);
     }
 
     @Override

@@ -20,7 +20,9 @@ package org.apache.flink.table.planner.plan.batch.sql;
 
 import org.apache.flink.api.common.BatchShuffleMode;
 import org.apache.flink.api.common.RuntimeExecutionMode;
+import org.apache.flink.configuration.BatchExecutionOptions;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.DeploymentOptions;
 import org.apache.flink.configuration.ExecutionOptions;
 import org.apache.flink.table.api.TableEnvironment;
 import org.apache.flink.table.api.config.ExecutionConfigOptions;
@@ -51,6 +53,8 @@ class AdaptiveJoinITCase extends TableTestBase {
         config.set(ExecutionOptions.BATCH_SHUFFLE_MODE, BatchShuffleMode.ALL_EXCHANGES_BLOCKING);
         config.set(ExecutionOptions.RUNTIME_MODE, RuntimeExecutionMode.BATCH);
         config.set(OptimizerConfigOptions.TABLE_OPTIMIZER_ADAPTIVE_JOIN_ENABLED, true);
+        config.set(DeploymentOptions.SUBMIT_STREAM_GRAPH_ENABLED, false);
+        config.set(BatchExecutionOptions.ADAPTIVE_JOIN_TYPE_ENABLED, false);
 
         env = TableEnvironment.create(config);
 

@@ -23,6 +23,7 @@ import org.apache.flink.configuration.AlgorithmOptions;
 import org.apache.flink.streaming.api.operators.BoundedMultiInput;
 import org.apache.flink.streaming.api.operators.InputSelectable;
 import org.apache.flink.streaming.api.operators.InputSelection;
+import org.apache.flink.streaming.api.operators.SwitchBroadcastSide;
 import org.apache.flink.streaming.api.operators.TwoInputStreamOperator;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
 import org.apache.flink.table.data.GenericRowData;
@@ -67,7 +68,8 @@ import static org.apache.flink.util.Preconditions.checkState;
 public abstract class HashJoinOperator extends TableStreamOperator<RowData>
         implements TwoInputStreamOperator<RowData, RowData, RowData>,
                 BoundedMultiInput,
-                InputSelectable {
+                InputSelectable,
+                SwitchBroadcastSide {
 
     private static final Logger LOG = LoggerFactory.getLogger(HashJoinOperator.class);
 
@@ -323,6 +325,11 @@ public abstract class HashJoinOperator extends TableStreamOperator<RowData>
         } else {
             sortMergeJoinFunction.processElement1(rowData);
         }
+    }
+
+    @Override
+    public void activateBroadcastJoin(boolean leftIsBuild) {
+        this.leftIsBuild = leftIsBuild;
     }
 
     public static HashJoinOperator newHashJoinOperator(
