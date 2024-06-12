@@ -279,24 +279,17 @@ class AdaptiveJobGraphManagerTest {
             for (Integer nodeId : streamGraph.getSourceIDs()) {
                 streamNodeList.add(streamGraph.getStreamNode(nodeId));
             }
-            List<JobVertex> jobVertices =
-                    adaptiveJobGraphGenerator.createJobVerticesAndUpdateGraph(streamNodeList);
+            List<JobVertex> jobVertices = adaptiveJobGraphGenerator.initializeJobGraph();
             assertThat(adaptiveJobGraphGenerator.isStreamGraphConversionFinished())
                     .isEqualTo(false);
             assertThat(adaptiveJobGraphGenerator.getJobGraph().getNumberOfVertices()).isEqualTo(1);
             while (!adaptiveJobGraphGenerator.isStreamGraphConversionFinished()) {
-                List<StreamEdge> streamEdges = new ArrayList<>();
+                List<JobVertex> newJobVertices = new ArrayList<>();
                 for (JobVertex jobVertex : jobVertices) {
-                    streamEdges.addAll(
-                            adaptiveJobGraphGenerator.findOutputEdgesByVertexId(jobVertex.getID()));
+                    newJobVertices =
+                            adaptiveJobGraphGenerator.onJobVertexFinished(jobVertex.getID());
                 }
-                List<StreamNode> streamNodes = new ArrayList<>();
-                for (StreamEdge streamEdge : streamEdges) {
-                    StreamNode streamNode = streamGraph.getStreamNode(streamEdge.getTargetId());
-                    streamNodes.add(streamNode);
-                }
-                jobVertices.addAll(
-                        adaptiveJobGraphGenerator.createJobVerticesAndUpdateGraph(streamNodes));
+                jobVertices = newJobVertices;
             }
             assertThat(adaptiveJobGraphGenerator.isStreamGraphConversionFinished()).isEqualTo(true);
             assertThat(adaptiveJobGraphGenerator.getJobGraph().getNumberOfVertices()).isEqualTo(2);
@@ -377,8 +370,11 @@ class AdaptiveJobGraphManagerTest {
                                                     Collections.singletonList(
                                                             streamEdgeUpdateRequestInfo))))
                     .isEqualTo(true);
-            jobVertices.addAll(
-                    adaptiveJobGraphGenerator.createJobVerticesAndUpdateGraph(streamNodes));
+            List<JobVertex> newJobVertices = new ArrayList<>();
+            for (JobVertex jobVertex : jobVertices) {
+                newJobVertices = adaptiveJobGraphGenerator.onJobVertexFinished(jobVertex.getID());
+            }
+            jobVertices = newJobVertices;
         }
         List<JobVertex> sortedJobVertices =
                 adaptiveJobGraphGenerator.getJobGraph().getVerticesSortedTopologicallyFromSources();
@@ -3057,19 +3053,14 @@ class AdaptiveJobGraphManagerTest {
                         AdaptiveJobGraphManager.GenerateMode.LAZILY);
         try {
             List<JobVertex> jobVertices = adaptiveJobGraphGenerator.initializeJobGraph();
+
             while (!adaptiveJobGraphGenerator.isStreamGraphConversionFinished()) {
-                List<StreamEdge> streamEdges = new ArrayList<>();
+                List<JobVertex> newJobVertices = new ArrayList<>();
                 for (JobVertex jobVertex : jobVertices) {
-                    streamEdges.addAll(
-                            adaptiveJobGraphGenerator.findOutputEdgesByVertexId(jobVertex.getID()));
+                    newJobVertices =
+                            adaptiveJobGraphGenerator.onJobVertexFinished(jobVertex.getID());
                 }
-                List<StreamNode> streamNodes = new ArrayList<>();
-                for (StreamEdge streamEdge : streamEdges) {
-                    StreamNode streamNode = streamGraph.getStreamNode(streamEdge.getTargetId());
-                    streamNodes.add(streamNode);
-                }
-                jobVertices.addAll(
-                        adaptiveJobGraphGenerator.createJobVerticesAndUpdateGraph(streamNodes));
+                jobVertices = newJobVertices;
             }
         } finally {
             serializationExecutor.shutdown();

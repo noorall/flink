@@ -23,6 +23,7 @@ import org.apache.flink.api.common.ExecutionConfig;
 import org.apache.flink.api.common.operators.ResourceSpec;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.IllegalConfigurationException;
 import org.apache.flink.runtime.OperatorIDPair;
 import org.apache.flink.runtime.jobgraph.InputOutputFormatContainer;
 import org.apache.flink.runtime.jobgraph.InputOutputFormatVertex;
@@ -202,6 +203,16 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
         this.jobGraph.setSavepointRestoreSettings(streamGraph.getSavepointRestoreSettings());
         this.jobGraph.setJobType(streamGraph.getJobType());
         this.jobGraph.setDynamic(streamGraph.isDynamic());
+        this.jobGraph.setJobConfiguration(streamGraph.getJobConfiguration());
+
+        // set the ExecutionConfig last when it has been finalized
+        try {
+            jobGraph.setExecutionConfig(streamGraph.getExecutionConfig());
+        } catch (IOException e) {
+            throw new IllegalConfigurationException(
+                    "Could not serialize the ExecutionConfig."
+                            + "This indicates that non-serializable types (like custom serializers) were registered");
+        }
 
         this.jobGraph.enableApproximateLocalRecovery(
                 streamGraph.getCheckpointConfig().isApproximateLocalRecoveryEnabled());
@@ -252,6 +263,9 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
     @Override
     public List<JobVertex> onJobVertexFinished(JobVertexID finishedJobVertexId) {
         this.finishedJobVertices.add(finishedJobVertexId);
+        if(generateMode == GenerateMode.EAGERLY){
+            return Collections.emptyList();
+        }
         List<StreamNode> streamNodes = new ArrayList<>();
         for (StreamEdge outEdge : findOutputEdgesByVertexId(finishedJobVertexId)) {
             streamNodes.add(outEdge.getTargetNode());
@@ -259,9 +273,7 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
         return createJobVerticesAndUpdateGraph(streamNodes);
     }
 
-    //    @Override
-    //    @VisibleForTesting
-    public List<JobVertex> createJobVerticesAndUpdateGraph(List<StreamNode> streamNodes) {
+    private List<JobVertex> createJobVerticesAndUpdateGraph(List<StreamNode> streamNodes) {
         Map<Integer, List<StreamEdge>> nonChainableOutputsCache = new LinkedHashMap<>();
         Map<Integer, List<StreamEdge>> nonChainedInputsCache = new LinkedHashMap<>();
 
@@ -822,7 +834,7 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
                         entry -> {
                             Integer startNodeId = entry.getKey();
                             OperatorChainInfo chainInfo = entry.getValue();
-                            if (isReadyToCreateJobVertex(chainInfo)) {
+                            if (isReadyToCreateJobVertex(chainInfo) || generateMode.equals(GenerateMode.EAGERLY)) {
                                 chainEntryPoints.put(startNodeId, chainInfo);
                                 // we cache the outputs here, and set the config later
                                 chainInfo
@@ -881,9 +893,6 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
                         sourceNodeId, new ChainedSourceInfo(operatorConfig, inputConfig));
                 chainInfo.recordChainedNode(sourceNodeId);
                 chainInfo.addCoordinatorProvider(coordinatorProvider);
-                if (startNodeId == 35) {
-                    int a = -1;
-                }
                 LOG.info(
                         "chainInfo with startNodeId {} has been put in the pending queue.",
                         startNodeId);
@@ -893,9 +902,6 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
                         sourceNodeId);
                 pendingSourceChainInfos.computeIfAbsent(
                         sourceNodeId, ignored -> new OperatorChainInfo(sourceNodeId, streamGraph));
-                if (sourceNodeId == 35) {
-                    int a = -1;
-                }
             }
         }
     }
