@@ -173,7 +173,7 @@ class SingleInputGateTest extends InputGateTestBase {
 
             // after setup
             assertThat(inputGate.getBufferPool()).isNotNull();
-            assertThat(inputGate.getBufferPool().getExpectedNumberOfMemorySegments()).isEqualTo(1);
+            assertThat(inputGate.getBufferPool().getNumberOfRequiredMemorySegments()).isEqualTo(1);
             for (InputChannel inputChannel : inputGate.inputChannels()) {
                 if (inputChannel instanceof RemoteRecoveredInputChannel) {
                     assertThat(
@@ -190,7 +190,7 @@ class SingleInputGateTest extends InputGateTestBase {
 
             inputGate.convertRecoveredInputChannels();
             assertThat(inputGate.getBufferPool()).isNotNull();
-            assertThat(inputGate.getBufferPool().getExpectedNumberOfMemorySegments()).isEqualTo(1);
+            assertThat(inputGate.getBufferPool().getNumberOfRequiredMemorySegments()).isEqualTo(1);
             for (InputChannel inputChannel : inputGate.inputChannels()) {
                 if (inputChannel instanceof RemoteInputChannel) {
                     assertThat(((RemoteInputChannel) inputChannel).getNumberOfAvailableBuffers())
@@ -975,8 +975,7 @@ class SingleInputGateTest extends InputGateTestBase {
         // test setup
         gate.setup();
         assertThat(gate.getBufferPool()).isNotNull();
-        assertThat(gate.getBufferPool().getExpectedNumberOfMemorySegments())
-                .isEqualTo(gate.getInputChannels().size() * 2 + 1);
+        assertThat(gate.getBufferPool().getNumberOfRequiredMemorySegments()).isEqualTo(1);
 
         gate.finishReadRecoveredState();
         while (!gate.getStateConsumedFuture().isDone()) {
@@ -1232,8 +1231,8 @@ class SingleInputGateTest extends InputGateTestBase {
     void testCalculateInputGateNetworkBuffers() throws Exception {
         verifyBuffersInBufferPool(true, 2);
         verifyBuffersInBufferPool(false, 2);
-        verifyBuffersInBufferPool(true, 100);
-        verifyBuffersInBufferPool(false, 100);
+        verifyBuffersInBufferPool(true, 500);
+        verifyBuffersInBufferPool(false, 500);
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -1277,17 +1276,20 @@ class SingleInputGateTest extends InputGateTestBase {
             }
         }
 
-        int maxBuffersPerGate = 2 * partitionIds.length * subpartitionRandSize + 8;
-        int minBuffersPerGate;
-        if (maxBuffersPerGate >= expectMaxRequiredBuffersPerGate.get()) {
-            minBuffersPerGate = expectMaxRequiredBuffersPerGate.get();
+        int targetTotalBuffersPerGate = 2 * partitionIds.length * subpartitionRandSize + 8;
+        int requiredFloatingBuffersPerGate;
+        int totalFloatingBuffersPerGate;
+        if (targetTotalBuffersPerGate >= expectMaxRequiredBuffersPerGate.get()) {
+            requiredFloatingBuffersPerGate = expectMaxRequiredBuffersPerGate.get();
+            totalFloatingBuffersPerGate = targetTotalBuffersPerGate;
         } else {
-            minBuffersPerGate = 2 * partitionIds.length * subpartitionRandSize + 1;
+            requiredFloatingBuffersPerGate = 1;
+            totalFloatingBuffersPerGate = 8;
         }
-        assertThat(gate.getBufferPool().getExpectedNumberOfMemorySegments())
-                .isEqualTo(minBuffersPerGate);
+        assertThat(gate.getBufferPool().getNumberOfRequiredMemorySegments())
+                .isEqualTo(requiredFloatingBuffersPerGate);
         assertThat(gate.getBufferPool().getMaxNumberOfMemorySegments())
-                .isEqualTo(maxBuffersPerGate);
+                .isEqualTo(totalFloatingBuffersPerGate);
     }
 
     private static List<InputChannel> getInputChannelsInPartition(
