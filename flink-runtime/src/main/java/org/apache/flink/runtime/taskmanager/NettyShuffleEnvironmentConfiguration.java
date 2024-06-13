@@ -49,7 +49,6 @@ import java.util.Optional;
 import static org.apache.flink.api.common.BatchShuffleMode.ALL_EXCHANGES_HYBRID_FULL;
 import static org.apache.flink.api.common.BatchShuffleMode.ALL_EXCHANGES_HYBRID_SELECTIVE;
 import static org.apache.flink.configuration.ExecutionOptions.BATCH_SHUFFLE_MODE;
-import static org.apache.flink.configuration.NettyShuffleEnvironmentOptions.NETWORK_HYBRID_SHUFFLE_ENABLE_MEMORY_DECOUPLING;
 import static org.apache.flink.configuration.NettyShuffleEnvironmentOptions.NETWORK_HYBRID_SHUFFLE_ENABLE_NEW_MODE;
 import static org.apache.flink.configuration.NettyShuffleEnvironmentOptions.NETWORK_HYBRID_SHUFFLE_REMOTE_STORAGE_BASE_PATH;
 import static org.apache.flink.util.Preconditions.checkArgument;
@@ -422,9 +421,6 @@ public class NettyShuffleEnvironmentConfiguration {
                                     pageSize,
                                     configuration.get(
                                             NETWORK_HYBRID_SHUFFLE_REMOTE_STORAGE_BASE_PATH))
-                            .setMemoryDecouplingEnabled(
-                                    configuration.get(
-                                            NETWORK_HYBRID_SHUFFLE_ENABLE_MEMORY_DECOUPLING))
                             .build();
         }
         return new NettyShuffleEnvironmentConfiguration(

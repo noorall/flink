@@ -62,9 +62,7 @@ public class InputGateSpecUtils {
                         numInputChannels,
                         expectedBuffersPerGate);
         int minBuffersPerGate =
-                partitionType.isHybridResultPartition()
-                                && enableTieredStorage
-                                && tieredStorageConfiguration.getMemoryDecouplingEnabled()
+                partitionType.isHybridResultPartition() && enableTieredStorage
                         ? tieredStorageConfiguration.getMinBuffersPerGate()
                         : expectedBuffersPerGate;
         expectedBuffersPerGate = Math.max(minBuffersPerGate, expectedBuffersPerGate);
@@ -117,6 +115,7 @@ public class InputGateSpecUtils {
         return numInputChannels * configuredNetworkBuffersPerChannel + 1;
     }
 
+    /** */
     private static int getMaxBuffersPerGate(
             int numInputChannels,
             int configuredNetworkBuffersPerChannel,
