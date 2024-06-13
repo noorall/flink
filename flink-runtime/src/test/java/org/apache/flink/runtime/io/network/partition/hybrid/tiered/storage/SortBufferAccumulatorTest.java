@@ -231,7 +231,7 @@ class SortBufferAccumulatorTest {
 
         SortBufferAccumulator bufferAccumulator =
                 new SortBufferAccumulator(
-                        numSubpartitions, numBuffers, BUFFER_SIZE_BYTES, 0L, memoryManager, true);
+                        numSubpartitions, numBuffers, BUFFER_SIZE_BYTES, memoryManager, true);
         bufferAccumulator.setup(
                 ((subpartition, buffer, numRemainingBuffers) -> buffer.recycleBuffer()));
 

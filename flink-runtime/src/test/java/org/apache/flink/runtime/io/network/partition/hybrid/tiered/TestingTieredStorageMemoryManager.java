@@ -30,6 +30,7 @@ import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 /** Test implementation for {@link TieredStorageMemoryManager}. */
 public class TestingTieredStorageMemoryManager implements TieredStorageMemoryManager {
@@ -140,6 +141,7 @@ public class TestingTieredStorageMemoryManager implements TieredStorageMemoryMan
                 (oldOwner, newOwner, buffer) -> {};
 
         private Runnable releaseRunnable = () -> {};
+        private Supplier<Integer> getBufferPoolSizeSupplier;
 
         public Builder() {}
 
