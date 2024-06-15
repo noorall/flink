@@ -83,6 +83,7 @@ public final class JobSubmitHandler
             @Nonnull HandlerRequest<JobSubmitRequestBody> request,
             @Nonnull DispatcherGateway gateway)
             throws RestHandlerException {
+        log.info("Received job submit request.");
         final Collection<File> uploadedFiles = request.getUploadedFiles();
         final Map<String, Path> nameToFile =
                 uploadedFiles.stream()
@@ -196,6 +197,7 @@ public final class JobSubmitHandler
         return logicalGraphFuture.thenCombine(
                 blobServerPortFuture,
                 (LogicalGraph logicalGraph, Integer blobServerPort) -> {
+                    log.info("Start upload graph.");
                     final InetSocketAddress address =
                             new InetSocketAddress(gateway.getHostname(), blobServerPort);
                     try {
@@ -219,6 +221,7 @@ public final class JobSubmitHandler
                                         HttpResponseStatus.INTERNAL_SERVER_ERROR,
                                         e));
                     }
+                    log.info("Finish upload job graph.");
                     return logicalGraph;
                 });
     }
