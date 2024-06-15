@@ -77,6 +77,7 @@ import org.apache.flink.runtime.scheduler.strategy.ExecutionVertexID;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingStrategyFactory;
 import org.apache.flink.runtime.shuffle.ShuffleMaster;
 import org.apache.flink.runtime.source.coordinator.SourceCoordinator;
+import org.apache.flink.streaming.api.operators.collect.JobVertexNotInitailizationResponse;
 import org.apache.flink.util.FlinkException;
 import org.apache.flink.util.concurrent.FutureUtils;
 import org.apache.flink.util.concurrent.ScheduledExecutor;
@@ -299,7 +300,9 @@ public class AdaptiveBatchScheduler extends DefaultScheduler implements JobGraph
     public CompletableFuture<CoordinationResponse> deliverCoordinationRequestToCoordinator(
             int streamNodeId, CoordinationRequest request) throws FlinkException {
         OperatorID operatorId = adaptiveExecutionHandler.findOperatorIdByStreamNodeId(streamNodeId);
-        checkNotNull(operatorId);
+        if (operatorId == null) {
+            return CompletableFuture.completedFuture(JobVertexNotInitailizationResponse.INSTANCE);
+        }
 
         return operatorCoordinatorHandler.deliverCoordinationRequestToCoordinator(
                 operatorId, request);

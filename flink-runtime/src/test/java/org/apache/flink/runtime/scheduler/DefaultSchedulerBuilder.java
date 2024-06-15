@@ -390,7 +390,8 @@ public class DefaultSchedulerBuilder {
                 executionJobVertexFactory,
                 isDynamicGraph
                         && hybridPartitionDataConsumeConstraint
-                                == HybridPartitionDataConsumeConstraint.ONLY_FINISHED_PRODUCERS);
+                                == HybridPartitionDataConsumeConstraint.ONLY_FINISHED_PRODUCERS,
+                -1);
     }
 
     public static VertexParallelismAndInputInfosDecider createCustomParallelismDecider(

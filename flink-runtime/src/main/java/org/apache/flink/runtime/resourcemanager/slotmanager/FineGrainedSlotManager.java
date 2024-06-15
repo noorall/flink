@@ -365,7 +365,7 @@ public class FineGrainedSlotManager implements SlotManager {
             if (!matchedPendingTaskManagerOptional.isPresent()
                     && isMaxTotalResourceExceededAfterAdding(totalResourceProfile)) {
 
-                LOG.info(
+                LOG.trace(
                         "Can not register task manager {}. The max total resource limitation <{}, {}> is reached.",
                         taskExecutorConnection.getResourceID(),
                         maxTotalCpu,
@@ -706,7 +706,7 @@ public class FineGrainedSlotManager implements SlotManager {
                 lines.add("\t\tTotal:     " + taskManager.getTotalResource());
             }
         }
-        LOG.info(lines.toString());
+        LOG.trace(lines.toString());
     }
 
     private void allocateSlotsAccordingTo(Map<JobID, Map<InstanceID, ResourceCounter>> result) {
@@ -865,7 +865,7 @@ public class FineGrainedSlotManager implements SlotManager {
     private boolean allocateResource(PendingTaskManager pendingTaskManager) {
         Preconditions.checkState(resourceAllocator.isSupported());
         if (isMaxTotalResourceExceededAfterAdding(pendingTaskManager.getTotalResourceProfile())) {
-            LOG.info(
+            LOG.trace(
                     "Could not allocate {}. Max total resource limitation <{}, {}> is reached.",
                     pendingTaskManager,
                     maxTotalCpu,

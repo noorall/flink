@@ -139,6 +139,9 @@ public class CollectResultFetcher<T> {
                 CollectCoordinationResponse response;
                 try {
                     response = sendRequest(buffer.getVersion(), requestOffset);
+                    if (response instanceof JobVertexNotInitailizationResponse) {
+                        continue;
+                    }
                 } catch (Exception e) {
                     if (ExceptionUtils.findThrowableWithMessage(
                                     e, UnavailableDispatcherOperationException.class.getName())

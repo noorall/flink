@@ -157,6 +157,11 @@ public class DefaultVertexParallelismAndInputInfosDecider
             if (vertexInitialParallelism == ExecutionConfig.PARALLELISM_DEFAULT
                     && areAllInputsAllToAll(consumedResults)
                     && !areAllInputsBroadcast(consumedResults)) {
+                LOG.info(
+                        "### DEBUG ### try decideParallelismAndEvenlyDistributeData for {}, the consumed results size is {}({})",
+                        jobVertexId,
+                        consumedResults.size(),
+                        consumedResults);
                 return decideParallelismAndEvenlyDistributeData(
                         jobVertexId,
                         consumedResults,
@@ -164,6 +169,11 @@ public class DefaultVertexParallelismAndInputInfosDecider
                         minParallelism,
                         maxParallelism);
             } else {
+                LOG.info(
+                        "### DEBUG ### try decideParallelismAndEvenlyDistributeSubpartitions for {}, the consumed results size is {}({})",
+                        jobVertexId,
+                        consumedResults.size(),
+                        consumedResults);
                 return decideParallelismAndEvenlyDistributeSubpartitions(
                         jobVertexId,
                         consumedResults,

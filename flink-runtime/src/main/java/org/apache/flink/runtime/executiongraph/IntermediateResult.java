@@ -30,12 +30,12 @@ import org.apache.flink.runtime.jobgraph.IntermediateDataSet;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
 import org.apache.flink.runtime.jobgraph.JobEdge;
+import org.apache.flink.runtime.jobgraph.JobVertex;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
+import org.apache.flink.runtime.scheduler.adaptivebatch.AdaptiveBatchScheduler;
 import org.apache.flink.runtime.scheduler.strategy.ConsumedPartitionGroup;
 import org.apache.flink.streaming.api.graph.StreamEdge;
-import org.apache.flink.streaming.api.graph.StreamNode;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -74,8 +74,6 @@ public class IntermediateResult {
 
     private final Map<ConsumedPartitionGroup, CachedShuffleDescriptors> shuffleDescriptorCache;
 
-    private final List<StreamNode> consumerStreamNodes = new ArrayList<>();
-
     public IntermediateResult(
             IntermediateDataSet intermediateDataSet,
             ExecutionJobVertex producer,
@@ -103,12 +101,6 @@ public class IntermediateResult {
         this.resultType = checkNotNull(resultType);
 
         this.shuffleDescriptorCache = new HashMap<>();
-
-        if (intermediateDataSet.isDynamic()) {
-            intermediateDataSet
-                    .getStreamEdges()
-                    .forEach(streamEdge -> consumerStreamNodes.add(streamEdge.getTargetNode()));
-        }
     }
 
     public boolean isAllConsumerVerticesCreated() {
@@ -193,11 +185,11 @@ public class IntermediateResult {
     int getConsumersParallelism() {
         List<JobEdge> consumers = intermediateDataSet.getConsumers();
         if (consumers.isEmpty()) {
-            List<StreamEdge> streamEdges = intermediateDataSet.getStreamEdges();
-            checkState(!streamEdges.isEmpty());
+            List<StreamEdge> consumerStreamEdges = intermediateDataSet.getConsumerStreamEdges();
+            checkState(!consumerStreamEdges.isEmpty());
 
-            int consumersParallelism = streamEdges.get(0).getTargetNode().getParallelism();
-            if (streamEdges.size() == 1) {
+            int consumersParallelism = consumerStreamEdges.get(0).getTargetNode().getParallelism();
+            if (consumerStreamEdges.size() == 1) {
                 return consumersParallelism;
             }
 
@@ -206,9 +198,9 @@ public class IntermediateResult {
             // graph), the parallelisms will all be -1 (parallelism not decided yet)
             // 2. for vertices that are initially assigned a parallelism, the parallelisms must be
             // the same, which is guaranteed at compilation phase
-            for (StreamNode streamNode : consumerStreamNodes) {
+            for (StreamEdge edge : consumerStreamEdges) {
                 checkState(
-                        consumersParallelism == streamNode.getParallelism(),
+                        consumersParallelism == edge.getTargetNode().getParallelism(),
                         "Consumers must have the same parallelism.");
             }
             return consumersParallelism;
@@ -237,20 +229,29 @@ public class IntermediateResult {
     int getConsumersMaxParallelism() {
         List<JobEdge> consumers = intermediateDataSet.getConsumers();
         if (consumers.isEmpty()) {
-            List<StreamEdge> streamEdges = intermediateDataSet.getStreamEdges();
-            checkState(!streamEdges.isEmpty());
+            List<StreamEdge> consumerStreamEdges = intermediateDataSet.getConsumerStreamEdges();
+            checkState(!consumerStreamEdges.isEmpty());
 
-            int consumersMaxParallelism = streamEdges.get(0).getTargetNode().getMaxParallelism();
-            if (streamEdges.size() == 1) {
-                return consumersMaxParallelism;
-            }
-
-            // sanity check, all consumer nodes must have the same max parallelism
-            for (StreamNode streamNode : consumerStreamNodes) {
+            int consumersMaxParallelism =
+                    consumerStreamEdges.get(0).getTargetNode().getMaxParallelism();
+            // sanity check, all consumer vertices must have the same parallelism:
+            // 1. for vertices that are not assigned a parallelism initially (for example, dynamic
+            // graph), the parallelisms will all be -1 (parallelism not decided yet)
+            // 2. for vertices that are initially assigned a parallelism, the parallelisms must be
+            // the same, which is guaranteed at compilation phase
+            for (StreamEdge edge : consumerStreamEdges) {
                 checkState(
-                        consumersMaxParallelism == streamNode.getMaxParallelism(),
+                        consumersMaxParallelism == edge.getTargetNode().getMaxParallelism(),
                         "Consumers must have the same max parallelism.");
             }
+
+            if (consumersMaxParallelism == JobVertex.MAX_PARALLELISM_DEFAULT) {
+                consumersMaxParallelism =
+                        AdaptiveBatchScheduler.computeMaxParallelism(
+                                consumerStreamEdges.get(0).getTargetNode().getParallelism(),
+                                producer.getGraph().getDefaultMaxParallelism());
+            }
+
             return consumersMaxParallelism;
         }
 

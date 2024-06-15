@@ -109,6 +109,10 @@ public interface InternalExecutionGraphAccessor {
 
     boolean isDynamic();
 
+    default int getDefaultMaxParallelism() {
+        throw new UnsupportedOperationException();
+    }
+
     ExecutionGraphID getExecutionGraphID();
 
     /** Get the shuffle descriptors of the cluster partitions ordered by partition number. */

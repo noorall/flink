@@ -307,6 +307,8 @@ public class DefaultExecutionGraph implements ExecutionGraph, InternalExecutionG
 
     private final TaskDeploymentDescriptorFactory taskDeploymentDescriptorFactory;
 
+    private final int defaultMaxParallelism;
+
     // --------------------------------------------------------------------------------------------
     //   Constructors
     // --------------------------------------------------------------------------------------------
@@ -332,7 +334,8 @@ public class DefaultExecutionGraph implements ExecutionGraph, InternalExecutionG
             ExecutionJobVertex.Factory executionJobVertexFactory,
             List<JobStatusHook> jobStatusHooks,
             MarkPartitionFinishedStrategy markPartitionFinishedStrategy,
-            TaskDeploymentDescriptorFactory taskDeploymentDescriptorFactory) {
+            TaskDeploymentDescriptorFactory taskDeploymentDescriptorFactory,
+            int defaultMaxParallelism) {
 
         this.jobType = jobType;
         this.executionGraphId = new ExecutionGraphID();
@@ -402,6 +405,8 @@ public class DefaultExecutionGraph implements ExecutionGraph, InternalExecutionG
         this.markPartitionFinishedStrategy = markPartitionFinishedStrategy;
 
         this.taskDeploymentDescriptorFactory = checkNotNull(taskDeploymentDescriptorFactory);
+
+        this.defaultMaxParallelism = defaultMaxParallelism;
 
         LOG.info(
                 "Created execution graph {} for job {}.",
@@ -1754,6 +1759,11 @@ public class DefaultExecutionGraph implements ExecutionGraph, InternalExecutionG
     @Override
     public boolean isDynamic() {
         return isDynamic;
+    }
+
+    @Override
+    public int getDefaultMaxParallelism() {
+        return defaultMaxParallelism;
     }
 
     @Override

@@ -46,10 +46,6 @@ public class IntermediateDataSet implements java.io.Serializable {
 
     private final List<StreamEdge> streamEdges = new ArrayList<>();
 
-    private boolean dynamic;
-
-    private boolean isAllConsumerVerticesCreated = true;
-
     // The type of partition to use at runtime
     private final ResultPartitionType resultType;
 
@@ -80,24 +76,12 @@ public class IntermediateDataSet implements java.io.Serializable {
         return this.consumers;
     }
 
-    public List<StreamEdge> getStreamEdges() {
+    public List<StreamEdge> getConsumerStreamEdges() {
         return streamEdges;
-    }
-
-    public void setDynamic(boolean dynamic) {
-        this.dynamic = dynamic;
-    }
-
-    public boolean isDynamic() {
-        return dynamic;
     }
 
     public boolean isAllConsumerVerticesCreated() {
         return streamEdges.size() == consumers.size();
-    }
-
-    public void setAllConsumerVerticesCreated(boolean allConsumerVerticesCreated) {
-        isAllConsumerVerticesCreated = allConsumerVerticesCreated;
     }
 
     public boolean isBroadcast() {

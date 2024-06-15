@@ -97,7 +97,8 @@ public class DefaultExecutionGraphBuilder {
             ExecutionJobVertex.Factory executionJobVertexFactory,
             MarkPartitionFinishedStrategy markPartitionFinishedStrategy,
             boolean nonFinishedHybridPartitionShouldBeUnknown,
-            JobManagerJobMetricGroup jobManagerJobMetricGroup)
+            JobManagerJobMetricGroup jobManagerJobMetricGroup,
+            int defaultMaxParallelism)
             throws JobExecutionException, JobException {
 
         checkNotNull(jobGraph, "job graph cannot be null");
@@ -164,7 +165,8 @@ public class DefaultExecutionGraphBuilder {
                         executionJobVertexFactory,
                         jobGraph.getJobStatusHooks(),
                         markPartitionFinishedStrategy,
-                        taskDeploymentDescriptorFactory);
+                        taskDeploymentDescriptorFactory,
+                        defaultMaxParallelism);
 
         // set the basic properties
 

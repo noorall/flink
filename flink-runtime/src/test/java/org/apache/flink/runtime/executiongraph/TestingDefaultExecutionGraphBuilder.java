@@ -82,6 +82,7 @@ public class TestingDefaultExecutionGraphBuilder {
             ResultPartitionType::isBlockingOrBlockingPersistentResultPartition;
 
     private boolean nonFinishedHybridPartitionShouldBeUnknown = false;
+    private int defaultMaxParallelism;
 
     private TestingDefaultExecutionGraphBuilder() {}
 
@@ -199,7 +200,8 @@ public class TestingDefaultExecutionGraphBuilder {
                 executionJobVertexFactory,
                 markPartitionFinishedStrategy,
                 nonFinishedHybridPartitionShouldBeUnknown,
-                UnregisteredMetricGroups.createUnregisteredJobManagerJobMetricGroup());
+                UnregisteredMetricGroups.createUnregisteredJobManagerJobMetricGroup(),
+                defaultMaxParallelism);
     }
 
     public DefaultExecutionGraph build(ScheduledExecutorService executorService)

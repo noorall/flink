@@ -37,6 +37,9 @@ import org.apache.flink.streaming.api.graph.StreamGraph;
 import org.apache.flink.util.AbstractID;
 import org.apache.flink.util.function.FunctionUtils;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import javax.annotation.Nonnull;
 
 import java.util.Set;
@@ -58,6 +61,8 @@ public class AbstractSessionClusterExecutor<
                 ClusterID, ClientFactory extends ClusterClientFactory<ClusterID>>
         implements CacheSupportedPipelineExecutor {
 
+    private static Logger logger = LoggerFactory.getLogger(AbstractSessionClusterExecutor.class);
+
     private final ClientFactory clusterClientFactory;
 
     public AbstractSessionClusterExecutor(@Nonnull final ClientFactory clusterClientFactory) {
@@ -77,10 +82,12 @@ public class AbstractSessionClusterExecutor<
                     LogicalGraph.createLogicalGraph(
                             PipelineExecutorUtils.getStreamGraph(pipeline, configuration));
         } else {
+            logger.info("Start build job graph");
             logicalGraph =
                     LogicalGraph.createLogicalGraph(
                             PipelineExecutorUtils.getJobGraph(
                                     pipeline, configuration, userCodeClassloader));
+            logger.info("Finish build job graph");
         }
 
         try (final ClusterDescriptor<ClusterID> clusterDescriptor =

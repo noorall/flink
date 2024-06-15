@@ -33,6 +33,7 @@ import org.apache.flink.runtime.operators.coordination.OperatorCoordinator;
 import org.apache.flink.runtime.operators.coordination.OperatorCoordinatorHolder;
 import org.apache.flink.runtime.operators.coordination.OperatorEvent;
 import org.apache.flink.runtime.operators.coordination.TaskNotRunningException;
+import org.apache.flink.streaming.api.operators.collect.JobVertexNotInitailizationResponse;
 import org.apache.flink.util.ExceptionUtils;
 import org.apache.flink.util.FlinkException;
 import org.apache.flink.util.FlinkRuntimeException;
@@ -135,10 +136,7 @@ public class DefaultOperatorCoordinatorHandler implements OperatorCoordinatorHan
 
         final OperatorCoordinatorHolder coordinatorHolder = coordinatorMap.get(operator);
         if (coordinatorHolder == null) {
-            throw new FlinkException(
-                    "Coordinator of operator "
-                            + operator
-                            + " does not exist or the job vertex this operator belongs to is not initialized.");
+            return CompletableFuture.completedFuture(JobVertexNotInitailizationResponse.INSTANCE);
         }
 
         final OperatorCoordinator coordinator = coordinatorHolder.coordinator();

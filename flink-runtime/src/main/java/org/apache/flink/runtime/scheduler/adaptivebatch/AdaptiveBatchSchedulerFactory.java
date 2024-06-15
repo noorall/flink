@@ -220,6 +220,9 @@ public class AdaptiveBatchSchedulerFactory implements SchedulerNGFactory {
                 getOrDecideHybridPartitionDataConsumeConstraint(
                         jobMasterConfiguration, enableSpeculativeExecution);
 
+        int defaultMaxParallelism =
+                getDefaultMaxParallelism(jobMasterConfiguration, executionConfig);
+
         final ExecutionGraphFactory executionGraphFactory =
                 new DefaultExecutionGraphFactory(
                         jobMasterConfiguration,
@@ -234,27 +237,17 @@ public class AdaptiveBatchSchedulerFactory implements SchedulerNGFactory {
                         partitionTracker,
                         true,
                         createExecutionJobVertexFactory(enableSpeculativeExecution),
-                        hybridPartitionDataConsumeConstraint == ONLY_FINISHED_PRODUCERS);
+                        hybridPartitionDataConsumeConstraint == ONLY_FINISHED_PRODUCERS,
+                        defaultMaxParallelism);
 
         final SchedulingStrategyFactory schedulingStrategyFactory =
                 new VertexwiseSchedulingStrategy.Factory(
                         loadInputConsumableDeciderFactory(hybridPartitionDataConsumeConstraint));
 
-        int defaultMaxParallelism =
-                getDefaultMaxParallelism(jobMasterConfiguration, executionConfig);
-
         AdaptiveExecutionHandler handler;
         if (BatchExecutionOptions.enableAdaptiveExecution(jobMasterConfiguration)) {
             checkState(jobMasterConfiguration.get(DeploymentOptions.SUBMIT_STREAM_GRAPH_ENABLED));
             StreamGraph streamGraph = logicalGraph.getStreamGraph();
-
-            for (StreamNode streamNode : streamGraph.getStreamNodes()) {
-                if (streamNode.getMaxParallelism() == -1) {
-                    streamNode.setMaxParallelism(
-                            AdaptiveBatchScheduler.computeMaxParallelism(
-                                    streamNode.getParallelism(), defaultMaxParallelism));
-                }
-            }
 
             final ExecutorService serializationExecutor =
                     Executors.newFixedThreadPool(
