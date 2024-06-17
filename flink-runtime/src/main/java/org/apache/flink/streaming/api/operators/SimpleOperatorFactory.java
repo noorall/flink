@@ -72,13 +72,6 @@ public class SimpleOperatorFactory<OUT> extends AbstractStreamOperatorFactory<OU
         return operator;
     }
 
-    public void setOperator(StreamOperator<OUT> operator) {
-        this.operator = operator;
-        if (operator instanceof SetupableStreamOperator) {
-            this.chainingStrategy = ((SetupableStreamOperator) operator).getChainingStrategy();
-        }
-    }
-
     @SuppressWarnings("unchecked")
     @Override
     public <T extends StreamOperator<OUT>> T createStreamOperator(

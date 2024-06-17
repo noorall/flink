@@ -452,6 +452,9 @@ object LongHashJoinGenerator {
                                   |  return $INPUT_SELECTION.FIRST;
                                   |}
          """.stripMargin),
+      switchBroadcastSideCode = Some(s"""
+                                      |$leftIsBuildTerm = leftIsBuild;
+       """.stripMargin),
       endInputCode1 = Some(s"""
                               |LOG.info("Finish build phase.");
                               |table.endBuild();

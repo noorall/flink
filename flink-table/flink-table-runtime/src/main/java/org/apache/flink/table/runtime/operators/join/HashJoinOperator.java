@@ -100,10 +100,6 @@ public abstract class HashJoinOperator extends TableStreamOperator<RowData>
         this.sortMergeJoinFunction = parameter.sortMergeJoinFunction;
     }
 
-    public void reApply(boolean leftIsBuild) {
-        this.leftIsBuild = leftIsBuild;
-    }
-
     @Override
     public void open() throws Exception {
         super.open();

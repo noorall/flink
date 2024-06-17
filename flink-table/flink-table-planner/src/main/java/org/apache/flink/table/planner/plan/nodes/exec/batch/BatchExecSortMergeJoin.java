@@ -30,6 +30,7 @@ import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeConfig;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeContext;
 import org.apache.flink.table.planner.plan.nodes.exec.InputProperty;
 import org.apache.flink.table.planner.plan.nodes.exec.SingleTransformationTranslator;
+import org.apache.flink.table.planner.plan.nodes.exec.spec.JoinSpec;
 import org.apache.flink.table.planner.plan.nodes.exec.utils.ExecNodeUtil;
 import org.apache.flink.table.planner.plan.utils.JoinUtil;
 import org.apache.flink.table.planner.plan.utils.SorMergeJoinOperatorUtil;
@@ -55,20 +56,23 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
 public class BatchExecSortMergeJoin extends ExecNodeBase<RowData>
         implements BatchExecNode<RowData>, SingleTransformationTranslator<RowData> {
 
+    private final ReadableConfig tableConfig;
+    private final JoinSpec joinSpec;
     private final FlinkJoinType joinType;
     private final int[] leftKeys;
     private final int[] rightKeys;
     private final boolean[] filterNulls;
     private final @Nullable RexNode nonEquiCondition;
     private final boolean leftIsSmaller;
+    private final InputProperty leftInputProperty;
+    private final InputProperty rightInputProperty;
+    private final RowType outputType;
+    private final String description;
 
     public BatchExecSortMergeJoin(
             ReadableConfig tableConfig,
             FlinkJoinType joinType,
-            int[] leftKeys,
-            int[] rightKeys,
-            boolean[] filterNulls,
-            @Nullable RexNode nonEquiCondition,
+            JoinSpec joinSpec,
             boolean leftIsSmaller,
             InputProperty leftInputProperty,
             InputProperty rightInputProperty,
@@ -81,15 +85,21 @@ public class BatchExecSortMergeJoin extends ExecNodeBase<RowData>
                 Arrays.asList(leftInputProperty, rightInputProperty),
                 outputType,
                 description);
+        this.tableConfig = tableConfig;
         this.joinType = checkNotNull(joinType);
-        this.leftKeys = checkNotNull(leftKeys);
-        this.rightKeys = checkNotNull(rightKeys);
-        this.filterNulls = checkNotNull(filterNulls);
+        this.joinSpec = joinSpec;
+        this.leftKeys = checkNotNull(joinSpec.getLeftKeys());
+        this.rightKeys = checkNotNull(joinSpec.getRightKeys());
+        this.filterNulls = checkNotNull(joinSpec.getFilterNulls());
         checkArgument(leftKeys.length > 0 && leftKeys.length == rightKeys.length);
         checkArgument(leftKeys.length == filterNulls.length);
 
-        this.nonEquiCondition = nonEquiCondition;
+        this.nonEquiCondition = joinSpec.getNonEquiCondition().orElse(null);
         this.leftIsSmaller = leftIsSmaller;
+        this.leftInputProperty = leftInputProperty;
+        this.rightInputProperty = rightInputProperty;
+        this.outputType = outputType;
+        this.description = description;
     }
 
     @Override
@@ -156,5 +166,23 @@ public class BatchExecSortMergeJoin extends ExecNodeBase<RowData>
                 rightInputTransform.getParallelism(),
                 managedMemory,
                 false);
+    }
+
+    public BatchExecAdaptiveJoin toAdaptiveJoin() {
+        return new BatchExecAdaptiveJoin(
+                tableConfig,
+                joinSpec,
+                24,
+                24,
+                200000,
+                200000,
+                leftIsSmaller,
+                false,
+                leftInputProperty,
+                rightInputProperty,
+                outputType,
+                description.replace("SortMergeJoin(", "AdaptiveJoin(originalJoin=[SortMergeJoin], "),
+                joinSpec.getNonEquiCondition().orElse(null),
+                1);
     }
 }

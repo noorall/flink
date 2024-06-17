@@ -27,8 +27,12 @@ import org.apache.flink.streaming.api.operators.StreamOperatorFactory;
 import org.apache.flink.table.api.config.ExecutionConfigOptions;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.planner.codegen.CodeGeneratorContext;
+import org.apache.flink.table.planner.codegen.LongHashJoinGenerator;
 import org.apache.flink.table.planner.codegen.ProjectionCodeGenerator;
 import org.apache.flink.table.planner.delegation.PlannerBase;
+import org.apache.flink.table.planner.plan.fusion.OpFusionCodegenSpecGenerator;
+import org.apache.flink.table.planner.plan.fusion.generator.TwoInputOpFusionCodegenSpecGenerator;
+import org.apache.flink.table.planner.plan.fusion.spec.HashJoinFusionCodegenSpec;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecEdge;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeBase;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeConfig;
@@ -67,7 +71,6 @@ public class BatchExecAdaptiveJoin extends ExecNodeBase<RowData>
     private final boolean tryDistinctBuildRow;
     private final RexNode condition;
     private final int originalJobType;
-    private final int maybeBroadcastJoinSide;
 
     public BatchExecAdaptiveJoin(
             ReadableConfig tableConfig,
@@ -83,8 +86,7 @@ public class BatchExecAdaptiveJoin extends ExecNodeBase<RowData>
             RowType outputType,
             String description,
             RexNode condition,
-            int originalJobType,
-            int maybeBroadcastJoinSide) {
+            int originalJobType) {
         super(
                 ExecNodeContext.newNodeId(),
                 ExecNodeContext.newContext(BatchExecAdaptiveJoin.class),
@@ -101,7 +103,6 @@ public class BatchExecAdaptiveJoin extends ExecNodeBase<RowData>
         this.tryDistinctBuildRow = tryDistinctBuildRow;
         this.condition = condition;
         this.originalJobType = originalJobType;
-        this.maybeBroadcastJoinSide = maybeBroadcastJoinSide;
     }
 
     @Override
@@ -232,30 +233,70 @@ public class BatchExecAdaptiveJoin extends ExecNodeBase<RowData>
                         config.get(ExecutionConfigOptions.TABLE_EXEC_SPILL_COMPRESSION_BLOCK_SIZE)
                                 .getBytes();
 
-        SimpleOperatorFactory originalFactory;
-        SimpleOperatorFactory broadcastFactory = SimpleOperatorFactory.of(
-                HashJoinOperator.newHashJoinOperator(
-                        hashJoinType,
-                        leftIsBuild,
-                        compressionEnabled,
-                        compressionBlockSize,
-                        condFunc,
-                        reverseJoin,
-                        joinSpec.getFilterNulls(),
-                        buildProj,
-                        probeProj,
-                        tryDistinctBuildRow,
-                        buildRowSize,
-                        buildRowCount,
-                        probeRowCount,
-                        keyType,
-                        sortMergeJoinFunction));
+        StreamOperatorFactory originalFactory;
+        StreamOperatorFactory broadcastFactory;
+        if (LongHashJoinGenerator.support(hashJoinType, keyType, joinSpec.getFilterNulls())) {
+            broadcastFactory =
+                    LongHashJoinGenerator.gen(
+                            config,
+                            planner.getFlinkContext().getClassLoader(),
+                            hashJoinType,
+                            keyType,
+                            buildType,
+                            probeType,
+                            buildKeys,
+                            probeKeys,
+                            buildRowSize,
+                            buildRowCount,
+                            reverseJoin,
+                            condFunc,
+                            leftIsBuild,
+                            compressionEnabled,
+                            compressionBlockSize,
+                            sortMergeJoinFunction);
+        } else {
+            broadcastFactory = SimpleOperatorFactory.of(
+                    HashJoinOperator.newHashJoinOperator(
+                            hashJoinType,
+                            leftIsBuild,
+                            compressionEnabled,
+                            compressionBlockSize,
+                            condFunc,
+                            reverseJoin,
+                            joinSpec.getFilterNulls(),
+                            buildProj,
+                            probeProj,
+                            tryDistinctBuildRow,
+                            buildRowSize,
+                            buildRowCount,
+                            probeRowCount,
+                            keyType,
+                            sortMergeJoinFunction));
+        }
         if (originalJobType == 0) {
             originalFactory = broadcastFactory;
         } else {
             originalFactory = SimpleOperatorFactory.of(new SortMergeJoinOperator(sortMergeJoinFunction));
             buildTransform = leftInputTransform;
             probeTransform = rightInputTransform;
+        }
+
+        int maybeBroadcastJoinSide = -1;
+        switch (joinType) {
+            case FULL:
+                break;
+            case RIGHT:
+                maybeBroadcastJoinSide = 0;
+                break;
+            case LEFT:
+            case ANTI:
+            case SEMI:
+                maybeBroadcastJoinSide = 1;
+                break;
+            case INNER:
+                maybeBroadcastJoinSide = 2;
+                break;
+            default:
         }
         operator =
                 new AdaptiveJoinOperatorFactory<>(

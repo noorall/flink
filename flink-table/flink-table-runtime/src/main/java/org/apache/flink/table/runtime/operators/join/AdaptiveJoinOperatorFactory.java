@@ -18,15 +18,22 @@
 package org.apache.flink.table.runtime.operators.join;
 
 import org.apache.flink.annotation.Internal;
+import org.apache.flink.streaming.api.operators.AbstractStreamOperator;
 import org.apache.flink.streaming.api.operators.AbstractStreamOperatorFactory;
 import org.apache.flink.streaming.api.operators.AdaptiveJoin;
+import org.apache.flink.streaming.api.operators.SetupableStreamOperator;
 import org.apache.flink.streaming.api.operators.SimpleOperatorFactory;
 import org.apache.flink.streaming.api.operators.StreamOperator;
+import org.apache.flink.streaming.api.operators.StreamOperatorFactory;
+import org.apache.flink.streaming.api.operators.StreamOperatorParameters;
 import org.apache.flink.streaming.api.operators.SwitchBroadcastSide;
 import org.apache.flink.table.runtime.generated.GeneratedClass;
+import org.apache.flink.table.runtime.operators.CodeGenOperatorFactory;
 
 import java.util.ArrayList;
 import java.util.List;
+
+import static org.apache.flink.util.Preconditions.checkNotNull;
 
 /**
  * Adaptive join factory.
@@ -34,24 +41,22 @@ import java.util.List;
  * @param <OUT> The output type of the operator
  */
 @Internal
-public class AdaptiveJoinOperatorFactory<OUT> extends SimpleOperatorFactory<OUT>
+public class AdaptiveJoinOperatorFactory<OUT> extends AbstractStreamOperatorFactory<OUT>
         implements AdaptiveJoin {
+    private final List<PotentialBroadcastSide> potentialBroadcastJoinSides;
 
-    private List<PotentialBroadcastSide> potentialBroadcastJoinSides;
+    private final StreamOperatorFactory<OUT> broadcastFactory;
 
-    private GeneratedClass<? extends StreamOperator<OUT>> generatedClass;
-
-    private AbstractStreamOperatorFactory<OUT> originalFactory;
-
-    private AbstractStreamOperatorFactory<OUT> broadcastFactory;
+    private StreamOperatorFactory<OUT> finalFactory;
 
     private boolean isBroadcastJoin;
 
-    public AdaptiveJoinOperatorFactory(AbstractStreamOperatorFactory<OUT> originalFactory,
-                                       AbstractStreamOperatorFactory<OUT> broadcastFactory,
+    private boolean isLeftBuild;
+
+    public AdaptiveJoinOperatorFactory(StreamOperatorFactory<OUT> originalFactory,
+                                       StreamOperatorFactory<OUT> broadcastFactory,
                                        int maybeBroadcastJoinSide) {
-        super(((SimpleOperatorFactory<OUT>)originalFactory).getOperator());
-        this.originalFactory = originalFactory;
+        this.finalFactory = originalFactory;
         this.broadcastFactory = broadcastFactory;
         potentialBroadcastJoinSides = new ArrayList<>();
         if (maybeBroadcastJoinSide == 0) {
@@ -66,28 +71,40 @@ public class AdaptiveJoinOperatorFactory<OUT> extends SimpleOperatorFactory<OUT>
 
     @Override
     public void markAsBroadcastJoin(PotentialBroadcastSide side) {
-        StreamOperator<OUT> streamOperator;
+        isBroadcastJoin = true;
+        this.finalFactory = broadcastFactory;
         switch (side) {
             case LEFT:
-                streamOperator = ((SimpleOperatorFactory<OUT>)broadcastFactory).getOperator();
-                ((SwitchBroadcastSide) streamOperator)
-                        .activateBroadcastJoin(true);
-                isBroadcastJoin = true;
+                isLeftBuild = true;
                 break;
             case RIGHT:
-                streamOperator = ((SimpleOperatorFactory<OUT>)broadcastFactory).getOperator();
-                ((SwitchBroadcastSide) streamOperator)
-                        .activateBroadcastJoin(false);
-                isBroadcastJoin = true;
+                isLeftBuild = false;
                 break;
             default:
                 throw new IllegalArgumentException("invalid: " + side);
         }
-        setOperator(streamOperator);
     }
 
     @Override
     public List<PotentialBroadcastSide> getPotentialBroadcastJoinSides() {
         return potentialBroadcastJoinSides;
+    }
+
+    @Override
+    public <T extends StreamOperator<OUT>> T createStreamOperator(StreamOperatorParameters<OUT> parameters) {
+        if (finalFactory instanceof AbstractStreamOperatorFactory) {
+            ((AbstractStreamOperatorFactory) finalFactory).setProcessingTimeService(processingTimeService);
+        }
+        StreamOperator<OUT> operator = finalFactory.createStreamOperator(parameters);
+        if (isBroadcastJoin && operator instanceof SwitchBroadcastSide) {
+            ((SwitchBroadcastSide) operator)
+                    .activateBroadcastJoin(isLeftBuild);
+        }
+        return (T) operator;
+    }
+
+    @Override
+    public Class<? extends StreamOperator> getStreamOperatorClass(ClassLoader classLoader) {
+        return finalFactory.getStreamOperatorClass(classLoader);
     }
 }

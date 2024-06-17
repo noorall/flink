@@ -18,7 +18,7 @@
 package org.apache.flink.table.planner.codegen
 
 import org.apache.flink.streaming.api.graph.StreamConfig
-import org.apache.flink.streaming.api.operators.{AbstractStreamOperator, BoundedMultiInput, BoundedOneInput, InputSelectable, InputSelection, OneInputStreamOperator, Output, StreamOperator, TwoInputStreamOperator}
+import org.apache.flink.streaming.api.operators.{AbstractStreamOperator, BoundedMultiInput, BoundedOneInput, InputSelectable, InputSelection, OneInputStreamOperator, Output, StreamOperator, SwitchBroadcastSide, TwoInputStreamOperator}
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord
 import org.apache.flink.streaming.runtime.tasks.{ProcessingTimeService, StreamTask}
 import org.apache.flink.table.planner.codegen.CodeGenUtils._
@@ -140,6 +140,7 @@ object OperatorCodeGenerator extends Logging {
       input1Term: String = CodeGenUtils.DEFAULT_INPUT1_TERM,
       input2Term: String = CodeGenUtils.DEFAULT_INPUT2_TERM,
       nextSelectionCode: Option[String] = None,
+      switchBroadcastSideCode: Option[String] = None,
       endInputCode1: Option[String] = None,
       endInputCode2: Option[String] = None,
       useTimeCollect: Boolean = false): GeneratedOperator[TwoInputStreamOperator[IN1, IN2, OUT]] = {
@@ -163,6 +164,19 @@ object OperatorCodeGenerator extends Logging {
              |}
          """.stripMargin,
           s", ${className[InputSelectable]}")
+    }
+
+    val (switchBroadcastSide, switchBroadcastSideImpl) = switchBroadcastSideCode match {
+      case None => ("", "")
+      case Some(code) =>
+        (
+          s"""
+             |@Override
+             |public void activateBroadcastJoin(boolean leftIsBuild) {
+             |  $code
+             |}
+         """.stripMargin,
+          s", ${className[SwitchBroadcastSide]}")
     }
 
     val (endInput, endInputImpl) = (endInputCode1, endInputCode2) match {
@@ -198,7 +212,7 @@ object OperatorCodeGenerator extends Logging {
     val operatorCode =
       j"""
       public class $operatorName extends ${abstractBaseClass.getCanonicalName}
-          implements ${baseClass.getCanonicalName}$nextSelImpl$endInputImpl {
+          implements ${baseClass.getCanonicalName}$nextSelImpl$endInputImpl$switchBroadcastSideImpl {
 
         public static org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger("$operatorName");
 
@@ -245,6 +259,8 @@ object OperatorCodeGenerator extends Logging {
         $nextSel
 
         $endInput
+
+        $switchBroadcastSide
 
         @Override
         public void finish() throws Exception {

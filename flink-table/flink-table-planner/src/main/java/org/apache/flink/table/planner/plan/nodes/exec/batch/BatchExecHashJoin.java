@@ -58,6 +58,7 @@ import java.util.stream.IntStream;
 public class BatchExecHashJoin extends ExecNodeBase<RowData>
         implements BatchExecNode<RowData>, SingleTransformationTranslator<RowData> {
 
+    private final ReadableConfig tableConfig;
     private final JoinSpec joinSpec;
     private final boolean isBroadcast;
     private final boolean leftIsBuild;
@@ -66,6 +67,10 @@ public class BatchExecHashJoin extends ExecNodeBase<RowData>
     private final long estimatedLeftRowCount;
     private final long estimatedRightRowCount;
     private final boolean tryDistinctBuildRow;
+    private final InputProperty leftInputProperty;
+    private final InputProperty rightInputProperty;
+    private final RowType outputType;
+    private final String description;
 
     public BatchExecHashJoin(
             ReadableConfig tableConfig,
@@ -88,6 +93,7 @@ public class BatchExecHashJoin extends ExecNodeBase<RowData>
                 Arrays.asList(leftInputProperty, rightInputProperty),
                 outputType,
                 description);
+        this.tableConfig = tableConfig;
         this.joinSpec = joinSpec;
         this.isBroadcast = isBroadcast;
         this.leftIsBuild = leftIsBuild;
@@ -96,6 +102,10 @@ public class BatchExecHashJoin extends ExecNodeBase<RowData>
         this.estimatedLeftRowCount = estimatedLeftRowCount;
         this.estimatedRightRowCount = estimatedRightRowCount;
         this.tryDistinctBuildRow = tryDistinctBuildRow;
+        this.leftInputProperty = leftInputProperty;
+        this.rightInputProperty = rightInputProperty;
+        this.outputType = outputType;
+        this.description = description;
     }
 
     @Override
@@ -357,5 +367,23 @@ public class BatchExecHashJoin extends ExecNodeBase<RowData>
         leftInput.addOutput(1, hashJoinGenerator);
         rightInput.addOutput(2, hashJoinGenerator);
         return hashJoinGenerator;
+    }
+
+    public BatchExecAdaptiveJoin toAdaptiveJoin() {
+        return new BatchExecAdaptiveJoin(
+                tableConfig,
+                joinSpec,
+                estimatedLeftAvgRowSize,
+                estimatedRightAvgRowSize,
+                estimatedLeftRowCount,
+                estimatedRightRowCount,
+                leftIsBuild,
+                tryDistinctBuildRow,
+                leftInputProperty,
+                rightInputProperty,
+                outputType,
+                description.replace("HashJoin(", "AdaptiveJoin(originalJoin=[SortMergeJoin], "),
+                joinSpec.getNonEquiCondition().orElse(null),
+                0);
     }
 }

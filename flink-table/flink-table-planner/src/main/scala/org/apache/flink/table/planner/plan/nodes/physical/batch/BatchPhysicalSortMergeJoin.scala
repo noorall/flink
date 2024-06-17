@@ -178,10 +178,7 @@ class BatchPhysicalSortMergeJoin(
     new BatchExecSortMergeJoin(
       unwrapTableConfig(this),
       JoinTypeUtil.getFlinkJoinType(joinType),
-      joinSpec.getLeftKeys,
-      joinSpec.getRightKeys,
-      joinSpec.getFilterNulls,
-      condition,
+      joinSpec,
       estimateOutputSize(getLeft) < estimateOutputSize(getRight),
       InputProperty
         .builder()

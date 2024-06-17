@@ -48,6 +48,7 @@ object ExecutionOrderEnforcerCodeGenerator {
         DEFAULT_INPUT1_TERM,
         DEFAULT_INPUT2_TERM,
         None,
+        None,
         // we cannot pass None or use default here, because this operator must implement BoundedMultiInput
         Some(""),
         Some("")
