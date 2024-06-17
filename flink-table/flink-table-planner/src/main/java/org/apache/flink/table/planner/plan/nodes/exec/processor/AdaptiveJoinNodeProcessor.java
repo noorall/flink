@@ -25,7 +25,9 @@ import org.apache.flink.table.api.config.OptimizerConfigOptions;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecEdge;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNode;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeGraph;
+import org.apache.flink.table.planner.plan.nodes.exec.InputProperty;
 import org.apache.flink.table.planner.plan.nodes.exec.InputProperty.KeepInputAsIsDistribution;
+import org.apache.flink.table.planner.plan.nodes.exec.InputProperty.DistributionType;
 import org.apache.flink.table.planner.plan.nodes.exec.batch.BatchExecAdaptiveJoin;
 import org.apache.flink.table.planner.plan.nodes.exec.batch.BatchExecHashJoin;
 import org.apache.flink.table.planner.plan.nodes.exec.batch.BatchExecSortMergeJoin;
@@ -106,8 +108,8 @@ public class AdaptiveJoinNodeProcessor implements ExecNodeGraphProcessor {
     }
 
     private boolean checkAllInputShuffleIsHash(ExecNode<?> input) {
-        for (ExecEdge edge : input.getInputEdges()) {
-            if (!edge.getShuffle().getType().equals(ExecEdge.Shuffle.Type.HASH)) {
+        for (InputProperty inputProperty : input.getInputProperties()) {
+            if (inputProperty.getRequiredDistribution().getType() != DistributionType.HASH) {
                 return false;
             }
         }
