@@ -41,6 +41,7 @@ import org.slf4j.Logger;
 
 import java.util.Collection;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 
 /** Factory for {@link SlotPoolService} and {@link SchedulerNG}. */
@@ -90,6 +91,7 @@ public interface SlotPoolServiceSchedulerFactory {
             FatalErrorHandler fatalErrorHandler,
             JobStatusListener jobStatusListener,
             Collection<FailureEnricher> failureEnrichers,
-            BlocklistOperations blocklistOperations)
+            BlocklistOperations blocklistOperations,
+            ExecutorService serializationExecutor)
             throws Exception;
 }

@@ -43,6 +43,7 @@ import org.apache.flink.util.ClassLoaderUtil;
 import org.apache.flink.util.InstantiationUtil;
 import org.apache.flink.util.OutputTag;
 import org.apache.flink.util.Preconditions;
+import org.apache.flink.util.SerializedValue;
 import org.apache.flink.util.TernaryBoolean;
 import org.apache.flink.util.concurrent.FutureUtils;
 
@@ -650,6 +651,11 @@ public class StreamConfig implements Serializable {
         }
     }
 
+    public void setStateBackend(SerializedValue<StateBackend> backend, boolean useManagedMemory) {
+        this.config.setBytes(STATE_BACKEND, backend.getByteArray());
+        setStateBackendUsesManagedMemory(useManagedMemory);
+    }
+
     public void setChangelogStateBackendEnabled(TernaryBoolean enabled) {
         toBeSerializedConfigObjects.put(ENABLE_CHANGE_LOG_STATE_BACKEND, enabled);
     }
@@ -683,6 +689,10 @@ public class StreamConfig implements Serializable {
         }
     }
 
+    public void setCheckpointStorage(SerializedValue<CheckpointStorage> storage) {
+        this.config.setBytes(CHECKPOINT_STORAGE, storage.getByteArray());
+    }
+
     public CheckpointStorage getCheckpointStorage(ClassLoader cl) {
         try {
             return InstantiationUtil.readObjectFromConfig(this.config, CHECKPOINT_STORAGE, cl);
@@ -695,6 +705,11 @@ public class StreamConfig implements Serializable {
         if (timerServiceProvider != null) {
             toBeSerializedConfigObjects.put(TIMER_SERVICE_PROVIDER, timerServiceProvider);
         }
+    }
+
+    public void setTimerServiceProvider(
+            SerializedValue<InternalTimeServiceManager.Provider> timerServiceProvider) {
+        this.config.setBytes(TIMER_SERVICE_PROVIDER, timerServiceProvider.getByteArray());
     }
 
     public InternalTimeServiceManager.Provider getTimerServiceProvider(ClassLoader cl) {

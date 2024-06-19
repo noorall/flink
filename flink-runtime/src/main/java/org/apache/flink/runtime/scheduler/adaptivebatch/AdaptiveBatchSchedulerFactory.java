@@ -70,7 +70,6 @@ import org.apache.flink.runtime.scheduler.strategy.PartialFinishedInputConsumabl
 import org.apache.flink.runtime.scheduler.strategy.SchedulingStrategyFactory;
 import org.apache.flink.runtime.scheduler.strategy.VertexwiseSchedulingStrategy;
 import org.apache.flink.runtime.shuffle.ShuffleMaster;
-import org.apache.flink.runtime.util.Hardware;
 import org.apache.flink.runtime.util.LogicalGraph;
 import org.apache.flink.runtime.util.SlotSelectionStrategyUtils;
 import org.apache.flink.streaming.api.graph.StreamEdge;
@@ -78,7 +77,6 @@ import org.apache.flink.streaming.api.graph.StreamGraph;
 import org.apache.flink.streaming.api.graph.StreamNode;
 import org.apache.flink.streaming.api.transformations.StreamExchangeMode;
 import org.apache.flink.util.Preconditions;
-import org.apache.flink.util.concurrent.ExecutorThreadFactory;
 import org.apache.flink.util.concurrent.ScheduledExecutor;
 import org.apache.flink.util.concurrent.ScheduledExecutorServiceAdapter;
 
@@ -87,8 +85,6 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
 import java.util.concurrent.Executor;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 
 import static org.apache.flink.configuration.JobManagerOptions.HybridPartitionDataConsumeConstraint.ONLY_FINISHED_PRODUCERS;
@@ -122,7 +118,8 @@ public class AdaptiveBatchSchedulerFactory implements SchedulerNGFactory {
             FatalErrorHandler fatalErrorHandler,
             JobStatusListener jobStatusListener,
             Collection<FailureEnricher> failureEnrichers,
-            BlocklistOperations blocklistOperations)
+            BlocklistOperations blocklistOperations,
+            Executor serializationExecutor)
             throws Exception {
 
         final SlotPool slotPool =
@@ -177,7 +174,8 @@ public class AdaptiveBatchSchedulerFactory implements SchedulerNGFactory {
                 new ScheduledExecutorServiceAdapter(futureExecutor),
                 DefaultVertexParallelismAndInputInfosDecider.from(
                         getDefaultMaxParallelism(jobMasterConfiguration, executionConfig),
-                        jobMasterConfiguration));
+                        jobMasterConfiguration),
+                serializationExecutor);
     }
 
     @VisibleForTesting
@@ -205,7 +203,8 @@ public class AdaptiveBatchSchedulerFactory implements SchedulerNGFactory {
             ExecutionSlotAllocatorFactory allocatorFactory,
             RestartBackoffTimeStrategy restartBackoffTimeStrategy,
             ScheduledExecutor delayExecutor,
-            VertexParallelismAndInputInfosDecider vertexParallelismAndInputInfosDecider)
+            VertexParallelismAndInputInfosDecider vertexParallelismAndInputInfosDecider,
+            Executor serializationExecutor)
             throws Exception {
 
         checkState(
@@ -248,15 +247,6 @@ public class AdaptiveBatchSchedulerFactory implements SchedulerNGFactory {
         if (BatchExecutionOptions.enableAdaptiveExecution(jobMasterConfiguration)) {
             checkState(jobMasterConfiguration.get(DeploymentOptions.SUBMIT_STREAM_GRAPH_ENABLED));
             StreamGraph streamGraph = logicalGraph.getStreamGraph();
-
-            final ExecutorService serializationExecutor =
-                    Executors.newFixedThreadPool(
-                            Math.max(
-                                    1,
-                                    Math.min(
-                                            Hardware.getNumberCPUCores(),
-                                            streamGraph.getExecutionConfig().getParallelism())),
-                            new ExecutorThreadFactory("flink-operator-serialization-io"));
 
             handler =
                     new DefaultAdaptiveExecutionHandler(

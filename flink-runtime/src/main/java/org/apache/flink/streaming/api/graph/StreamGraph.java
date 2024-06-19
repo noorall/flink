@@ -99,11 +99,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+import java.util.stream.Collectors;
 
 import static org.apache.flink.runtime.jobgraph.JobGraph.INITIAL_CLIENT_HEARTBEAT_TIMEOUT;
 import static org.apache.flink.runtime.jobgraph.tasks.CheckpointCoordinatorConfiguration.MINIMAL_CHECKPOINT_TIME;
 import static org.apache.flink.util.Preconditions.checkArgument;
 import static org.apache.flink.util.Preconditions.checkNotNull;
+import static org.apache.flink.util.Preconditions.checkState;
 
 /**
  * Class representing the streaming topology. It contains all the information necessary to build the
@@ -152,7 +156,8 @@ public class StreamGraph implements Pipeline, Serializable {
     protected Map<Integer, Long> vertexIDtoLoopTimeout;
     private transient StateBackend stateBackend;
     private transient CheckpointStorage checkpointStorage;
-    private Set<Tuple2<StreamNode, StreamNode>> iterationSourceSinkPairs;
+    private transient Set<Tuple2<StreamNode, StreamNode>> iterationSourceSinkPairs;
+    private Set<Tuple2<Integer, Integer>> iterationSourceSinkNodeIdPairs;
     private InternalTimeServiceManager.Provider timerServiceProvider;
     private JobType jobType = JobType.STREAMING;
     private Map<String, ResourceProfile> slotSharingGroupResources;
@@ -182,6 +187,9 @@ public class StreamGraph implements Pipeline, Serializable {
 
     private int maximumParallelism = -1;
 
+    private boolean serialized;
+    private boolean useManageMemory;
+
     public StreamGraph(
             Configuration jobConfiguration,
             ExecutionConfig executionConfig,
@@ -205,6 +213,7 @@ public class StreamGraph implements Pipeline, Serializable {
         vertexIDtoBrokerID = new HashMap<>();
         vertexIDtoLoopTimeout = new HashMap<>();
         iterationSourceSinkPairs = new HashSet<>();
+        iterationSourceSinkNodeIdPairs = new HashSet<>();
         sources = new HashSet<>();
         sinks = new HashSet<>();
         slotSharingGroupResources = new HashMap<>();
@@ -1195,13 +1204,17 @@ public class StreamGraph implements Pipeline, Serializable {
         return streamNodes.values();
     }
 
-    public void serializeAllNodesToConfig() {
-        streamGraphConfig.serializeStreamNodes(new ArrayList<>(streamNodes.values()));
+    public void serializeAllNodesToConfig(Executor ioExecutor) throws Exception {
+        CompletableFuture<?> future =
+                streamGraphConfig.serializeStreamNodes(new HashMap<>(streamNodes), ioExecutor);
+
         streamGraphConfig.serializeVirtualPartitionNodes(virtualPartitionNodes);
         streamGraphConfig.serializeStateBackends(stateBackend);
+        this.useManageMemory = stateBackend.useManagedMemory();
         streamGraphConfig.serializeCheckpointStorage(checkpointStorage);
         streamGraphConfig.serializeVirtualSideOutputNodes(virtualSideOutputNodes);
         streamGraphConfig.serializeExecutionConfig(executionConfig);
+        streamGraphConfig.serializeTimeServiceProvider(timerServiceProvider);
 
         maximumParallelism = -1;
         for (StreamNode node : streamNodes.values()) {
@@ -1210,19 +1223,59 @@ public class StreamGraph implements Pipeline, Serializable {
             }
             maximumParallelism = Math.max(node.getParallelism(), maximumParallelism);
         }
+
+        future.get();
+        serialized = true;
     }
 
-    public void deSerializeAllNodesFromConfig(ClassLoader userClassLoader) {
-        streamNodes = new HashMap<>();
-        for (StreamNode streamNode : streamGraphConfig.getStreamNodes(userClassLoader)) {
-            streamNodes.put(streamNode.getId(), streamNode);
-        }
+    public void deSerializeAllNodesFromConfig(Executor ioExecutor, ClassLoader userClassLoader)
+            throws Exception {
+        iterationSourceSinkPairs = new HashSet<>();
+
+        CompletableFuture<Map<Integer, StreamNode>> future =
+                streamGraphConfig.getStreamNodes(userClassLoader, ioExecutor);
 
         virtualPartitionNodes = streamGraphConfig.getVirtualPartitionNodes(userClassLoader);
         virtualSideOutputNodes = streamGraphConfig.getVirtualSideOutputNodes(userClassLoader);
-        stateBackend = streamGraphConfig.getStateBackend(userClassLoader);
-        checkpointStorage = streamGraphConfig.getCheckpointStorage(userClassLoader);
+        // stateBackend = streamGraphConfig.getStateBackend(userClassLoader);
+        // checkpointStorage = streamGraphConfig.getCheckpointStorage(userClassLoader);
         executionConfig = streamGraphConfig.getExecutionConfig(userClassLoader);
+        // timerServiceProvider = streamGraphConfig.getTimeServiceProvider(userClassLoader);
+
+        this.streamNodes = future.get();
+
+        // build iteration sources and sinks
+        iterationSourceSinkPairs.addAll(
+                iterationSourceSinkNodeIdPairs.stream()
+                        .map(
+                                tuple2 ->
+                                        Tuple2.of(
+                                                this.streamNodes.get(tuple2.f0),
+                                                this.streamNodes.get(tuple2.f0)))
+                        .collect(Collectors.toSet()));
+    }
+
+    public SerializedValue<StateBackend> getSerializedStateBackend() {
+        checkState(serialized);
+        return streamGraphConfig.getStateBackendSerializedValue();
+    }
+
+    public SerializedValue<CheckpointStorage> getSerializedCheckpointStorage() {
+        checkState(serialized);
+        return streamGraphConfig.getStorageSerializedValue();
+    }
+
+    public SerializedValue<InternalTimeServiceManager.Provider> getSerializedTimeServiceProvider() {
+        checkState(serialized);
+        return streamGraphConfig.getProviderSerializedValue();
+    }
+
+    public boolean isSerialized() {
+        return serialized;
+    }
+
+    public boolean isUseManageMemory() {
+        return useManageMemory;
     }
 
     public int getNumberOfVertices() {
@@ -1290,6 +1343,7 @@ public class StreamGraph implements Pipeline, Serializable {
         setResources(sink.getId(), tailResources, tailResources);
 
         iterationSourceSinkPairs.add(new Tuple2<>(source, sink));
+        iterationSourceSinkNodeIdPairs.add(new Tuple2<>(source.getId(), sink.getId()));
 
         this.vertexIDtoBrokerID.put(source.getId(), "broker-" + loopId);
         this.vertexIDtoBrokerID.put(sink.getId(), "broker-" + loopId);

@@ -74,7 +74,8 @@ public class TestingSchedulerNGFactory implements SchedulerNGFactory {
             FatalErrorHandler fatalErrorHandler,
             JobStatusListener jobStatusListener,
             Collection<FailureEnricher> failureEnrichers,
-            BlocklistOperations blocklistOperations)
+            BlocklistOperations blocklistOperations,
+            Executor executorService)
             throws Exception {
         return schedulerNG;
     }

@@ -123,7 +123,8 @@ class JobMasterSchedulerTest {
                 FatalErrorHandler fatalErrorHandler,
                 JobStatusListener jobStatusListener,
                 Collection<FailureEnricher> failureEnrichers,
-                BlocklistOperations blocklistOperations) {
+                BlocklistOperations blocklistOperations,
+                Executor executorService) {
             return TestingSchedulerNG.newBuilder()
                     .setStartSchedulingRunnable(
                             () -> {

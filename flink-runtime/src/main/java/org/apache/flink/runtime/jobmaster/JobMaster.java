@@ -130,6 +130,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
@@ -214,6 +215,7 @@ public class JobMaster extends FencedRpcEndpoint<JobMasterId>
     private final ExecutionDeploymentTracker executionDeploymentTracker;
     private final ExecutionDeploymentReconciler executionDeploymentReconciler;
     private final Collection<FailureEnricher> failureEnrichers;
+    private final ExecutorService serializeationExecutor;
 
     // -------- Mutable fields ---------
 
@@ -318,6 +320,8 @@ public class JobMaster extends FencedRpcEndpoint<JobMasterId>
         this.futureExecutor =
                 MdcUtils.scopeToJob(jid, jobManagerSharedServices.getFutureExecutor());
         this.ioExecutor = MdcUtils.scopeToJob(jid, jobManagerSharedServices.getIoExecutor());
+        this.serializeationExecutor =
+                MdcUtils.scopeToJob(jid, jobManagerSharedServices.getSerializationExecutor());
         this.jobCompletionActions = checkNotNull(jobCompletionActions);
         this.fatalErrorHandler = checkNotNull(fatalErrorHandler);
         this.userCodeLoader = checkNotNull(userCodeLoader);
@@ -406,7 +410,8 @@ public class JobMaster extends FencedRpcEndpoint<JobMasterId>
                         fatalErrorHandler,
                         jobStatusListener,
                         failureEnrichers,
-                        blocklistHandler::addNewBlockedNodes);
+                        blocklistHandler::addNewBlockedNodes,
+                        serializeationExecutor);
 
         return scheduler;
     }

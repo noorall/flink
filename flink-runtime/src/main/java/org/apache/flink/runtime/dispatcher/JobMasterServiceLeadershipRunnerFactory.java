@@ -40,8 +40,12 @@ import org.apache.flink.runtime.leaderelection.LeaderElection;
 import org.apache.flink.runtime.rpc.FatalErrorHandler;
 import org.apache.flink.runtime.rpc.RpcService;
 import org.apache.flink.runtime.util.LogicalGraph;
+import org.apache.flink.streaming.api.graph.StreamGraph;
 import org.apache.flink.util.MdcUtils;
 import org.apache.flink.util.Preconditions;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
 
@@ -50,6 +54,9 @@ import static org.apache.flink.util.Preconditions.checkArgument;
 /** Factory which creates a {@link JobMasterServiceLeadershipRunner}. */
 public enum JobMasterServiceLeadershipRunnerFactory implements JobManagerRunnerFactory {
     INSTANCE;
+
+    private static final Logger log =
+            LoggerFactory.getLogger(JobMasterServiceLeadershipRunnerFactory.class);
 
     @Override
     public JobManagerRunner createJobManagerRunner(
@@ -75,7 +82,15 @@ public enum JobMasterServiceLeadershipRunnerFactory implements JobManagerRunnerF
                         .asClassLoader();
 
         if (!graph.isJobGraph()) {
-            graph.getStreamGraph().deSerializeAllNodesFromConfig(userCodeClassLoader);
+            StreamGraph streamGraph = graph.getStreamGraph();
+            long currMs = System.currentTimeMillis();
+            streamGraph.deSerializeAllNodesFromConfig(
+                    MdcUtils.scopeToJob(
+                            graph.getJobId(), jobManagerServices.getSerializationExecutor()),
+                    userCodeClassLoader);
+            log.info(
+                    "Finished try to deserialize the StreamGraph from config took {} ms",
+                    System.currentTimeMillis() - currMs);
         }
 
         if (graph.isPartialResourceConfigured()) {

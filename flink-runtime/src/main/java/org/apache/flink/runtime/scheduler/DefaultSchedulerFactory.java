@@ -80,7 +80,8 @@ public class DefaultSchedulerFactory implements SchedulerNGFactory {
             final FatalErrorHandler fatalErrorHandler,
             final JobStatusListener jobStatusListener,
             final Collection<FailureEnricher> failureEnrichers,
-            final BlocklistOperations blocklistOperations)
+            final BlocklistOperations blocklistOperations,
+            Executor serializationExecutor)
             throws Exception {
         checkState(logicalGraph.isJobGraph());
         JobGraph jobGraph = logicalGraph.getJobGraph();

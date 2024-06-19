@@ -66,7 +66,8 @@ public interface SchedulerNGFactory {
             FatalErrorHandler fatalErrorHandler,
             JobStatusListener jobStatusListener,
             Collection<FailureEnricher> failureEnrichers,
-            BlocklistOperations blocklistOperations)
+            BlocklistOperations blocklistOperations,
+            Executor serializationExecutor)
             throws Exception;
 
     JobManagerOptions.SchedulerType getSchedulerType();

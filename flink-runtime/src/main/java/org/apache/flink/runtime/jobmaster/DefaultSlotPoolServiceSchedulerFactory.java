@@ -59,6 +59,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 
 /** Default {@link SlotPoolServiceSchedulerFactory} implementation. */
@@ -116,7 +117,8 @@ public final class DefaultSlotPoolServiceSchedulerFactory
             FatalErrorHandler fatalErrorHandler,
             JobStatusListener jobStatusListener,
             Collection<FailureEnricher> failureEnrichers,
-            BlocklistOperations blocklistOperations)
+            BlocklistOperations blocklistOperations,
+            ExecutorService serializationExecutor)
             throws Exception {
         return schedulerNGFactory.createInstance(
                 log,
@@ -139,7 +141,8 @@ public final class DefaultSlotPoolServiceSchedulerFactory
                 fatalErrorHandler,
                 jobStatusListener,
                 failureEnrichers,
-                blocklistOperations);
+                blocklistOperations,
+                serializationExecutor);
     }
 
     public static DefaultSlotPoolServiceSchedulerFactory create(

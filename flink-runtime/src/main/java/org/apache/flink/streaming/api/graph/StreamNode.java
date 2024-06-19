@@ -81,7 +81,7 @@ public class StreamNode implements Serializable {
     private KeySelector<?, ?>[] statePartitioners = new KeySelector[0];
     private TypeSerializer<?> stateKeySerializer;
 
-    private @Nullable StreamOperatorFactory<?> operatorFactory;
+    private @Nullable transient StreamOperatorFactory<?> operatorFactory;
     private TypeSerializer<?>[] typeSerializersIn = new TypeSerializer[0];
     private TypeSerializer<?> typeSerializerOut;
 
@@ -273,6 +273,10 @@ public class StreamNode implements Serializable {
 
     public @Nullable StreamOperatorFactory<?> getOperatorFactory() {
         return operatorFactory;
+    }
+
+    public void setOperatorFactory(StreamOperatorFactory<?> operatorFactory) {
+        this.operatorFactory = operatorFactory;
     }
 
     public String getOperatorName() {

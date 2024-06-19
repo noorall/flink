@@ -366,7 +366,8 @@ public class DefaultSchedulerBuilder {
                 executionSlotAllocatorFactory,
                 restartBackoffTimeStrategy,
                 delayExecutor,
-                vertexParallelismAndInputInfosDecider);
+                vertexParallelismAndInputInfosDecider,
+                ioExecutor);
     }
 
     private ExecutionGraphFactory createExecutionGraphFactory(boolean isDynamicGraph) {

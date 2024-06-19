@@ -41,7 +41,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.InetSocketAddress;
-import java.net.MalformedURLException;
 import java.util.Collection;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -90,7 +89,7 @@ public class EmbeddedExecutor implements PipelineExecutor {
             final Pipeline pipeline,
             final Configuration configuration,
             ClassLoader userCodeClassloader)
-            throws MalformedURLException {
+            throws Exception {
         checkNotNull(pipeline);
         checkNotNull(configuration);
 
@@ -117,7 +116,7 @@ public class EmbeddedExecutor implements PipelineExecutor {
             final Pipeline pipeline,
             final Configuration configuration,
             final ClassLoader userCodeClassloader)
-            throws MalformedURLException {
+            throws Exception {
         final Time timeout =
                 Time.milliseconds(configuration.get(ClientOptions.CLIENT_TIMEOUT).toMillis());
 

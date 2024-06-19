@@ -31,7 +31,6 @@ import org.apache.flink.runtime.minicluster.MiniCluster;
 import org.apache.flink.runtime.minicluster.MiniClusterConfiguration;
 import org.apache.flink.runtime.util.LogicalGraph;
 
-import java.net.MalformedURLException;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 
@@ -86,7 +85,7 @@ public class LocalExecutor implements PipelineExecutor {
 
     private LogicalGraph getLogicalGraph(
             Pipeline pipeline, Configuration configuration, ClassLoader userCodeClassloader)
-            throws MalformedURLException {
+            throws Exception {
         // This is a quirk in how LocalEnvironment used to work. It sets the default parallelism
         // to <num taskmanagers> * <num task slots>. Might be questionable but we keep the behaviour
         // for now.

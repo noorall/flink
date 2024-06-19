@@ -1188,10 +1188,18 @@ public class StreamingJobGraphGenerator {
 
         final CheckpointConfig checkpointCfg = streamGraph.getCheckpointConfig();
 
-        config.setStateBackend(streamGraph.getStateBackend());
-        config.setCheckpointStorage(streamGraph.getCheckpointStorage());
+        if (streamGraph.isSerialized()) {
+            config.setStateBackend(
+                    streamGraph.getSerializedStateBackend(), streamGraph.isUseManageMemory());
+            config.setCheckpointStorage(streamGraph.getSerializedCheckpointStorage());
+            config.setTimerServiceProvider(streamGraph.getSerializedTimeServiceProvider());
+        } else {
+            config.setStateBackend(streamGraph.getStateBackend());
+            config.setCheckpointStorage(streamGraph.getCheckpointStorage());
+            config.setTimerServiceProvider(streamGraph.getTimerServiceProvider());
+        }
+
         config.setGraphContainingLoops(streamGraph.isIterative());
-        config.setTimerServiceProvider(streamGraph.getTimerServiceProvider());
         config.setCheckpointingEnabled(checkpointCfg.isCheckpointingEnabled());
         config.getConfiguration()
                 .set(

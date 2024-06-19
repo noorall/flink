@@ -24,16 +24,23 @@ import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.state.CheckpointStorage;
 import org.apache.flink.runtime.state.StateBackend;
+import org.apache.flink.streaming.api.operators.InternalTimeServiceManager;
+import org.apache.flink.streaming.api.operators.StreamOperatorFactory;
 import org.apache.flink.streaming.api.transformations.StreamExchangeMode;
 import org.apache.flink.streaming.runtime.partitioner.StreamPartitioner;
 import org.apache.flink.util.InstantiationUtil;
 import org.apache.flink.util.OutputTag;
+import org.apache.flink.util.SerializedValue;
+import org.apache.flink.util.concurrent.FutureUtils;
 
 import java.io.IOException;
 import java.io.Serializable;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 import java.util.stream.Collectors;
 
 public class StreamGraphConfig implements Serializable {
@@ -41,19 +48,47 @@ public class StreamGraphConfig implements Serializable {
     private static final long serialVersionUID = 1L;
 
     private static final String VIRTUAL_PARTITION_NODES = "virtualPartitionNodes";
-    private static final String STREAM_NODES = "streamNodes";
     private static final String VIRTUAL_SIDE_OUTPUT_NODES = "virtualSideOutputNodes";
-    private static final String EXECUTION_CONFIG = "executionConfig";
-    // the following should be removed
-    private static final String STATE_BACKEND = "stateBackend";
-    private static final String CHECKPOINT_STORAGE = "checkpointStorage";
 
     private final Configuration config = new Configuration();
+    private SerializedValue<StateBackend> stateBackendSerializedValue;
+    private SerializedValue<CheckpointStorage> storageSerializedValue;
+    private SerializedValue<ExecutionConfig> configSerializedValue;
+    private SerializedValue<Map<Integer, StreamNode>> streamNodesSerializedValue;
+    private SerializedValue<InternalTimeServiceManager.Provider> providerSerializedValue;
+    private final Configuration operatorFactoryConfig = new Configuration();
 
-    public void serializeStreamNodes(List<StreamNode> toBeSerializedStreamNodes) {
+    public CompletableFuture<?> serializeStreamNodes(
+            Map<Integer, StreamNode> toBeSerializedStreamNodes, Executor ioExecutor) {
         try {
-            InstantiationUtil.writeObjectToConfig(
-                    toBeSerializedStreamNodes, this.config, STREAM_NODES);
+            FutureUtils.ConjunctFuture<Collection<Void>> future =
+                    FutureUtils.combineAll(
+                            toBeSerializedStreamNodes.values().stream()
+                                    .filter(node -> node.getOperatorFactory() != null)
+                                    .map(
+                                            node ->
+                                                    CompletableFuture.runAsync(
+                                                            () -> {
+                                                                try {
+                                                                    InstantiationUtil
+                                                                            .writeObjectToConfig(
+                                                                                    node
+                                                                                            .getOperatorFactory(),
+                                                                                    this
+                                                                                            .operatorFactoryConfig,
+                                                                                    String.valueOf(
+                                                                                            node
+                                                                                                    .getId()));
+                                                                } catch (IOException e) {
+                                                                    throw new RuntimeException(
+                                                                            "Could not serialize stream nodes",
+                                                                            e);
+                                                                }
+                                                            },
+                                                            ioExecutor))
+                                    .collect(Collectors.toList()));
+            this.streamNodesSerializedValue = new SerializedValue<>(toBeSerializedStreamNodes);
+            return future;
         } catch (IOException e) {
             throw new RuntimeException("Could not serialize stream nodes", e);
         }
@@ -76,7 +111,7 @@ public class StreamGraphConfig implements Serializable {
 
     public void serializeStateBackends(StateBackend stateBackend) {
         try {
-            InstantiationUtil.writeObjectToConfig(stateBackend, this.config, STATE_BACKEND);
+            this.stateBackendSerializedValue = new SerializedValue<>(stateBackend);
         } catch (IOException e) {
             throw new RuntimeException("Could not serialize state backend.", e);
         }
@@ -84,8 +119,7 @@ public class StreamGraphConfig implements Serializable {
 
     public void serializeCheckpointStorage(CheckpointStorage checkpointStorage) {
         try {
-            InstantiationUtil.writeObjectToConfig(
-                    checkpointStorage, this.config, CHECKPOINT_STORAGE);
+            this.storageSerializedValue = new SerializedValue<>(checkpointStorage);
         } catch (IOException e) {
             throw new RuntimeException("Could not serialize checkpoint storage.", e);
         }
@@ -103,42 +137,114 @@ public class StreamGraphConfig implements Serializable {
 
     public void serializeExecutionConfig(ExecutionConfig toBeSerializeExecutionConfig) {
         try {
-            InstantiationUtil.writeObjectToConfig(
-                    toBeSerializeExecutionConfig, this.config, EXECUTION_CONFIG);
+            this.configSerializedValue = new SerializedValue<>(toBeSerializeExecutionConfig);
         } catch (IOException e) {
             throw new RuntimeException("Could not serialize execution config.", e);
         }
     }
 
-    public ExecutionConfig getExecutionConfig(ClassLoader cl) {
+    public void serializeTimeServiceProvider(
+            InternalTimeServiceManager.Provider toBeSerializeTimerServiceProvider) {
         try {
-            return InstantiationUtil.readObjectFromConfig(this.config, EXECUTION_CONFIG, cl);
-        } catch (Exception e) {
-            throw new RuntimeException("Could not deserialize serializer config.");
+            this.providerSerializedValue = new SerializedValue<>(toBeSerializeTimerServiceProvider);
+        } catch (IOException e) {
+            throw new RuntimeException("Could not serialize time service provider.", e);
         }
     }
 
-    public List<StreamNode> getStreamNodes(ClassLoader cl) {
+    public InternalTimeServiceManager.Provider getTimeServiceProvider(ClassLoader cl) {
         try {
-            return InstantiationUtil.readObjectFromConfig(this.config, STREAM_NODES, cl);
+            return providerSerializedValue.deserializeValue(cl);
         } catch (Exception e) {
-            throw new RuntimeException("Could not deserialize stream nodes.");
+            throw new RuntimeException("Could not deserialize time service provider.", e);
+        }
+    }
+
+    public ExecutionConfig getExecutionConfig(ClassLoader cl) {
+        try {
+            return configSerializedValue.deserializeValue(cl);
+        } catch (Exception e) {
+            throw new RuntimeException("Could not deserialize serializer config.", e);
+        }
+    }
+
+    public SerializedValue<StateBackend> getStateBackendSerializedValue() {
+        return stateBackendSerializedValue;
+    }
+
+    public SerializedValue<CheckpointStorage> getStorageSerializedValue() {
+        return storageSerializedValue;
+    }
+
+    public SerializedValue<InternalTimeServiceManager.Provider> getProviderSerializedValue() {
+        return providerSerializedValue;
+    }
+
+    public CompletableFuture<Map<Integer, StreamNode>> getStreamNodes(
+            ClassLoader cl, Executor ioExecutor) {
+        try {
+            FutureUtils.ConjunctFuture<Collection<Tuple2<String, StreamOperatorFactory<?>>>>
+                    future =
+                            FutureUtils.combineAll(
+                                    operatorFactoryConfig.keySet().stream()
+                                            .map(
+                                                    nodeId ->
+                                                            CompletableFuture.supplyAsync(
+                                                                    () -> {
+                                                                        try {
+                                                                            StreamOperatorFactory<?>
+                                                                                    operatorFactory =
+                                                                                            InstantiationUtil
+                                                                                                    .readObjectFromConfig(
+                                                                                                            operatorFactoryConfig,
+                                                                                                            nodeId,
+                                                                                                            cl);
+                                                                            return Tuple2
+                                                                                    .<String,
+                                                                                            StreamOperatorFactory<
+                                                                                                    ?>>
+                                                                                            of(
+                                                                                                    nodeId,
+                                                                                                    operatorFactory);
+                                                                        } catch (Exception e) {
+                                                                            throw new RuntimeException(
+                                                                                    "Could not deserialize stream node "
+                                                                                            + nodeId,
+                                                                                    e);
+                                                                        }
+                                                                    },
+                                                                    ioExecutor))
+                                            .collect(Collectors.toList()));
+            Map<Integer, StreamNode> streamNodes = streamNodesSerializedValue.deserializeValue(cl);
+
+            return future.thenApply(
+                    results -> {
+                        for (Tuple2<String, StreamOperatorFactory<?>> tuple2 : results) {
+                            streamNodes
+                                    .get(Integer.valueOf(tuple2.f0))
+                                    .setOperatorFactory(tuple2.f1);
+                        }
+
+                        return streamNodes;
+                    });
+        } catch (Exception e) {
+            throw new RuntimeException("Could not deserialize stream nodes.", e);
         }
     }
 
     public StateBackend getStateBackend(ClassLoader cl) {
         try {
-            return InstantiationUtil.readObjectFromConfig(this.config, STATE_BACKEND, cl);
+            return stateBackendSerializedValue.deserializeValue(cl);
         } catch (Exception e) {
-            throw new RuntimeException("Could not deserialize state backend.");
+            throw new RuntimeException("Could not deserialize state backend.", e);
         }
     }
 
     public CheckpointStorage getCheckpointStorage(ClassLoader cl) {
         try {
-            return InstantiationUtil.readObjectFromConfig(this.config, CHECKPOINT_STORAGE, cl);
+            return storageSerializedValue.deserializeValue(cl);
         } catch (Exception e) {
-            throw new RuntimeException("Could not deserialize checkpoint storage.");
+            throw new RuntimeException("Could not deserialize checkpoint storage.", e);
         }
     }
 
@@ -147,7 +253,7 @@ public class StreamGraphConfig implements Serializable {
             return InstantiationUtil.readObjectFromConfig(
                     this.config, VIRTUAL_SIDE_OUTPUT_NODES, cl);
         } catch (Exception e) {
-            throw new RuntimeException("Could not deserialize checkpoint storage.");
+            throw new RuntimeException("Could not deserialize checkpoint storage.", e);
         }
     }
 
@@ -163,7 +269,7 @@ public class StreamGraphConfig implements Serializable {
 
             return virtualPartitionNodes;
         } catch (Exception e) {
-            throw new RuntimeException("Could not deserialize stream nodes.");
+            throw new RuntimeException("Could not deserialize virtual partition nodes.", e);
         }
     }
 
