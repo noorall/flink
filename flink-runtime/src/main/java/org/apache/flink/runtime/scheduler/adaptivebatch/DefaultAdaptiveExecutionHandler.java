@@ -150,6 +150,7 @@ public class DefaultAdaptiveExecutionHandler implements AdaptiveExecutionHandler
             AdaptiveJoin adaptiveJoin = (AdaptiveJoin) node.getOperatorFactory();
             List<AdaptiveJoin.PotentialBroadcastSide> potentialBroadcastJoinSides =
                     adaptiveJoin.getPotentialBroadcastJoinSides();
+            log.info("The potential broadcast join sides are {}.", potentialBroadcastJoinSides);
 
             if (potentialBroadcastJoinSides.isEmpty()) {
                 return;
@@ -173,7 +174,11 @@ public class DefaultAdaptiveExecutionHandler implements AdaptiveExecutionHandler
                     return;
                 }
             }
-
+            log.info(
+                    "The edge {} (side {}) produced {} bytes",
+                    edge,
+                    edge.getTypeNumber(),
+                    producedBytes);
             if (canBeBroadcast(producedBytes, edge.getTypeNumber(), potentialBroadcastJoinSides)) {
                 List<StreamEdge> otherEdge =
                         node.getInEdges().stream()
