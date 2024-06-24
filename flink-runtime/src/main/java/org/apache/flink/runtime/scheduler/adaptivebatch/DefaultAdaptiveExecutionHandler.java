@@ -282,14 +282,6 @@ public class DefaultAdaptiveExecutionHandler implements AdaptiveExecutionHandler
     }
 
     @Override
-    public void initializeJobGraph() throws Exception {
-        List<JobVertex> list = jobGraphManager.initializeJobGraph();
-        if (!list.isEmpty()) {
-            notifyJobGraphUpdated(list);
-        }
-    }
-
-    @Override
     public OperatorID findOperatorIdByStreamNodeId(int streamNodeId) {
         return findOperatorIdByStreamNodeId.apply(streamNodeId);
     }

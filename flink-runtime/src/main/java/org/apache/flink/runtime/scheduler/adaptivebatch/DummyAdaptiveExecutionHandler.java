@@ -75,9 +75,6 @@ public class DummyAdaptiveExecutionHandler implements AdaptiveExecutionHandler {
     }
 
     @Override
-    public void initializeJobGraph() {}
-
-    @Override
     public OperatorID findOperatorIdByStreamNodeId(int streamNodeId) {
         checkNotNull(findOperatorIdByStreamNodeId);
 

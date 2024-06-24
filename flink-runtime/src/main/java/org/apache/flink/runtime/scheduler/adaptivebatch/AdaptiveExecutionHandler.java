@@ -43,8 +43,6 @@ public interface AdaptiveExecutionHandler {
 
     boolean isStreamGraphConversionFinished();
 
-    void initializeJobGraph() throws Exception;
-
     void registerJobGraphUpdateListener(JobGraphUpdateListener listener);
 
     OperatorID findOperatorIdByStreamNodeId(int streamNodeId);

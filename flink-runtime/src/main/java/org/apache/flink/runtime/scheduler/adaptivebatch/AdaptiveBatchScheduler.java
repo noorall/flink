@@ -49,7 +49,6 @@ import org.apache.flink.runtime.executiongraph.ResultPartitionBytes;
 import org.apache.flink.runtime.executiongraph.failover.FailoverStrategy;
 import org.apache.flink.runtime.executiongraph.failover.FailureHandlingResult;
 import org.apache.flink.runtime.executiongraph.failover.RestartBackoffTimeStrategy;
-import org.apache.flink.runtime.failure.FailureEnricherUtils;
 import org.apache.flink.runtime.jobgraph.DistributionPattern;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
@@ -312,11 +311,6 @@ public class AdaptiveBatchScheduler extends DefaultScheduler implements JobGraph
     protected void startSchedulingInternal() {
         speculativeExecutionHandler.init(
                 getExecutionGraph(), getMainThreadExecutor(), jobManagerJobMetricGroup);
-        try {
-            adaptiveExecutionHandler.initializeJobGraph();
-        } catch (Exception e) {
-            failJob(e, System.currentTimeMillis(), FailureEnricherUtils.EMPTY_FAILURE_LABELS);
-        }
 
         tryComputeSourceParallelismThenRunAsync(
                 (Void value, Throwable throwable) -> {
