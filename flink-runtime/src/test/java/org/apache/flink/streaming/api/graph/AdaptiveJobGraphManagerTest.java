@@ -215,8 +215,6 @@ class AdaptiveJobGraphManagerTest {
                             serializationExecutor,
                             AdaptiveJobGraphManager.GenerateMode.EAGERLY);
 
-            adaptiveJobGraphGenerator.initializeJobGraph();
-
             assertThat(adaptiveJobGraphGenerator.isStreamGraphConversionFinished()).isEqualTo(true);
             assertThat(adaptiveJobGraphGenerator.getJobGraph().getNumberOfVertices()).isEqualTo(2);
 
@@ -279,7 +277,8 @@ class AdaptiveJobGraphManagerTest {
             for (Integer nodeId : streamGraph.getSourceIDs()) {
                 streamNodeList.add(streamGraph.getStreamNode(nodeId));
             }
-            List<JobVertex> jobVertices = adaptiveJobGraphGenerator.initializeJobGraph();
+            JobGraph jobGraph = adaptiveJobGraphGenerator.getJobGraph();
+            List<JobVertex> jobVertices = jobGraph.getVerticesSortedTopologicallyFromSources();
             assertThat(adaptiveJobGraphGenerator.isStreamGraphConversionFinished())
                     .isEqualTo(false);
             assertThat(adaptiveJobGraphGenerator.getJobGraph().getNumberOfVertices()).isEqualTo(1);
@@ -343,7 +342,8 @@ class AdaptiveJobGraphManagerTest {
                         streamGraph,
                         serializationExecutor,
                         AdaptiveJobGraphManager.GenerateMode.LAZILY);
-        List<JobVertex> jobVertices = adaptiveJobGraphGenerator.initializeJobGraph();
+        JobGraph jobGraph = adaptiveJobGraphGenerator.getJobGraph();
+        List<JobVertex> jobVertices = jobGraph.getVerticesSortedTopologicallyFromSources();
         while (!adaptiveJobGraphGenerator.isStreamGraphConversionFinished()) {
             List<StreamEdge> streamEdges = new ArrayList<>();
             for (JobVertex jobVertex : jobVertices) {
@@ -3052,7 +3052,8 @@ class AdaptiveJobGraphManagerTest {
                         serializationExecutor,
                         AdaptiveJobGraphManager.GenerateMode.LAZILY);
         try {
-            List<JobVertex> jobVertices = adaptiveJobGraphGenerator.initializeJobGraph();
+            JobGraph jobGraph = adaptiveJobGraphGenerator.getJobGraph();
+            List<JobVertex> jobVertices = jobGraph.getVerticesSortedTopologicallyFromSources();
 
             while (!adaptiveJobGraphGenerator.isStreamGraphConversionFinished()) {
                 List<JobVertex> newJobVertices = new ArrayList<>();

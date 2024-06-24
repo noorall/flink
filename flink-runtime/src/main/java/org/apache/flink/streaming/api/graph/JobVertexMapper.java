@@ -19,6 +19,7 @@
 package org.apache.flink.streaming.api.graph;
 
 import org.apache.flink.runtime.jobgraph.JobVertexID;
+import org.apache.flink.runtime.jobgraph.forwardgroup.StreamNodeForwardGroup;
 
 import java.util.List;
 import java.util.Optional;
@@ -43,4 +44,13 @@ public interface JobVertexMapper {
      *     JobVertex.
      */
     List<StreamEdge> findOutputEdgesByVertexId(JobVertexID jobVertexId);
+
+
+    /**
+     * Retrieves ForwardGroup linked to a specified JobVertex.
+     *
+     * @param jobVertexId The unique identifier of the JobVertex.
+     * @return A {@link StreamNodeForwardGroup} of the specified JobVertex.
+     */
+    StreamNodeForwardGroup findForwardGroupByVertexId(JobVertexID jobVertexId);
 }
