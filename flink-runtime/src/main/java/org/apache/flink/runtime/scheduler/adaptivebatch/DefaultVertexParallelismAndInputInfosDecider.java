@@ -18,6 +18,7 @@
 
 package org.apache.flink.runtime.scheduler.adaptivebatch;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.ExecutionConfig;
 import org.apache.flink.configuration.BatchExecutionOptions;
 import org.apache.flink.configuration.Configuration;
@@ -37,10 +38,12 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -79,12 +82,16 @@ public class DefaultVertexParallelismAndInputInfosDecider
     private final int globalMinParallelism;
     private final long dataVolumePerTask;
     private final int globalDefaultSourceParallelism;
+    private final double skewedPartitionFactor;
+    private final long skewedPartitionThreshold;
 
     private DefaultVertexParallelismAndInputInfosDecider(
             int globalMaxParallelism,
             int globalMinParallelism,
             MemorySize dataVolumePerTask,
-            int globalDefaultSourceParallelism) {
+            int globalDefaultSourceParallelism,
+            double skewedPartitionFactor,
+            long skewedPartitionThreshold) {
 
         checkArgument(globalMinParallelism > 0, "The minimum parallelism must be larger than 0.");
         checkArgument(
@@ -94,11 +101,19 @@ public class DefaultVertexParallelismAndInputInfosDecider
                 globalDefaultSourceParallelism > 0,
                 "The default source parallelism must be larger than 0.");
         checkNotNull(dataVolumePerTask);
+        checkArgument(
+                skewedPartitionFactor > 0,
+                "The default skewed partition factor must be larger than 0.");
+        checkArgument(
+                skewedPartitionThreshold > 0,
+                "The default skewed threshold must be larger than 0.");
 
         this.globalMaxParallelism = globalMaxParallelism;
         this.globalMinParallelism = globalMinParallelism;
         this.dataVolumePerTask = dataVolumePerTask.getBytes();
         this.globalDefaultSourceParallelism = globalDefaultSourceParallelism;
+        this.skewedPartitionFactor = skewedPartitionFactor;
+        this.skewedPartitionThreshold = skewedPartitionThreshold;
     }
 
     @Override
@@ -158,11 +173,11 @@ public class DefaultVertexParallelismAndInputInfosDecider
                     && areAllInputsAllToAll(consumedResults)
                     && !areAllInputsBroadcast(consumedResults)) {
                 LOG.info(
-                        "### DEBUG ### try decideParallelismAndEvenlyDistributeData for {}, the consumed results size is {}({})",
+                        "### DEBUG ### try decideParallelismAndEvenlyDistributeSkewedData for {}, the consumed results size is {}({})",
                         jobVertexId,
                         consumedResults.size(),
                         consumedResults);
-                return decideParallelismAndEvenlyDistributeData(
+                return decideParallelismAndEvenlyDistributeSkewedData(
                         jobVertexId,
                         consumedResults,
                         vertexInitialParallelism,
@@ -377,6 +392,406 @@ public class DefaultVertexParallelismAndInputInfosDecider
         return createParallelismAndInputInfos(consumedResults, subpartitionRanges);
     }
 
+    public ParallelismAndInputInfos decideParallelismAndEvenlyDistributeSkewedData(
+            JobVertexID jobVertexId,
+            List<BlockingResultInfo> consumedResults,
+            int initialParallelism,
+            int minParallelism,
+            int maxParallelism) {
+        checkArgument(initialParallelism == ExecutionConfig.PARALLELISM_DEFAULT);
+        checkArgument(!consumedResults.isEmpty());
+        consumedResults.forEach(resultInfo -> checkState(!resultInfo.isPointwise()));
+
+        if (consumedResults.size() != 2) {
+            LOG.info(
+                    " The size of consumedResults of Job vertex {} is not equal to 2. "
+                            + "Fall back to compute a parallelism that can evenly distribute data.",
+                    jobVertexId);
+            return decideParallelismAndEvenlyDistributeData(
+                    jobVertexId,
+                    consumedResults,
+                    initialParallelism,
+                    minParallelism,
+                    maxParallelism);
+        }
+        BlockingResultInfo leftResultInfo = consumedResults.get(0);
+        BlockingResultInfo rightResultInfo = consumedResults.get(1);
+        if (!leftResultInfo.isSkewed() && !rightResultInfo.isSkewed()) {
+            LOG.info(
+                    " Job vertex {} no data skew occurs. "
+                            + "Fall back to compute a parallelism that can evenly distribute data.",
+                    jobVertexId);
+            return decideParallelismAndEvenlyDistributeData(
+                    jobVertexId,
+                    consumedResults,
+                    initialParallelism,
+                    minParallelism,
+                    maxParallelism);
+        }
+        int subPartitionNum = checkAndGetSubpartitionNum(consumedResults);
+        List<Long> leftSubpartitionBytes =
+                ((AllToAllBlockingResultInfo) leftResultInfo).getAggregatedSubpartitionBytes();
+        List<Long> rightSubpartitionBytes =
+                ((AllToAllBlockingResultInfo) rightResultInfo).getAggregatedSubpartitionBytes();
+
+        long leftMedSize = median(leftSubpartitionBytes);
+        long rightMedSize = median(rightSubpartitionBytes);
+
+        boolean canSplitLeft = leftResultInfo.isSplittable() & !leftResultInfo.isBroadcast();
+        boolean canSplitRight = rightResultInfo.isSplittable() & !rightResultInfo.isBroadcast();
+
+        long leftSkewThreshold =
+                getSkewThreshold(leftMedSize, skewedPartitionThreshold, skewedPartitionFactor);
+        long rightSkewThreshold =
+                getSkewThreshold(rightMedSize, skewedPartitionThreshold, skewedPartitionFactor);
+        long leftTargetSize = getTargetSize(leftSubpartitionBytes, leftSkewThreshold);
+        long rightTargetSize = getTargetSize(rightSubpartitionBytes, rightSkewThreshold);
+
+        LOG.info("The dataVolumePerTask is {}", dataVolumePerTask);
+
+        LOG.info(
+                "The left skewed threshold is {} and the target size is {}.",
+                leftSkewThreshold,
+                leftTargetSize);
+
+        LOG.info(
+                "The right skewed threshold is {} and the target size is {}.",
+                rightSkewThreshold,
+                rightTargetSize);
+
+        List<IndexRange> leftSplitPartitionRanges = new ArrayList<>();
+        List<IndexRange> rightSplitPartitionRanges = new ArrayList<>();
+        // Create a Map between the spilt subPartitions and the original Partitions
+        Map<Integer, Integer> mapToSubpartitionIdx = new HashMap<>();
+
+        int subPartitionNumAfterSplit = 0;
+
+        for (int i = 0; i < subPartitionNum; ++i) {
+            boolean isLeftSkew = canSplitLeft && leftSubpartitionBytes.get(i) > leftSkewThreshold;
+            boolean isRightSkew =
+                    canSplitRight && rightSubpartitionBytes.get(i) > rightSkewThreshold;
+
+            List<IndexRange> leftPartitionRange;
+            if (isLeftSkew) {
+                leftPartitionRange =
+                        splitSkewPartition(
+                                leftResultInfo.getSubpartitionBytesByPartitionIndex(),
+                                i,
+                                leftTargetSize);
+                LOG.info(
+                        "Left side partition {} is skewed, split it into {} parts: {}",
+                        i,
+                        leftPartitionRange.size(),
+                        leftPartitionRange);
+            } else {
+                leftPartitionRange =
+                        Collections.singletonList(
+                                new IndexRange(0, leftResultInfo.getNumPartitions() - 1));
+            }
+            List<IndexRange> rightPartitionRange;
+            if (isRightSkew) {
+                rightPartitionRange =
+                        splitSkewPartition(
+                                rightResultInfo.getSubpartitionBytesByPartitionIndex(),
+                                i,
+                                rightTargetSize);
+                LOG.info(
+                        "Right side partition {} is skewed, split it into {} parts: {}",
+                        i,
+                        rightPartitionRange.size(),
+                        rightPartitionRange);
+            } else {
+                rightPartitionRange =
+                        Collections.singletonList(
+                                new IndexRange(0, rightResultInfo.getNumPartitions() - 1));
+            }
+            for (IndexRange left : leftPartitionRange) {
+                for (IndexRange right : rightPartitionRange) {
+                    leftSplitPartitionRanges.add(left);
+                    rightSplitPartitionRanges.add(right);
+                    mapToSubpartitionIdx.put(subPartitionNumAfterSplit, i);
+                    ++subPartitionNumAfterSplit;
+                }
+            }
+        }
+
+        final List<BlockingResultInfo> nonBroadcastResults =
+                getNonBroadcastResultInfos(consumedResults);
+        int maxNumPartitions = getMaxNumPartitions(nonBroadcastResults);
+        int maxRangeSize = MAX_NUM_SUBPARTITIONS_PER_TASK_CONSUME / maxNumPartitions;
+
+        long[] bytesBySplitSubPartitions = new long[subPartitionNumAfterSplit];
+        for (int i = 0; i < subPartitionNumAfterSplit; ++i) {
+            int subPartitionIdx = mapToSubpartitionIdx.get(i);
+            IndexRange subPartitionRange = new IndexRange(subPartitionIdx, subPartitionIdx);
+            if (!leftResultInfo.isBroadcast()) {
+                bytesBySplitSubPartitions[i] +=
+                        getNumBytesByIndexRange(
+                                leftResultInfo, leftSplitPartitionRanges.get(i), subPartitionRange);
+            }
+            if (!rightResultInfo.isBroadcast()) {
+                bytesBySplitSubPartitions[i] +=
+                        getNumBytesByIndexRange(
+                                rightResultInfo,
+                                rightSplitPartitionRanges.get(i),
+                                subPartitionRange);
+            }
+        }
+
+        // compute subpartition ranges
+        List<IndexRange> splitSubpartitionRanges =
+                computeSubpartitionRanges(
+                        bytesBySplitSubPartitions, dataVolumePerTask, maxRangeSize);
+
+        // if the parallelism is not legal, adjust to a legal parallelism
+        if (!isLegalParallelism(splitSubpartitionRanges.size(), minParallelism, maxParallelism)) {
+            LOG.info(
+                    "The maximum parallelism limit is exceeded and the parallelism is recalculate, {}",
+                    jobVertexId);
+            Optional<List<IndexRange>> adjustedSubpartitionRanges =
+                    adjustToClosestLegalParallelism(
+                            dataVolumePerTask,
+                            splitSubpartitionRanges.size(),
+                            minParallelism,
+                            maxParallelism,
+                            Arrays.stream(bytesBySplitSubPartitions).min().getAsLong(),
+                            Arrays.stream(bytesBySplitSubPartitions).sum(),
+                            limit ->
+                                    computeParallelism(
+                                            bytesBySplitSubPartitions, limit, maxRangeSize),
+                            limit ->
+                                    computeSubpartitionRanges(
+                                            bytesBySplitSubPartitions, limit, maxRangeSize));
+            if (!adjustedSubpartitionRanges.isPresent()) {
+                // can't find any legal parallelism, fall back to evenly distribute subpartitions
+                LOG.info(
+                        "Cannot find a legal parallelism to evenly distribute skewed data for job vertex {}. "
+                                + "Fall back to compute a parallelism that can evenly distribute data.",
+                        jobVertexId);
+                return decideParallelismAndEvenlyDistributeData(
+                        jobVertexId,
+                        consumedResults,
+                        initialParallelism,
+                        minParallelism,
+                        maxParallelism);
+            }
+            splitSubpartitionRanges = adjustedSubpartitionRanges.get();
+        }
+
+        checkState(
+                isLegalParallelism(splitSubpartitionRanges.size(), minParallelism, maxParallelism));
+        return createParallelismAndInputInfosForSplitPartition(
+                consumedResults,
+                splitSubpartitionRanges,
+                leftSplitPartitionRanges,
+                rightSplitPartitionRanges,
+                mapToSubpartitionIdx);
+    }
+
+    private static long getNumBytesByIndexRange(
+            BlockingResultInfo resultInfo,
+            IndexRange partitionIndexRange,
+            IndexRange subpartitionIndexRange) {
+        int numSubpartitions = checkAndGetSubpartitionNum(Collections.singletonList(resultInfo));
+        Map<Integer, long[]> subpartitionBytesByPartitionIndex =
+                resultInfo.getSubpartitionBytesByPartitionIndex();
+        checkState(
+                partitionIndexRange.getEndIndex() < resultInfo.getNumPartitions(),
+                "Partition index %s is out of range.",
+                partitionIndexRange.getEndIndex());
+        checkState(
+                subpartitionIndexRange.getEndIndex() < numSubpartitions,
+                "Subpartition index %s is out of range.",
+                subpartitionIndexRange.getEndIndex());
+        long numBytes = 0L;
+        for (int i = partitionIndexRange.getStartIndex();
+                i <= partitionIndexRange.getEndIndex();
+                ++i) {
+            numBytes +=
+                    Arrays.stream(
+                                    subpartitionBytesByPartitionIndex.get(i),
+                                    subpartitionIndexRange.getStartIndex(),
+                                    subpartitionIndexRange.getEndIndex() + 1)
+                            .sum();
+        }
+        return numBytes;
+    }
+
+    private static ParallelismAndInputInfos createParallelismAndInputInfosForSplitPartition(
+            List<BlockingResultInfo> consumedResults,
+            List<IndexRange> splitSubPartitionRanges,
+            List<IndexRange> leftSplitSubPartitions,
+            List<IndexRange> rightSplitSubPartitions,
+            Map<Integer, Integer> mapToSubpartitionIdx) {
+        checkArgument(consumedResults.size() == 2);
+        final Map<IntermediateDataSetID, JobVertexInputInfo> vertexInputInfos = new HashMap<>();
+        BlockingResultInfo leftResultInfo = consumedResults.get(0);
+        BlockingResultInfo rightResultInfo = consumedResults.get(1);
+        List<ExecutionVertexInputInfo> leftExecutionVertexInputInfos =
+                createdExecutionVertexInputInfos(
+                        leftResultInfo,
+                        splitSubPartitionRanges,
+                        leftSplitSubPartitions,
+                        mapToSubpartitionIdx);
+        List<ExecutionVertexInputInfo> rightExecutionVertexInputInfos =
+                createdExecutionVertexInputInfos(
+                        rightResultInfo,
+                        splitSubPartitionRanges,
+                        rightSplitSubPartitions,
+                        mapToSubpartitionIdx);
+        vertexInputInfos.put(
+                leftResultInfo.getResultId(),
+                new JobVertexInputInfo(leftExecutionVertexInputInfos));
+        vertexInputInfos.put(
+                rightResultInfo.getResultId(),
+                new JobVertexInputInfo(rightExecutionVertexInputInfos));
+        return new ParallelismAndInputInfos(splitSubPartitionRanges.size(), vertexInputInfos);
+    }
+
+    public static List<ExecutionVertexInputInfo> createdExecutionVertexInputInfos(
+            BlockingResultInfo resultInfo,
+            List<IndexRange> combinedPartitionRanges,
+            List<IndexRange> splitPartitions,
+            Map<Integer, Integer> mapToSubpartitionIdx) {
+        int sourceParallelism = resultInfo.getNumPartitions();
+        List<ExecutionVertexInputInfo> executionVertexInputInfos = new ArrayList<>();
+        for (int i = 0; i < combinedPartitionRanges.size(); ++i) {
+            ExecutionVertexInputInfo executionVertexInputInfo;
+            if (resultInfo.isBroadcast()) {
+                executionVertexInputInfo =
+                        new ExecutionVertexInputInfo(
+                                i, new IndexRange(0, sourceParallelism - 1), new IndexRange(0, 0));
+            } else {
+                IndexRange splitSubpartitionRange = combinedPartitionRanges.get(i);
+                Map<IndexRange, IndexRange> mergedPartitionRanges =
+                        mergePartitionRanges(
+                                splitSubpartitionRange, splitPartitions, mapToSubpartitionIdx);
+                executionVertexInputInfo = new ExecutionVertexInputInfo(i, mergedPartitionRanges);
+            }
+            executionVertexInputInfos.add(executionVertexInputInfo);
+        }
+        return executionVertexInputInfos;
+    }
+
+    private static Map<IndexRange, IndexRange> mergePartitionRanges(
+            IndexRange combinedPartitionRange,
+            List<IndexRange> splitPartitions,
+            Map<Integer, Integer> mapToSubpartitionIdx) {
+        int startSubpartitionIdx = mapToSubpartitionIdx.get(combinedPartitionRange.getStartIndex());
+        int endSubpartitionIdx = mapToSubpartitionIdx.get(combinedPartitionRange.getEndIndex());
+        Map<Integer, IndexRange> subPartitionToPartitionIdx = new TreeMap<>();
+        for (int i = combinedPartitionRange.getStartIndex();
+                i <= combinedPartitionRange.getEndIndex();
+                i++) {
+            IndexRange partitionRange = splitPartitions.get(i);
+            int subPartitionIdx = mapToSubpartitionIdx.get(i);
+            subPartitionToPartitionIdx.merge(
+                    subPartitionIdx,
+                    partitionRange,
+                    (oldRange, newRange) -> {
+                        if (oldRange.equals(newRange)) {
+                            return oldRange;
+                        }
+                        checkArgument(oldRange.getEndIndex() + 1 == newRange.getStartIndex());
+                        return new IndexRange(oldRange.getStartIndex(), newRange.getEndIndex());
+                    });
+        }
+        int startIdx = startSubpartitionIdx;
+        IndexRange prePartitionIndexRange = subPartitionToPartitionIdx.get(startIdx);
+        Map<IndexRange, IndexRange> mergedPartitionRanges = new LinkedHashMap<>();
+        for (int i = startSubpartitionIdx; i <= endSubpartitionIdx; ++i) {
+            IndexRange partitionIndexRange = subPartitionToPartitionIdx.get(i);
+            if (!prePartitionIndexRange.equals(partitionIndexRange)) {
+                mergedPartitionRanges.put(prePartitionIndexRange, new IndexRange(startIdx, i - 1));
+                prePartitionIndexRange = partitionIndexRange;
+                startIdx = i;
+            }
+        }
+        mergedPartitionRanges.put(
+                prePartitionIndexRange, new IndexRange(startIdx, endSubpartitionIdx));
+        return mergedPartitionRanges;
+    }
+
+    public static List<IndexRange> splitSkewPartition(
+            Map<Integer, long[]> subPartitionBytesByPartitionIndex,
+            int subPartitionIndex,
+            long targetSize) {
+        List<IndexRange> splitPartitionRange = new ArrayList<>();
+        int partitionNum = subPartitionBytesByPartitionIndex.size();
+        long tmpSum = 0;
+        int startIndex = 0;
+        for (int i = 0; i < partitionNum; ++i) {
+            long[] subPartitionBytes = subPartitionBytesByPartitionIndex.get(i);
+            long num = subPartitionBytes[subPartitionIndex];
+            if (i == startIndex || tmpSum + num < targetSize) {
+                tmpSum += num;
+            } else {
+                LOG.info("The total size is {}, split it.", tmpSum);
+                splitPartitionRange.add(new IndexRange(startIndex, i - 1));
+                startIndex = i;
+                tmpSum = num;
+            }
+        }
+        LOG.info("The total size is {}, split it.", tmpSum);
+        splitPartitionRange.add(new IndexRange(startIndex, partitionNum - 1));
+        return splitPartitionRange;
+    }
+
+    @VisibleForTesting
+    public static long median(List<Long> nums) {
+        int len = nums.size();
+        List<Long> sortedNums = nums.stream().sorted().collect(Collectors.toList());
+        if (len % 2 == 0) {
+            return Math.max((sortedNums.get(len / 2) + sortedNums.get(len / 2 - 1)) / 2, 1L);
+        } else {
+            return Math.max(sortedNums.get(len / 2), 1L);
+        }
+    }
+
+    private static long getSkewThreshold(
+            long medSize, long skewedPartitionThreshold, double skewedPartitionFactor) {
+        return (long) Math.max(skewedPartitionThreshold, medSize * skewedPartitionFactor);
+    }
+
+    private long getTargetSize(List<Long> subpartitionBytes, long skewedThreshold) {
+        List<Long> nonSkewPartitions =
+                subpartitionBytes.stream()
+                        .filter(v -> v <= skewedThreshold)
+                        .collect(Collectors.toList());
+        if (nonSkewPartitions.isEmpty()) {
+            return dataVolumePerTask / 2;
+        } else {
+            return Math.max(
+                    dataVolumePerTask / 2,
+                    nonSkewPartitions.stream().mapToLong(Long::longValue).sum()
+                            / nonSkewPartitions.size());
+        }
+    }
+
+    public static boolean hasSkewPartitions(
+            BlockingResultInfo consumedResult,
+            long skewedPartitionThreshold,
+            double skewedPartitionFactor) {
+        if (consumedResult.isBroadcast() || consumedResult.isPointwise()) {
+            return false;
+        }
+
+        List<Long> subpartitionBytes =
+                ((AllToAllBlockingResultInfo) consumedResult).getAggregatedSubpartitionBytes();
+
+        long medSize = median(subpartitionBytes);
+        long skewThreshold =
+                getSkewThreshold(medSize, skewedPartitionThreshold, skewedPartitionFactor);
+
+        for (Long subpartitionByte : subpartitionBytes) {
+            if (subpartitionByte > skewThreshold) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private static boolean isLegalParallelism(
             int parallelism, int minParallelism, int maxParallelism) {
         return parallelism >= minParallelism && parallelism <= maxParallelism;
@@ -569,6 +984,10 @@ public class DefaultVertexParallelismAndInputInfosDecider
                         BatchExecutionOptions.ADAPTIVE_AUTO_PARALLELISM_AVG_DATA_VOLUME_PER_TASK),
                 configuration.get(
                         BatchExecutionOptions.ADAPTIVE_AUTO_PARALLELISM_DEFAULT_SOURCE_PARALLELISM,
-                        maxParallelism));
+                        maxParallelism),
+                configuration.get(BatchExecutionOptions.SKEWED_PARTITION_FACTOR),
+                configuration
+                        .get(BatchExecutionOptions.SKEWED_PARTITION_THRESHOLD_IN_BYTES)
+                        .getBytes());
     }
 }

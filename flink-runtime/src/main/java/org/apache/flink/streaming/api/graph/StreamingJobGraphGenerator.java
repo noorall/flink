@@ -58,6 +58,7 @@ import org.apache.flink.streaming.api.environment.CheckpointConfig;
 import org.apache.flink.streaming.api.environment.ExecutionCheckpointingOptions;
 import org.apache.flink.streaming.api.operators.ChainingStrategy;
 import org.apache.flink.streaming.api.operators.InputSelectable;
+import org.apache.flink.streaming.api.operators.SkewedJoin;
 import org.apache.flink.streaming.api.operators.SourceOperatorFactory;
 import org.apache.flink.streaming.api.operators.StreamOperatorFactory;
 import org.apache.flink.streaming.api.operators.YieldingOperatorFactory;
@@ -965,9 +966,14 @@ public class StreamingJobGraphGenerator {
                                         getChainedSourcesByVertexId(
                                                 vertexID, chainInfo, streamGraph))
                         .orElse(Collections.emptyList());
+        StreamNode node = streamGraph.getStreamNode(vertexID);
+        String originOperatorName = node.getOperatorName();
+        if (node.getOperatorFactory() instanceof SkewedJoin
+                && ((SkewedJoin) node.getOperatorFactory()).isSkewed()) {
+            originOperatorName += "(skewed)";
+        }
         final String operatorName =
-                nameWithChainedSourcesInfo(
-                        streamGraph.getStreamNode(vertexID).getOperatorName(), chainedSourceInfos);
+                nameWithChainedSourcesInfo(originOperatorName, chainedSourceInfos);
         if (chainedOutputs.size() > 1) {
             List<String> outputChainedNames = new ArrayList<>();
             for (StreamEdge chainable : chainedOutputs) {

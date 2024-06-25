@@ -18,6 +18,7 @@
 
 package org.apache.flink.runtime.scheduler.strategy;
 
+import org.apache.flink.runtime.executiongraph.IndexRange;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionType;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
@@ -42,6 +43,8 @@ public class ConsumedPartitionGroup implements Iterable<IntermediateResultPartit
 
     private final List<IntermediateResultPartitionID> resultPartitions;
 
+    private final IndexRange partitionIndexRange;
+
     private final AtomicInteger unfinishedPartitions;
 
     private final IntermediateDataSetID intermediateDataSetID;
@@ -56,7 +59,8 @@ public class ConsumedPartitionGroup implements Iterable<IntermediateResultPartit
     private ConsumedPartitionGroup(
             int numConsumers,
             List<IntermediateResultPartitionID> resultPartitions,
-            ResultPartitionType resultPartitionType) {
+            ResultPartitionType resultPartitionType,
+            IndexRange partitionIndexRange) {
         checkArgument(
                 resultPartitions.size() > 0,
                 "The size of result partitions in the ConsumedPartitionGroup should be larger than 0.");
@@ -73,13 +77,16 @@ public class ConsumedPartitionGroup implements Iterable<IntermediateResultPartit
         this.resultPartitions = resultPartitions;
 
         this.unfinishedPartitions = new AtomicInteger(resultPartitions.size());
+        this.partitionIndexRange = partitionIndexRange;
     }
 
     public static ConsumedPartitionGroup fromMultiplePartitions(
             int numConsumers,
             List<IntermediateResultPartitionID> resultPartitions,
-            ResultPartitionType resultPartitionType) {
-        return new ConsumedPartitionGroup(numConsumers, resultPartitions, resultPartitionType);
+            ResultPartitionType resultPartitionType,
+            IndexRange partitionIndexRange) {
+        return new ConsumedPartitionGroup(
+                numConsumers, resultPartitions, resultPartitionType, partitionIndexRange);
     }
 
     public static ConsumedPartitionGroup fromSinglePartition(
@@ -87,7 +94,10 @@ public class ConsumedPartitionGroup implements Iterable<IntermediateResultPartit
             IntermediateResultPartitionID resultPartition,
             ResultPartitionType resultPartitionType) {
         return new ConsumedPartitionGroup(
-                numConsumers, Collections.singletonList(resultPartition), resultPartitionType);
+                numConsumers,
+                Collections.singletonList(resultPartition),
+                resultPartitionType,
+                new IndexRange(0, 0));
     }
 
     @Override
@@ -147,5 +157,9 @@ public class ConsumedPartitionGroup implements Iterable<IntermediateResultPartit
     public void setConsumerVertexGroup(ConsumerVertexGroup consumerVertexGroup) {
         checkState(this.consumerVertexGroup == null);
         this.consumerVertexGroup = checkNotNull(consumerVertexGroup);
+    }
+
+    public IndexRange getPartitionIndexRange() {
+        return partitionIndexRange;
     }
 }

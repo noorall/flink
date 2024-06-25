@@ -33,7 +33,7 @@ public interface AdaptiveJoin {
      * Represents the side of a join operation that can potentially be optimized as a broadcast
      * join. The optimization can be applied on the LEFT side or the RIGHT side.
      */
-    enum PotentialBroadcastSide {
+    enum JoinSide {
         LEFT,
         RIGHT
     }
@@ -44,7 +44,7 @@ public interface AdaptiveJoin {
      * @param canBeBroadcastSide the side of the join that can be optimized; must not be {@code
      *     null}.
      */
-    void markAsBroadcastJoin(PotentialBroadcastSide canBeBroadcastSide);
+    void markAsBroadcastJoin(JoinSide canBeBroadcastSide);
 
     /**
      * Returns the side of the join that can be optimized as a broadcast join.
@@ -52,5 +52,5 @@ public interface AdaptiveJoin {
      * @return the broadcast side that has been set for optimization, or {@code BroadcastSide.NONE}
      *     if no optimization is set.
      */
-    List<PotentialBroadcastSide> getPotentialBroadcastJoinSides();
+    List<JoinSide> getPotentialBroadcastJoinSides();
 }

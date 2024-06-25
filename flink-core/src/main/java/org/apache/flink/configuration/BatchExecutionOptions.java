@@ -59,8 +59,45 @@ public class BatchExecutionOptions {
                                     + "nodes when performing a join.");
 
     public static boolean enableAdaptiveExecution(Configuration configuration) {
-        return configuration.get(ADAPTIVE_JOIN_TYPE_ENABLED);
+        return configuration.get(ADAPTIVE_JOIN_TYPE_ENABLED)
+                || configuration.get(SKEWED_JOIN_ENABLE);
     }
+
+    @Documentation.Section({Documentation.Sections.EXPERT_SCHEDULING})
+    public static final ConfigOption<Boolean> SKEWED_JOIN_ENABLE =
+            key("execution.batch.adaptive.skewed-join.enabled")
+                    .booleanType()
+                    .defaultValue(true)
+                    .withDescription(
+                            "If true, Flink will handles skew in shuffled join (sort-merge and hash) by splitting skewed partitions.");
+
+    @Documentation.Section({Documentation.Sections.EXPERT_SCHEDULING})
+    public static final ConfigOption<Boolean> SKEWED_JOIN_FORCE_OPTIMIZE =
+            key("execution.batch.adaptive.skewed-join.force-optimize")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withDescription(
+                            "If true, force enable OptimizeSkewedJoin even if it introduces extra shuffle.");
+
+    @Documentation.Section({Documentation.Sections.EXPERT_SCHEDULING})
+    public static final ConfigOption<Double> SKEWED_PARTITION_FACTOR =
+            key("execution.batch.adaptive.skewed-join.skewed-partition-factor")
+                    .doubleType()
+                    .defaultValue(5.0)
+                    .withDescription(
+                            "A partition is considered as skewed if its size is larger than "
+                                    + "this factor multiplying the median partition size "
+                                    + "and also larger than skewed-partition-threshold-in-bytes.");
+
+    @Documentation.Section({Documentation.Sections.EXPERT_SCHEDULING})
+    public static final ConfigOption<MemorySize> SKEWED_PARTITION_THRESHOLD_IN_BYTES =
+            key("execution.batch.adaptive.skewed-join.skewed-partition-threshold-in-bytes")
+                    .memoryType()
+                    .defaultValue(MemorySize.ofMebiBytes(256))
+                    .withDescription(
+                            "A partition is considered as skewed if its size is larger than "
+                                    + "this factor multiplying the median partition size "
+                                    + "and also larger than skewed-partition-threshold-in-bytes.");
 
     @Documentation.Section({Documentation.Sections.EXPERT_SCHEDULING})
     public static final ConfigOption<Integer> ADAPTIVE_AUTO_PARALLELISM_MIN_PARALLELISM =

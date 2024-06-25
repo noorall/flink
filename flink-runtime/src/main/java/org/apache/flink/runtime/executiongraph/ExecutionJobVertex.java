@@ -584,6 +584,10 @@ public class ExecutionJobVertex
                 && numExecutionVertexFinished == parallelismInfo.getParallelism();
     }
 
+    public boolean isSkewed() {
+        return jobVertex.isSkewed();
+    }
+
     // --------------------------------------------------------------------------------------------
     //  Accumulators / Metrics
     // --------------------------------------------------------------------------------------------

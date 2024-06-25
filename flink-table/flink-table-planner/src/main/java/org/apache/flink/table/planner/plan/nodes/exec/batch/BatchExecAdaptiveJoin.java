@@ -298,11 +298,31 @@ public class BatchExecAdaptiveJoin extends ExecNodeBase<RowData>
                 break;
             default:
         }
+        int splittableSide = -1;
+        switch (joinType) {
+            case FULL:
+                break;
+            case RIGHT:
+                splittableSide = 1;
+                break;
+            case LEFT:
+            case ANTI:
+            case SEMI:
+                splittableSide = 0;
+                break;
+            case INNER:
+                splittableSide = 2;
+                break;
+            default:
+        }
+
         operator =
                 new AdaptiveJoinOperatorFactory<>(
                         originalFactory,
                         broadcastFactory,
-                        maybeBroadcastJoinSide);
+                        maybeBroadcastJoinSide,
+                        splittableSide
+                        );
 
         return ExecNodeUtil.createTwoInputTransformation(
                 buildTransform,

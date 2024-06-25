@@ -38,6 +38,7 @@ import org.apache.flink.runtime.jobmanager.scheduler.SlotSharingGroup;
 import org.apache.flink.runtime.operators.coordination.OperatorCoordinator;
 import org.apache.flink.runtime.operators.util.TaskConfig;
 import org.apache.flink.streaming.api.operators.ChainingStrategy;
+import org.apache.flink.streaming.api.operators.SkewedJoin;
 import org.apache.flink.streaming.api.operators.SourceOperatorFactory;
 import org.apache.flink.streaming.runtime.partitioner.ForwardForConsecutiveHashPartitioner;
 import org.apache.flink.streaming.runtime.partitioner.ForwardForUnspecifiedPartitioner;
@@ -254,7 +255,7 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
     @Override
     public List<JobVertex> onJobVertexFinished(JobVertexID finishedJobVertexId) {
         this.finishedJobVertices.add(finishedJobVertexId);
-        if(generateMode == GenerateMode.EAGERLY){
+        if (generateMode == GenerateMode.EAGERLY) {
             return Collections.emptyList();
         }
         List<StreamNode> streamNodes = new ArrayList<>();
@@ -322,7 +323,6 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
         }
         createJobVerticesAndUpdateGraph(sourceNodes);
     }
-
 
     private List<JobVertex> createJobVerticesAndUpdateGraph(List<StreamNode> streamNodes) {
         Map<Integer, List<StreamEdge>> nonChainableOutputsCache = new LinkedHashMap<>();
@@ -805,6 +805,11 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
                 chainInfo.getAllChainedNodes().stream()
                         .anyMatch(StreamNode::isParallelismConfigured));
 
+        if (streamNode.getOperatorFactory() instanceof SkewedJoin
+                && ((SkewedJoin) streamNode.getOperatorFactory()).isSkewed()) {
+            jobVertex.markAsSkewed();
+        }
+
         return jobVertex;
     }
 
@@ -838,7 +843,8 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
                         entry -> {
                             Integer startNodeId = entry.getKey();
                             OperatorChainInfo chainInfo = entry.getValue();
-                            if (isReadyToCreateJobVertex(chainInfo) || generateMode.equals(GenerateMode.EAGERLY)) {
+                            if (isReadyToCreateJobVertex(chainInfo)
+                                    || generateMode.equals(GenerateMode.EAGERLY)) {
                                 chainEntryPoints.put(startNodeId, chainInfo);
                                 // we cache the outputs here, and set the config later
                                 chainInfo

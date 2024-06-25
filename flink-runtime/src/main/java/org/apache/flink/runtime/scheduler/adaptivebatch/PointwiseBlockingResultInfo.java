@@ -100,4 +100,20 @@ public class PointwiseBlockingResultInfo extends AbstractBlockingResultInfo {
         }
         return inputBytes;
     }
+
+    @Override
+    public void markAsSkewed() {}
+
+    @Override
+    public boolean isSkewed() {
+        return false;
+    }
+
+    @Override
+    public void markAsSplittable() {}
+
+    @Override
+    public boolean isSplittable() {
+        return false;
+    }
 }

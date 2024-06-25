@@ -39,6 +39,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
@@ -158,6 +159,8 @@ public class JobVertex implements java.io.Serializable {
     private boolean anyOutputBlocking = false;
 
     private boolean parallelismConfigured = false;
+
+    private boolean isSkewed = false;
 
     // --------------------------------------------------------------------------------------------
 
@@ -390,6 +393,11 @@ public class JobVertex implements java.io.Serializable {
 
     public List<IntermediateDataSet> getProducedDataSets() {
         return new ArrayList<>(results.values());
+    }
+
+    public Optional<IntermediateDataSet> getProducedDataSetById(
+            IntermediateDataSetID intermediateDataSetID) {
+        return Optional.ofNullable(results.get(intermediateDataSetID));
     }
 
     public void setProducedDataSets(Map<IntermediateDataSetID, IntermediateDataSet> map) {
@@ -664,6 +672,14 @@ public class JobVertex implements java.io.Serializable {
 
     public List<IntermediateDataSetID> getIntermediateDataSetIdsToConsume() {
         return intermediateDataSetIdsToConsume;
+    }
+
+    public void markAsSkewed() {
+        isSkewed = true;
+    }
+
+    public boolean isSkewed() {
+        return isSkewed;
     }
 
     // --------------------------------------------------------------------------------------------

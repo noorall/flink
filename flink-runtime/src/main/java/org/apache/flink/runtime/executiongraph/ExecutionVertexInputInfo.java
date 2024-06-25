@@ -19,8 +19,10 @@
 package org.apache.flink.runtime.executiongraph;
 
 import java.io.Serializable;
-
-import static org.apache.flink.util.Preconditions.checkNotNull;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
 
 /**
  * This class describe the inputs(partitions and subpartitions that belong to the same intermediate
@@ -32,27 +34,37 @@ public class ExecutionVertexInputInfo implements Serializable {
 
     private final int subtaskIndex;
 
-    private final IndexRange partitionIndexRange;
-
-    private final IndexRange subpartitionIndexRange;
+    private final Map<IndexRange, IndexRange> partitionInfo;
 
     public ExecutionVertexInputInfo(
             final int subtaskIndex,
             final IndexRange partitionIndexRange,
             final IndexRange subpartitionIndexRange) {
+        this(subtaskIndex, Collections.singletonMap(partitionIndexRange, subpartitionIndexRange));
+    }
+
+    public ExecutionVertexInputInfo(
+            final int subtaskIndex, final Map<IndexRange, IndexRange> partitionInfo) {
         this.subtaskIndex = subtaskIndex;
-        this.partitionIndexRange = checkNotNull(partitionIndexRange);
-        this.subpartitionIndexRange = checkNotNull(subpartitionIndexRange);
+        this.partitionInfo = partitionInfo;
     }
 
     /** Get the subpartition range this subtask should consume. */
     public IndexRange getSubpartitionIndexRange() {
-        return subpartitionIndexRange;
+        return partitionInfo.entrySet().iterator().next().getValue();
     }
 
     /** Get the partition range this subtask should consume. */
     public IndexRange getPartitionIndexRange() {
-        return partitionIndexRange;
+        return partitionInfo.entrySet().iterator().next().getKey();
+    }
+
+    public List<IndexRange> getPartitionIndexRanges() {
+        return new ArrayList<>(partitionInfo.keySet());
+    }
+
+    public IndexRange getSubpartitionIndexRanges(IndexRange partitionIndexRange) {
+        return partitionInfo.get(partitionIndexRange);
     }
 
     /** Get the index of this subtask. */
@@ -67,8 +79,7 @@ public class ExecutionVertexInputInfo implements Serializable {
         } else if (obj != null && obj.getClass() == getClass()) {
             ExecutionVertexInputInfo that = (ExecutionVertexInputInfo) obj;
             return that.subtaskIndex == this.subtaskIndex
-                    && that.partitionIndexRange.equals(this.partitionIndexRange)
-                    && that.subpartitionIndexRange.equals(this.subpartitionIndexRange);
+                    && that.partitionInfo.equals(this.partitionInfo);
         } else {
             return false;
         }

@@ -21,6 +21,7 @@ package org.apache.flink.runtime.scheduler.adaptivebatch;
 import org.apache.flink.configuration.BatchExecutionOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.executiongraph.ExecutionJobVertex;
+import org.apache.flink.runtime.jobgraph.IntermediateDataSet;
 import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.jobgraph.JobVertex;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
@@ -35,8 +36,11 @@ import org.apache.flink.streaming.api.graph.StreamGraph;
 import org.apache.flink.streaming.api.graph.StreamGraphManagerContext;
 import org.apache.flink.streaming.api.graph.StreamNode;
 import org.apache.flink.streaming.api.operators.AdaptiveJoin;
+import org.apache.flink.streaming.api.operators.SkewedJoin;
 import org.apache.flink.streaming.runtime.partitioner.BroadcastPartitioner;
+import org.apache.flink.streaming.runtime.partitioner.ForwardForConsecutiveHashPartitioner;
 import org.apache.flink.streaming.runtime.partitioner.ForwardPartitioner;
+import org.apache.flink.streaming.runtime.partitioner.StreamPartitioner;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,6 +50,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.function.Function;
@@ -111,6 +116,11 @@ public class DefaultAdaptiveExecutionHandler implements AdaptiveExecutionHandler
             if (enableAdaptiveJoinType()) {
                 tryAdjustJoinType(event);
             }
+
+            if (enableSkewedJoin()) {
+                tryAdjustSkewJoin(event);
+            }
+
             tryUpdateJobGraph(event.getVertexId());
         }
     }
@@ -125,6 +135,134 @@ public class DefaultAdaptiveExecutionHandler implements AdaptiveExecutionHandler
 
     private boolean enableAdaptiveJoinType() {
         return configuration.get(BatchExecutionOptions.ADAPTIVE_JOIN_TYPE_ENABLED);
+    }
+
+    private boolean enableSkewedJoin() {
+        return configuration.get(BatchExecutionOptions.SKEWED_JOIN_ENABLE);
+    }
+
+    private long getSkewedPartitionThreshold() {
+        return configuration
+                .get(BatchExecutionOptions.SKEWED_PARTITION_THRESHOLD_IN_BYTES)
+                .getBytes();
+    }
+
+    private double getSkewedPartitionFactor() {
+        return configuration.get(BatchExecutionOptions.SKEWED_PARTITION_FACTOR);
+    }
+
+    private boolean enableSkewedJoinForce() {
+        return configuration.get(BatchExecutionOptions.SKEWED_JOIN_FORCE_OPTIMIZE);
+    }
+
+    private void tryAdjustSkewJoin(ExecutionJobVertexFinishedEvent event) {
+        JobVertexID jobVertexId = event.getVertexId();
+
+        List<StreamEdge> outputEdges = jobGraphManager.findOutputEdgesByVertexId(jobVertexId);
+
+        for (StreamEdge edge : outputEdges) {
+            tryOptimizeSkewedJoin(edge);
+        }
+    }
+
+    private void tryOptimizeSkewedJoin(StreamEdge edge) {
+        StreamNode node = edge.getTargetNode();
+        if (jobGraphManager.findVertexByStreamNodeId(node.getId()).isPresent()) {
+            return;
+        }
+        if (node.getOperatorFactory() instanceof SkewedJoin) {
+            log.info("Try optimize skewed join {}.", node);
+            SkewedJoin skewedJoin = (SkewedJoin) node.getOperatorFactory();
+            List<AdaptiveJoin.JoinSide> splittableJoinSide = skewedJoin.getSplittableJoinSide();
+
+            log.info("The splittable join sides are {}.", splittableJoinSide);
+
+            if (splittableJoinSide.isEmpty()) {
+                return;
+            }
+
+            List<StreamEdge> sameTypeEdges =
+                    node.getInEdges().stream()
+                            .filter(inEdge -> inEdge.getTypeNumber() == edge.getTypeNumber())
+                            .collect(Collectors.toList());
+
+            if (sameTypeEdges.size() != 1) {
+                log.info("The input sides size is {} that not equals {}.", sameTypeEdges.size(), 1);
+                return;
+            }
+            JobVertexID jobVertexID =
+                    jobGraphManager.findVertexByStreamNodeId(edge.getSourceId()).get();
+
+            if (!jobVertexFinishedEvents.containsKey(jobVertexID)) {
+                return;
+            }
+            JobVertex jobVertex = getJobGraph().findVertexByID(jobVertexID);
+            jobVertex.getProducedDataSets();
+            for (BlockingResultInfo info :
+                    jobVertexFinishedEvents.get(jobVertexID).getResultInfo()) {
+                Optional<IntermediateDataSet> dataSet =
+                        jobVertex.getProducedDataSetById(info.getResultId());
+                if (!dataSet.isPresent()) {
+                    log.info("ResultInfo with id {} does not exist in vertex.", info.getResultId());
+                    continue;
+                }
+                if (!dataSet.get().getConsumerStreamEdges().contains(edge)) {
+                    continue;
+                }
+                if (edge.getPartitioner().isBroadcast()) {
+                    log.info(
+                            "ResultInfo with id {} connect to a Broadcast edge, skip it.",
+                            info.getResultId());
+                    continue;
+                }
+                info.markAsSplittable();
+                log.info("ResultInfo with id {} is marked as splittable.", info.getResultId());
+                if (!DefaultVertexParallelismAndInputInfosDecider.hasSkewPartitions(
+                        info, getSkewedPartitionThreshold(), getSkewedPartitionFactor())) {
+                    continue;
+                }
+                if (jobGraphManager.updateStreamGraph(
+                        context -> tryTransferToHashPartitioner(node, context))) {
+                    log.info("ResultInfo with id {} is marked as skewed.", info.getResultId());
+                    skewedJoin.markAsSkewed();
+                    info.markAsSkewed();
+                } else {
+                    log.info(
+                            "ResultInfo with id {} is skewed, but an error occurred while trying to modify the edge.",
+                            info.getResultId());
+                }
+            }
+        }
+    }
+
+    private boolean tryTransferToHashPartitioner(
+            StreamNode node, StreamGraphManagerContext context) {
+        List<StreamEdgeUpdateRequestInfo> updateRequestInfos = new ArrayList<>();
+        for (StreamEdge edge : node.getOutEdges()) {
+            StreamPartitioner<?> partitioner = edge.getPartitioner();
+            if (partitioner instanceof ForwardForConsecutiveHashPartitioner) {
+                StreamPartitioner<?> newPartitioner =
+                        ((ForwardForConsecutiveHashPartitioner<?>) partitioner)
+                                .getHashPartitioner();
+                StreamEdgeUpdateRequestInfo streamEdgeUpdateRequestInfo =
+                        new StreamEdgeUpdateRequestInfo(
+                                        edge.getId(), edge.getSourceId(), edge.getTargetId())
+                                .outputPartitioner(newPartitioner);
+                updateRequestInfos.add(streamEdgeUpdateRequestInfo);
+            }
+        }
+
+        if (updateRequestInfos.isEmpty()) {
+            return true;
+        }
+
+        if (!enableSkewedJoinForce()) {
+            log.info(
+                    "Found the downstream of ForwardForConsecutiveHashPartitioner, but did not enable forced skewed optimization, skip it.");
+            return false;
+        }
+
+        return context.modifyStreamEdge(updateRequestInfos);
     }
 
     private void tryAdjustJoinType(ExecutionJobVertexFinishedEvent event) {
@@ -148,7 +286,7 @@ public class DefaultAdaptiveExecutionHandler implements AdaptiveExecutionHandler
             log.info("Try optimize adaptive join {} to broadcast join.", node);
 
             AdaptiveJoin adaptiveJoin = (AdaptiveJoin) node.getOperatorFactory();
-            List<AdaptiveJoin.PotentialBroadcastSide> potentialBroadcastJoinSides =
+            List<AdaptiveJoin.JoinSide> potentialBroadcastJoinSides =
                     adaptiveJoin.getPotentialBroadcastJoinSides();
             log.info("The potential broadcast join sides are {}.", potentialBroadcastJoinSides);
 
@@ -238,7 +376,7 @@ public class DefaultAdaptiveExecutionHandler implements AdaptiveExecutionHandler
     private boolean canBeBroadcast(
             long producedBytes,
             int typeNumber,
-            List<AdaptiveJoin.PotentialBroadcastSide> potentialBroadcastSides) {
+            List<AdaptiveJoin.JoinSide> potentialBroadcastSides) {
         boolean isSmallEnough = isProducedBytesBelowThreshold(producedBytes);
         boolean isBroadcastCandidate =
                 isEdgeTypeAndSideCompatible(typeNumber, potentialBroadcastSides);
@@ -251,15 +389,15 @@ public class DefaultAdaptiveExecutionHandler implements AdaptiveExecutionHandler
     }
 
     private boolean isEdgeTypeAndSideCompatible(
-            int typeNumber, List<AdaptiveJoin.PotentialBroadcastSide> potentialBroadcastSides) {
+            int typeNumber, List<AdaptiveJoin.JoinSide> potentialBroadcastSides) {
         return potentialBroadcastSides.contains(getBroadCastSide(typeNumber));
     }
 
-    private AdaptiveJoin.PotentialBroadcastSide getBroadCastSide(int edgeTypeNumber) {
+    private AdaptiveJoin.JoinSide getBroadCastSide(int edgeTypeNumber) {
         if (edgeTypeNumber == 1) {
-            return AdaptiveJoin.PotentialBroadcastSide.LEFT;
+            return AdaptiveJoin.JoinSide.LEFT;
         } else if (edgeTypeNumber == 2) {
-            return AdaptiveJoin.PotentialBroadcastSide.RIGHT;
+            return AdaptiveJoin.JoinSide.RIGHT;
         } else {
             throw new IllegalArgumentException();
         }

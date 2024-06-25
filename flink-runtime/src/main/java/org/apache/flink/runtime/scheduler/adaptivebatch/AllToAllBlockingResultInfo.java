@@ -41,6 +41,10 @@ public class AllToAllBlockingResultInfo extends AbstractBlockingResultInfo {
 
     private final boolean aggregateSubpartitionBytes;
 
+    private boolean isSkewed;
+
+    private boolean isSplittable;
+
     /**
      * Aggregated subpartition bytes, which aggregates the subpartition bytes with the same
      * subpartition index in different partitions. Note that We can aggregate them because they will
@@ -100,21 +104,41 @@ public class AllToAllBlockingResultInfo extends AbstractBlockingResultInfo {
             IndexRange partitionIndexRange, IndexRange subpartitionIndexRange) {
         checkState(aggregatedSubpartitionBytes != null, "Not all partition infos are ready");
         checkState(
-                partitionIndexRange.getStartIndex() == 0
-                        && partitionIndexRange.getEndIndex() == numOfPartitions - 1,
-                "For All-To-All edges, the partition range should always be [0, %s).",
-                numOfPartitions);
-        checkState(
                 subpartitionIndexRange.getEndIndex() < numOfSubpartitions,
                 "Subpartition index %s is out of range.",
                 subpartitionIndexRange.getEndIndex());
 
-        return aggregatedSubpartitionBytes
-                .subList(
-                        subpartitionIndexRange.getStartIndex(),
-                        subpartitionIndexRange.getEndIndex() + 1)
-                .stream()
-                .reduce(0L, Long::sum);
+        long numBytes = 0L;
+        if (aggregateSubpartitionBytes) {
+            checkState(
+                    partitionIndexRange.getStartIndex() == 0
+                            && partitionIndexRange.getEndIndex() == numOfPartitions - 1,
+                    "For All-To-All edges, the partition range should always be [0, %s).",
+                    numOfPartitions);
+            numBytes =
+                    aggregatedSubpartitionBytes
+                            .subList(
+                                    subpartitionIndexRange.getStartIndex(),
+                                    subpartitionIndexRange.getEndIndex() + 1)
+                            .stream()
+                            .reduce(0L, Long::sum);
+        } else {
+            checkState(
+                    partitionIndexRange.getEndIndex() < numOfPartitions,
+                    "Partition index %s is out of range.",
+                    partitionIndexRange.getEndIndex());
+            for (int i = partitionIndexRange.getStartIndex();
+                    i <= partitionIndexRange.getEndIndex();
+                    ++i) {
+                numBytes +=
+                        Arrays.stream(
+                                        subpartitionBytesByPartitionIndex.get(i),
+                                        subpartitionIndexRange.getStartIndex(),
+                                        subpartitionIndexRange.getEndIndex() + 1)
+                                .sum();
+            }
+        }
+        return numBytes;
     }
 
     @Override
@@ -152,6 +176,26 @@ public class AllToAllBlockingResultInfo extends AbstractBlockingResultInfo {
         if (aggregatedSubpartitionBytes == null) {
             super.resetPartitionInfo(partitionIndex);
         }
+    }
+
+    @Override
+    public void markAsSkewed() {
+        this.isSkewed = true;
+    }
+
+    @Override
+    public boolean isSkewed() {
+        return this.isSkewed;
+    }
+
+    @Override
+    public void markAsSplittable() {
+        this.isSplittable = true;
+    }
+
+    @Override
+    public boolean isSplittable() {
+        return this.isSplittable;
     }
 
     public List<Long> getAggregatedSubpartitionBytes() {

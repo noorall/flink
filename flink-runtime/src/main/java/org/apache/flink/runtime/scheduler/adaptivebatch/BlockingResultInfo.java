@@ -68,4 +68,12 @@ public interface BlockingResultInfo extends IntermediateResultInfo {
     void resetPartitionInfo(int partitionIndex);
 
     Map<Integer, long[]> getSubpartitionBytesByPartitionIndex();
+
+    void markAsSkewed();
+
+    boolean isSkewed();
+
+    void markAsSplittable();
+
+    boolean isSplittable();
 }

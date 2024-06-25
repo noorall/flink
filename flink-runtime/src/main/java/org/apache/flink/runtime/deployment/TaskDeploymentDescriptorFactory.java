@@ -154,7 +154,8 @@ public class TaskDeploymentDescriptorFactory {
             IndexRange subpartitionRange =
                     executionVertex
                             .getExecutionVertexInputInfo(resultId)
-                            .getSubpartitionIndexRange();
+                            .getSubpartitionIndexRanges(
+                                    consumedPartitionGroup.getPartitionIndexRange());
 
             inputGates.add(
                     new InputGateDeploymentDescriptor(
