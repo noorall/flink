@@ -19,10 +19,9 @@
 package org.apache.flink.runtime.executiongraph;
 
 import java.io.Serializable;
-import java.util.ArrayList;
 import java.util.Collections;
-import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * This class describe the inputs(partitions and subpartitions that belong to the same intermediate
@@ -59,12 +58,16 @@ public class ExecutionVertexInputInfo implements Serializable {
         return partitionInfo.entrySet().iterator().next().getKey();
     }
 
-    public List<IndexRange> getPartitionIndexRanges() {
-        return new ArrayList<>(partitionInfo.keySet());
+    public Set<IndexRange> getPartitionIndexRanges() {
+        return partitionInfo.keySet();
     }
 
-    public IndexRange getSubpartitionIndexRanges(IndexRange partitionIndexRange) {
+    public IndexRange getSubpartitionIndexRange(IndexRange partitionIndexRange) {
         return partitionInfo.get(partitionIndexRange);
+    }
+
+    public Map<IndexRange, IndexRange> getPartitionInfo() {
+        return partitionInfo;
     }
 
     /** Get the index of this subtask. */

@@ -44,6 +44,7 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
 import static org.apache.flink.util.Preconditions.checkState;
@@ -74,7 +75,9 @@ public class InputGateDeploymentDescriptor implements Serializable {
      * depends on the {@link DistributionPattern} and the subtask indices of the producing and
      * consuming task. The range is inclusive.
      */
-    private final IndexRange consumedSubpartitionIndexRange;
+    //    private final IndexRange consumedSubpartitionIndexRange;
+
+    private final Map<IndexRange, IndexRange> subPartitionRangeByChannel;
 
     /** An input channel for each consumed subpartition. */
     private transient ShuffleDescriptor[] inputChannels;
@@ -109,9 +112,25 @@ public class InputGateDeploymentDescriptor implements Serializable {
             IndexRange consumedSubpartitionIndexRange,
             int numberOfInputChannels,
             List<MaybeOffloaded<ShuffleDescriptorGroup>> serializedInputChannels) {
+        this(
+                consumedResultId,
+                consumedPartitionType,
+                Collections.singletonMap(
+                        new IndexRange(0, numberOfInputChannels - 1),
+                        consumedSubpartitionIndexRange),
+                numberOfInputChannels,
+                serializedInputChannels);
+    }
+
+    public InputGateDeploymentDescriptor(
+            IntermediateDataSetID consumedResultId,
+            ResultPartitionType consumedPartitionType,
+            Map<IndexRange, IndexRange> subPartitionRangeByChannel,
+            int numberOfInputChannels,
+            List<MaybeOffloaded<ShuffleDescriptorGroup>> serializedInputChannels) {
         this.consumedResultId = checkNotNull(consumedResultId);
         this.consumedPartitionType = checkNotNull(consumedPartitionType);
-        this.consumedSubpartitionIndexRange = checkNotNull(consumedSubpartitionIndexRange);
+        this.subPartitionRangeByChannel = checkNotNull(subPartitionRangeByChannel);
         this.serializedInputChannels = checkNotNull(serializedInputChannels);
         this.numberOfInputChannels = numberOfInputChannels;
     }
@@ -129,17 +148,21 @@ public class InputGateDeploymentDescriptor implements Serializable {
         return consumedPartitionType;
     }
 
-    @Nonnegative
-    public int getConsumedSubpartitionIndex() {
-        checkState(
-                consumedSubpartitionIndexRange.getStartIndex()
-                        == consumedSubpartitionIndexRange.getEndIndex());
-        return consumedSubpartitionIndexRange.getStartIndex();
-    }
+    //    @Nonnegative
+    //    public int getConsumedSubpartitionIndex() {
+    //        checkState(
+    //                consumedSubpartitionIndexRange.getStartIndex()
+    //                        == consumedSubpartitionIndexRange.getEndIndex());
+    //        return consumedSubpartitionIndexRange.getStartIndex();
+    //    }
 
-    /** Return the index range of the consumed subpartitions. */
-    public IndexRange getConsumedSubpartitionIndexRange() {
-        return consumedSubpartitionIndexRange;
+    //    /** Return the index range of the consumed subpartitions. */
+    //    public IndexRange getConsumedSubpartitionIndexRange() {
+    //        return consumedSubpartitionIndexRange;
+    //    }
+
+    public Map<IndexRange, IndexRange> getSubPartitionRangeByChannel() {
+        return subPartitionRangeByChannel;
     }
 
     public ShuffleDescriptor[] getShuffleDescriptors() {
@@ -246,8 +269,7 @@ public class InputGateDeploymentDescriptor implements Serializable {
     @Override
     public String toString() {
         return String.format(
-                "InputGateDeploymentDescriptor [result id: %s, "
-                        + "consumed subpartition index range: %s]",
-                consumedResultId.toString(), consumedSubpartitionIndexRange);
+                "InputGateDeploymentDescriptor [result id: %s, " + "consumed partition info: %s]",
+                consumedResultId.toString(), subPartitionRangeByChannel);
     }
 }

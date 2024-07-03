@@ -49,6 +49,9 @@ import org.apache.flink.types.Either;
 import org.apache.flink.util.CompressedSerializedValue;
 import org.apache.flink.util.SerializedValue;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import javax.annotation.Nullable;
 
 import java.io.IOException;
@@ -69,6 +72,8 @@ import static org.apache.flink.util.Preconditions.checkState;
  * org.apache.flink.runtime.taskmanager.Task} from {@link Execution}.
  */
 public class TaskDeploymentDescriptorFactory {
+    private static final Logger LOG =
+            LoggerFactory.getLogger(TaskDeploymentDescriptorFactory.class);
     /**
      * This is an expert option, that we do not want to expose in the documentation. The default
      * value is good enough for almost all cases
@@ -151,17 +156,19 @@ public class TaskDeploymentDescriptorFactory {
 
             IntermediateDataSetID resultId = consumedIntermediateResult.getId();
             ResultPartitionType partitionType = consumedIntermediateResult.getResultType();
-            IndexRange subpartitionRange =
-                    executionVertex
-                            .getExecutionVertexInputInfo(resultId)
-                            .getSubpartitionIndexRanges(
-                                    consumedPartitionGroup.getPartitionIndexRange());
+
+            Map<IndexRange, IndexRange> subPartitionRangeByChannel =
+                    constructSubPartitionRangeByChannel(
+                            executionVertex
+                                    .getExecutionVertexInputInfo(resultId)
+                                    .getPartitionInfo(),
+                            consumedPartitionGroup.size());
 
             inputGates.add(
                     new InputGateDeploymentDescriptor(
                             resultId,
                             partitionType,
-                            subpartitionRange,
+                            subPartitionRangeByChannel,
                             consumedPartitionGroup.size(),
                             getConsumedPartitionShuffleDescriptors(
                                     consumedIntermediateResult,
@@ -195,8 +202,30 @@ public class TaskDeploymentDescriptorFactory {
                             0,
                             entry.getValue()));
         }
+        if (executionVertex.getTaskName().contains("AdaptiveJoin[115](skewed)")) {
+            LOG.info(
+                    "The input gate for task {} is {}",
+                    executionVertex.getTaskNameWithSubtaskIndex(),
+                    inputGates);
+        }
 
         return inputGates;
+    }
+
+    private Map<IndexRange, IndexRange> constructSubPartitionRangeByChannel(
+            Map<IndexRange, IndexRange> consumedPartitionInfo, int numberOfInputChannels) {
+        Map<IndexRange, IndexRange> subPartitionRangeByChannel = new HashMap<>();
+        int counter = 0;
+        for (Map.Entry<IndexRange, IndexRange> entry : consumedPartitionInfo.entrySet()) {
+            IndexRange partitionIndexRange = entry.getKey();
+            IndexRange subPartitionIndexRange = entry.getValue();
+            subPartitionRangeByChannel.put(
+                    new IndexRange(counter, counter + partitionIndexRange.size() - 1),
+                    subPartitionIndexRange);
+            counter = counter + partitionIndexRange.size();
+        }
+        checkState(counter == numberOfInputChannels);
+        return subPartitionRangeByChannel;
     }
 
     private List<MaybeOffloaded<ShuffleDescriptorGroup>> getConsumedPartitionShuffleDescriptors(

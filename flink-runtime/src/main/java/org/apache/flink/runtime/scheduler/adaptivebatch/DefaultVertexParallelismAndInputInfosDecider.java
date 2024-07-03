@@ -38,12 +38,14 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -84,6 +86,7 @@ public class DefaultVertexParallelismAndInputInfosDecider
     private final int globalDefaultSourceParallelism;
     private final double skewedPartitionFactor;
     private final long skewedPartitionThreshold;
+    private final double skewedPartitionMergeFactor;
 
     private DefaultVertexParallelismAndInputInfosDecider(
             int globalMaxParallelism,
@@ -91,7 +94,8 @@ public class DefaultVertexParallelismAndInputInfosDecider
             MemorySize dataVolumePerTask,
             int globalDefaultSourceParallelism,
             double skewedPartitionFactor,
-            long skewedPartitionThreshold) {
+            long skewedPartitionThreshold,
+            double skewedPartitionMergeFactor) {
 
         checkArgument(globalMinParallelism > 0, "The minimum parallelism must be larger than 0.");
         checkArgument(
@@ -107,6 +111,9 @@ public class DefaultVertexParallelismAndInputInfosDecider
         checkArgument(
                 skewedPartitionThreshold > 0,
                 "The default skewed threshold must be larger than 0.");
+        checkArgument(
+                skewedPartitionMergeFactor > 0,
+                "The default skewedPartitionMergeFactor must be larger than 0.");
 
         this.globalMaxParallelism = globalMaxParallelism;
         this.globalMinParallelism = globalMinParallelism;
@@ -114,6 +121,7 @@ public class DefaultVertexParallelismAndInputInfosDecider
         this.globalDefaultSourceParallelism = globalDefaultSourceParallelism;
         this.skewedPartitionFactor = skewedPartitionFactor;
         this.skewedPartitionThreshold = skewedPartitionThreshold;
+        this.skewedPartitionMergeFactor = skewedPartitionMergeFactor;
     }
 
     @Override
@@ -540,8 +548,12 @@ public class DefaultVertexParallelismAndInputInfosDecider
 
         // compute subpartition ranges
         List<IndexRange> splitSubpartitionRanges =
-                computeSubpartitionRanges(
-                        bytesBySplitSubPartitions, dataVolumePerTask, maxRangeSize);
+                computeSubpartitionRangesForSkewed(
+                        bytesBySplitSubPartitions,
+                        dataVolumePerTask,
+                        maxRangeSize,
+                        mapToSubpartitionIdx,
+                        skewedPartitionMergeFactor);
 
         // if the parallelism is not legal, adjust to a legal parallelism
         if (!isLegalParallelism(splitSubpartitionRanges.size(), minParallelism, maxParallelism)) {
@@ -557,11 +569,19 @@ public class DefaultVertexParallelismAndInputInfosDecider
                             Arrays.stream(bytesBySplitSubPartitions).min().getAsLong(),
                             Arrays.stream(bytesBySplitSubPartitions).sum(),
                             limit ->
-                                    computeParallelism(
-                                            bytesBySplitSubPartitions, limit, maxRangeSize),
+                                    computeParallelismForSkewed(
+                                            bytesBySplitSubPartitions,
+                                            limit,
+                                            maxRangeSize,
+                                            mapToSubpartitionIdx,
+                                            skewedPartitionMergeFactor),
                             limit ->
-                                    computeSubpartitionRanges(
-                                            bytesBySplitSubPartitions, limit, maxRangeSize));
+                                    computeSubpartitionRangesForSkewed(
+                                            bytesBySplitSubPartitions,
+                                            limit,
+                                            maxRangeSize,
+                                            mapToSubpartitionIdx,
+                                            skewedPartitionMergeFactor));
             if (!adjustedSubpartitionRanges.isPresent()) {
                 // can't find any legal parallelism, fall back to evenly distribute subpartitions
                 LOG.info(
@@ -666,6 +686,9 @@ public class DefaultVertexParallelismAndInputInfosDecider
                 Map<IndexRange, IndexRange> mergedPartitionRanges =
                         mergePartitionRanges(
                                 splitSubpartitionRange, splitPartitions, mapToSubpartitionIdx);
+                if (mergedPartitionRanges.size() > 1) {
+                    LOG.info("Input info for Task {} is {}", i, mergedPartitionRanges);
+                }
                 executionVertexInputInfo = new ExecutionVertexInputInfo(i, mergedPartitionRanges);
             }
             executionVertexInputInfos.add(executionVertexInputInfo);
@@ -709,7 +732,50 @@ public class DefaultVertexParallelismAndInputInfosDecider
         }
         mergedPartitionRanges.put(
                 prePartitionIndexRange, new IndexRange(startIdx, endSubpartitionIdx));
-        return mergedPartitionRanges;
+        return reorganizePartitionRange(mergedPartitionRanges);
+    }
+
+    private static Map<IndexRange, IndexRange> reorganizePartitionRange(
+            Map<IndexRange, IndexRange> mergedPartitionRanges) {
+        TreeSet<Integer> pointSet = new TreeSet<>();
+        for (IndexRange partitionIndexRange : mergedPartitionRanges.keySet()) {
+            pointSet.add(partitionIndexRange.getStartIndex());
+            pointSet.add(partitionIndexRange.getEndIndex() + 1);
+        }
+
+        Map<IndexRange, IndexRange> reorganizedPartitionRange = new LinkedHashMap<>();
+
+        Iterator<Integer> iterator = pointSet.iterator();
+        int prev = iterator.next();
+        while (iterator.hasNext()) {
+            int curr = iterator.next() - 1;
+            if (prev <= curr) {
+                IndexRange newPartitionRange = new IndexRange(prev, curr);
+                reorganizedPartitionRange.put(
+                        newPartitionRange,
+                        constructSubpartitionIndexRange(newPartitionRange, mergedPartitionRanges));
+            }
+            prev = curr + 1;
+        }
+        return reorganizedPartitionRange;
+    }
+
+    private static IndexRange constructSubpartitionIndexRange(
+            IndexRange partitionIndexRange, Map<IndexRange, IndexRange> mergedPartitionRanges) {
+        int subPartitionStartIndex = Integer.MAX_VALUE;
+        int subPartitionEndIndex = Integer.MIN_VALUE;
+        for (Map.Entry<IndexRange, IndexRange> entry : mergedPartitionRanges.entrySet()) {
+            IndexRange oldPartitionRange = entry.getKey();
+            IndexRange oldSubPartitionRange = entry.getValue();
+            if (partitionIndexRange.getStartIndex() <= oldPartitionRange.getEndIndex()
+                    && partitionIndexRange.getEndIndex() >= oldPartitionRange.getStartIndex()) {
+                subPartitionStartIndex =
+                        Math.min(oldSubPartitionRange.getStartIndex(), subPartitionStartIndex);
+                subPartitionEndIndex =
+                        Math.max(oldSubPartitionRange.getEndIndex(), subPartitionEndIndex);
+            }
+        }
+        return new IndexRange(subPartitionStartIndex, subPartitionEndIndex);
     }
 
     public static List<IndexRange> splitSkewPartition(
@@ -947,6 +1013,79 @@ public class DefaultVertexParallelismAndInputInfosDecider
         return count;
     }
 
+    private static List<IndexRange> computeSubpartitionRangesForSkewed(
+            long[] nums,
+            long limit,
+            int maxRangeSize,
+            Map<Integer, Integer> mapToSubpartitionIdx,
+            double skewedPartitionMergeFactor) {
+        List<IndexRange> subpartitionRanges = new ArrayList<>();
+
+        long tmpSum = 0;
+        int startIndex = 0;
+        int preSubpartitionIndex = mapToSubpartitionIdx.get(0);
+
+        long limitForSkewedPartition = (long) (limit * skewedPartitionMergeFactor);
+
+        for (int i = 0; i < nums.length; ++i) {
+            long num = nums[i];
+            int currentSubpartitionIndex = mapToSubpartitionIdx.get(i);
+            long mergeLimit =
+                    currentSubpartitionIndex == preSubpartitionIndex
+                            ? limitForSkewedPartition
+                            : limit;
+            if (i == startIndex
+                    || (tmpSum + num <= mergeLimit
+                            && (currentSubpartitionIndex - preSubpartitionIndex + 1)
+                                    <= maxRangeSize)) {
+                tmpSum += num;
+            } else {
+                subpartitionRanges.add(new IndexRange(startIndex, i - 1));
+                startIndex = i;
+                tmpSum = num;
+                preSubpartitionIndex = currentSubpartitionIndex;
+            }
+        }
+        subpartitionRanges.add(new IndexRange(startIndex, nums.length - 1));
+        return subpartitionRanges;
+    }
+
+    private static int computeParallelismForSkewed(
+            long[] nums,
+            long limit,
+            int maxRangeSize,
+            Map<Integer, Integer> mapToSubpartitionIdx,
+            double skewedPartitionMergeFactor) {
+
+        long tmpSum = 0;
+        int startIndex = 0;
+        int preSubpartitionIndex = mapToSubpartitionIdx.get(0);
+
+        long limitForSkewedPartition = (long) (limit * skewedPartitionMergeFactor);
+
+        int count = 1;
+        for (int i = 0; i < nums.length; ++i) {
+            long num = nums[i];
+            int currentSubpartitionIndex = mapToSubpartitionIdx.get(i);
+            long mergeLimit =
+                    currentSubpartitionIndex == preSubpartitionIndex
+                            ? limitForSkewedPartition
+                            : limit;
+            if (i == startIndex
+                    || (tmpSum + num <= mergeLimit
+                            && (currentSubpartitionIndex - preSubpartitionIndex + 1)
+                                    <= maxRangeSize)) {
+                tmpSum += num;
+            } else {
+                ++count;
+                startIndex = i;
+                tmpSum = num;
+                preSubpartitionIndex = currentSubpartitionIndex;
+            }
+        }
+        return count;
+    }
+
     private static int getMaxNumPartitions(List<BlockingResultInfo> consumedResults) {
         checkArgument(!consumedResults.isEmpty());
         return consumedResults.stream()
@@ -988,6 +1127,7 @@ public class DefaultVertexParallelismAndInputInfosDecider
                 configuration.get(BatchExecutionOptions.SKEWED_PARTITION_FACTOR),
                 configuration
                         .get(BatchExecutionOptions.SKEWED_PARTITION_THRESHOLD_IN_BYTES)
-                        .getBytes());
+                        .getBytes(),
+                configuration.get(BatchExecutionOptions.SKEWED_PARTITION_MERGE_FACTOR));
     }
 }

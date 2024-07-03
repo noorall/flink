@@ -35,5 +35,7 @@ public enum DistributionPattern {
     ALL_TO_ALL,
 
     /** Each producing sub task is connected to one or more subtask(s) of the consuming task. */
-    POINTWISE
+    POINTWISE,
+
+    HYBRID
 }

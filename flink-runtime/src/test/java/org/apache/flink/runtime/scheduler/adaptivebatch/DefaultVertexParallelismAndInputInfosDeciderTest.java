@@ -479,21 +479,12 @@ class DefaultVertexParallelismAndInputInfosDeciderTest {
                         splitPartitions,
                         mapToSubpartitionIdx);
         assertThat(executionVertexInputInfos.size()).isEqualTo(2);
-        assertThat(
-                        executionVertexInputInfos
-                                .get(0)
-                                .getSubpartitionIndexRanges(new IndexRange(0, 4)))
+        assertThat(executionVertexInputInfos.get(0).getSubpartitionIndexRange(new IndexRange(0, 4)))
                 .isEqualTo(new IndexRange(0, 0));
-        assertThat(
-                        executionVertexInputInfos
-                                .get(1)
-                                .getSubpartitionIndexRanges(new IndexRange(5, 9)))
-                .isEqualTo(new IndexRange(0, 0));
-        assertThat(
-                        executionVertexInputInfos
-                                .get(1)
-                                .getSubpartitionIndexRanges(new IndexRange(0, 9)))
+        assertThat(executionVertexInputInfos.get(1).getSubpartitionIndexRange(new IndexRange(0, 4)))
                 .isEqualTo(new IndexRange(1, 3));
+        assertThat(executionVertexInputInfos.get(1).getSubpartitionIndexRange(new IndexRange(5, 9)))
+                .isEqualTo(new IndexRange(0, 3));
     }
 
     @Test

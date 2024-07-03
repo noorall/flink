@@ -319,7 +319,7 @@ public class TestingSchedulingTopology implements SchedulingTopology {
                 numConsumers,
                 consumedPartitions,
                 resultPartitionType,
-                new IndexRange(0, consumedPartitions.size() - 1));
+                Collections.singleton(new IndexRange(0, consumedPartitions.size() - 1)));
     }
 
     private static ConsumerVertexGroup createConsumerVertexGroup(

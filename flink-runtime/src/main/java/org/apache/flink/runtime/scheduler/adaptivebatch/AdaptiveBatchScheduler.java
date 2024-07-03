@@ -91,6 +91,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.function.BiConsumer;
@@ -703,10 +704,10 @@ public class AdaptiveBatchScheduler extends DefaultScheduler implements JobGraph
                         ev.getExecutionVertexInputInfo(intermediateResult.getId());
                 BlockingResultInfo blockingResultInfo =
                         checkNotNull(getBlockingResultInfo(intermediateResult.getId()));
-                List<IndexRange> partitionIndexRanges = inputInfo.getPartitionIndexRanges();
+                Set<IndexRange> partitionIndexRanges = inputInfo.getPartitionIndexRanges();
                 for (IndexRange partitionIndexRange : partitionIndexRanges) {
                     IndexRange subpartitionIndexRange =
-                            inputInfo.getSubpartitionIndexRanges(partitionIndexRange);
+                            inputInfo.getSubpartitionIndexRange(partitionIndexRange);
                     inputBytes +=
                             blockingResultInfo.getNumBytesProduced(
                                     partitionIndexRange, subpartitionIndexRange);

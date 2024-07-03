@@ -90,6 +90,16 @@ public class BatchExecutionOptions {
                                     + "and also larger than skewed-partition-threshold-in-bytes.");
 
     @Documentation.Section({Documentation.Sections.EXPERT_SCHEDULING})
+    public static final ConfigOption<Double> SKEWED_PARTITION_MERGE_FACTOR =
+            key("execution.batch.adaptive.skewed-join.skewed-partition-merge-factor")
+                    .doubleType()
+                    .defaultValue(1.5)
+                    .withDescription(
+                            "We prefer that the split data skewed partitions be merged together. "
+                                    + "The larger the threshold, the greater the probability "
+                                    + "that the skewed partitions will be merged.");
+
+    @Documentation.Section({Documentation.Sections.EXPERT_SCHEDULING})
     public static final ConfigOption<MemorySize> SKEWED_PARTITION_THRESHOLD_IN_BYTES =
             key("execution.batch.adaptive.skewed-join.skewed-partition-threshold-in-bytes")
                     .memoryType()
