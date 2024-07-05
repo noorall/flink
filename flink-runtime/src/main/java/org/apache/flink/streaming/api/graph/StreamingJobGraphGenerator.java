@@ -1457,7 +1457,7 @@ public class StreamingJobGraphGenerator {
                         && partitionType2.isHybridResultPartition());
     }
 
-    public static void tryConvertPartitionerForDynamicGraph(
+    private void tryConvertPartitionerForDynamicGraph(
             List<StreamEdge> chainableOutputs,
             List<StreamEdge> nonChainableOutputs,
             StreamGraph streamGraph) {

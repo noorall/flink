@@ -194,6 +194,7 @@ public class DefaultAdaptiveExecutionHandler implements AdaptiveExecutionHandler
                     jobGraphManager.findVertexByStreamNodeId(edge.getSourceId()).get();
 
             if (!jobVertexFinishedEvents.containsKey(jobVertexID)) {
+                log.info("The source vertex {} is not finish yet.", jobVertexID);
                 return;
             }
             JobVertex jobVertex = getJobGraph().findVertexByID(jobVertexID);
@@ -207,6 +208,7 @@ public class DefaultAdaptiveExecutionHandler implements AdaptiveExecutionHandler
                     continue;
                 }
                 if (!dataSet.get().getConsumerStreamEdges().contains(edge)) {
+                    log.info("The edge does not consuming the dataset with id {}.", dataSet);
                     continue;
                 }
                 if (edge.getPartitioner().isBroadcast()) {
@@ -219,6 +221,7 @@ public class DefaultAdaptiveExecutionHandler implements AdaptiveExecutionHandler
                 log.info("ResultInfo with id {} is marked as splittable.", info.getResultId());
                 if (!DefaultVertexParallelismAndInputInfosDecider.hasSkewPartitions(
                         info, getSkewedPartitionThreshold(), getSkewedPartitionFactor())) {
+                    log.info("No skewed partition found, skipped.");
                     continue;
                 }
                 if (jobGraphManager.updateStreamGraph(

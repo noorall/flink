@@ -43,6 +43,7 @@ import org.apache.flink.streaming.api.operators.SourceOperatorFactory;
 import org.apache.flink.streaming.runtime.partitioner.ForwardForConsecutiveHashPartitioner;
 import org.apache.flink.streaming.runtime.partitioner.ForwardForUnspecifiedPartitioner;
 import org.apache.flink.streaming.runtime.partitioner.ForwardPartitioner;
+import org.apache.flink.streaming.runtime.partitioner.RescalePartitioner;
 import org.apache.flink.streaming.runtime.partitioner.StreamPartitioner;
 import org.apache.flink.util.FlinkRuntimeException;
 import org.apache.flink.util.Preconditions;
@@ -90,8 +91,8 @@ import static org.apache.flink.streaming.api.graph.StreamingJobGraphGenerator.se
 import static org.apache.flink.streaming.api.graph.StreamingJobGraphGenerator.setPhysicalEdges;
 import static org.apache.flink.streaming.api.graph.StreamingJobGraphGenerator.setSlotSharing;
 import static org.apache.flink.streaming.api.graph.StreamingJobGraphGenerator.setVertexDescription;
-import static org.apache.flink.streaming.api.graph.StreamingJobGraphGenerator.tryConvertPartitionerForDynamicGraph;
 import static org.apache.flink.streaming.api.graph.StreamingJobGraphGenerator.validateHybridShuffleExecuteInBatchMode;
+import static org.apache.flink.util.Preconditions.checkState;
 
 public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVertexMapper {
     private static final Logger LOG = LoggerFactory.getLogger(AdaptiveJobGraphManager.class);
@@ -452,19 +453,10 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
                     Set<StreamNode> forwardConsumers =
                             transitiveOutEdgesMap.get(startNodeId).stream()
                                     .filter(
-                                            edge -> {
-                                                StreamPartitioner<?> partitioner =
-                                                        edge.getPartitioner();
-                                                if (partitioner
-                                                                instanceof
-                                                                ForwardForConsecutiveHashPartitioner
-                                                        || partitioner
-                                                                instanceof
-                                                                ForwardForUnspecifiedPartitioner) {
-                                                    return chainableOutputs.contains(edge);
-                                                }
-                                                return partitioner instanceof ForwardPartitioner;
-                                            })
+                                            edge ->
+                                                    edge.getPartitioner()
+                                                            .getClass()
+                                                            .equals(ForwardPartitioner.class))
                                     .map(StreamEdge::getTargetId)
                                     .map(streamGraph::getStreamNode)
                                     .collect(Collectors.toSet());
@@ -1103,6 +1095,46 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
 
         } else {
             return new ArrayList<>();
+        }
+    }
+
+    private void tryConvertPartitionerForDynamicGraph(
+            List<StreamEdge> chainableOutputs,
+            List<StreamEdge> nonChainableOutputs,
+            StreamGraph streamGraph) {
+
+        for (StreamEdge edge : chainableOutputs) {
+            StreamPartitioner<?> partitioner = edge.getPartitioner();
+            if (partitioner instanceof ForwardForConsecutiveHashPartitioner
+                    || partitioner instanceof ForwardForUnspecifiedPartitioner) {
+                checkState(
+                        streamGraph.isDynamic(),
+                        String.format(
+                                "%s should only be used in dynamic graph.",
+                                partitioner.getClass().getSimpleName()));
+                edge.setPartitioner(new ForwardPartitioner<>());
+                StreamGraphManagerContext.mergeForwardGroups(
+                        edge.getSourceId(),
+                        edge.getTargetId(),
+                        forwardGroupsByEndpointNodeIdCache,
+                        streamGraph);
+            }
+        }
+        for (StreamEdge edge : nonChainableOutputs) {
+            StreamPartitioner<?> partitioner = edge.getPartitioner();
+            if (partitioner instanceof ForwardForConsecutiveHashPartitioner) {
+                checkState(
+                        streamGraph.isDynamic(),
+                        "ForwardForConsecutiveHashPartitioner should only be used in dynamic graph.");
+                edge.setPartitioner(
+                        ((ForwardForConsecutiveHashPartitioner<?>) partitioner)
+                                .getHashPartitioner());
+            } else if (partitioner instanceof ForwardForUnspecifiedPartitioner) {
+                checkState(
+                        streamGraph.isDynamic(),
+                        "ForwardForUnspecifiedPartitioner should only be used in dynamic graph.");
+                edge.setPartitioner(new RescalePartitioner<>());
+            }
         }
     }
 

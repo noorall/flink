@@ -33,16 +33,16 @@ public class StreamGraphManagerContext {
     private static final Logger LOG = LoggerFactory.getLogger(StreamGraphManagerContext.class);
 
     private final StreamGraph streamGraph;
-    private final Map<Integer, StreamNodeForwardGroup> forwardGroupsByStartNodeIdCache;
+    private final Map<Integer, StreamNodeForwardGroup> forwardGroupsByEndpointNodeIdCache;
     private final Map<Integer, Integer> frozenNodeToStartNodeMap;
     private final Map<Integer, Map<StreamEdge, NonChainedOutput>> opIntermediateOutputsCaches;
 
     public StreamGraphManagerContext(
-            Map<Integer, StreamNodeForwardGroup> forwardGroupsByStartNodeIdCache,
+            Map<Integer, StreamNodeForwardGroup> forwardGroupsByEndpointNodeIdCache,
             StreamGraph streamGraph,
             Map<Integer, Integer> frozenNodeToStartNodeMap,
             Map<Integer, Map<StreamEdge, NonChainedOutput>> opIntermediateOutputsCaches) {
-        this.forwardGroupsByStartNodeIdCache = forwardGroupsByStartNodeIdCache;
+        this.forwardGroupsByEndpointNodeIdCache = forwardGroupsByEndpointNodeIdCache;
         this.streamGraph = streamGraph;
         this.frozenNodeToStartNodeMap = frozenNodeToStartNodeMap;
         this.opIntermediateOutputsCaches = opIntermediateOutputsCaches;
@@ -81,16 +81,20 @@ public class StreamGraphManagerContext {
                         requestInfo.getTargetId(),
                         requestInfo.getEdgeId());
         if (targetEdge == null) {
+            LOG.info("Unable to find target streamEdge {}.", requestInfo.getEdgeId());
             return false;
         }
         Integer sourceNodeId = targetEdge.getSourceId();
         Integer targetNodeId = targetEdge.getTargetId();
         if (frozenNodeToStartNodeMap.containsKey(targetNodeId)) {
+            LOG.info(
+                    "The downstream vertex has been generated and the edge {} cannot be modified!",
+                    requestInfo.getEdgeId());
             return false;
         }
         StreamPartitioner<?> newPartitioner = requestInfo.getOutputPartitioner();
         if (newPartitioner != null) {
-            if (targetEdge.getPartitioner() instanceof ForwardPartitioner) {
+            if (targetEdge.getPartitioner().getClass().equals(ForwardPartitioner.class)) {
                 return false;
             }
             if (streamGraph.isDynamic()
@@ -124,7 +128,8 @@ public class StreamGraphManagerContext {
                 newPartitioner.getClass(),
                 targetEdge.getPartitioner().getClass());
         if (streamGraph.isDynamic() && targetEdge.getPartitioner() instanceof ForwardPartitioner) {
-            mergeForwardGroups(sourceNodeId, targetNodeId);
+            mergeForwardGroups(
+                    sourceNodeId, targetNodeId, forwardGroupsByEndpointNodeIdCache, streamGraph);
         }
         Map<StreamEdge, NonChainedOutput> opIntermediateOutputs =
                 opIntermediateOutputsCaches.get(sourceNodeId);
@@ -137,9 +142,9 @@ public class StreamGraphManagerContext {
 
     private boolean canMergeForwardGroups(Integer sourceNodeId, Integer targetNodeId) {
         StreamNodeForwardGroup sourceForwardGroup =
-                forwardGroupsByStartNodeIdCache.get(sourceNodeId);
+                forwardGroupsByEndpointNodeIdCache.get(sourceNodeId);
         StreamNodeForwardGroup targetForwardGroup =
-                forwardGroupsByStartNodeIdCache.get(targetNodeId);
+                forwardGroupsByEndpointNodeIdCache.get(targetNodeId);
         if (sourceForwardGroup == null || targetForwardGroup == null) {
             return false;
         }
@@ -153,11 +158,15 @@ public class StreamGraphManagerContext {
                                         >= targetForwardGroup.getMaxParallelism());
     }
 
-    private void mergeForwardGroups(Integer sourceNodeId, Integer targetNodeId) {
+    public static void mergeForwardGroups(
+            Integer sourceNodeId,
+            Integer targetNodeId,
+            Map<Integer, StreamNodeForwardGroup> forwardGroupsByEndpointNodeIdCache,
+            StreamGraph streamGraph) {
         StreamNodeForwardGroup sourceForwardGroup =
-                forwardGroupsByStartNodeIdCache.get(sourceNodeId);
+                forwardGroupsByEndpointNodeIdCache.get(sourceNodeId);
         StreamNodeForwardGroup targetForwardGroup =
-                forwardGroupsByStartNodeIdCache.get(targetNodeId);
+                forwardGroupsByEndpointNodeIdCache.get(targetNodeId);
         if (sourceForwardGroup == null || targetForwardGroup == null) {
             return;
         }
@@ -168,7 +177,7 @@ public class StreamGraphManagerContext {
                 .getStartNodeIds()
                 .forEach(
                         startNodeId ->
-                                forwardGroupsByStartNodeIdCache.put(
+                                forwardGroupsByEndpointNodeIdCache.put(
                                         startNodeId, sourceForwardGroup));
 
         if (sourceForwardGroup.isParallelismDecided()) {
