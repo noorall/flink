@@ -283,15 +283,17 @@ public class AdaptiveBatchScheduler extends DefaultScheduler implements JobGraph
     private void tryUpdateResultInfo(IntermediateDataSetID id, DistributionPattern pattern) {
         if (blockingResultInfos.containsKey(id)) {
             BlockingResultInfo resultInfo = blockingResultInfos.get(id);
+            IntermediateResult result = getExecutionGraph().getAllIntermediateResults().get(id);
             if ((pattern == DistributionPattern.ALL_TO_ALL && resultInfo.isPointwise())
                     || (pattern == DistributionPattern.POINTWISE && !resultInfo.isPointwise())) {
-                IntermediateResult result = getExecutionGraph().getAllIntermediateResults().get(id);
 
                 BlockingResultInfo newInfo =
                         createFromIntermediateResult(
                                 result, resultInfo.getSubpartitionBytesByPartitionIndex());
 
                 blockingResultInfos.put(id, newInfo);
+            } else if (pattern == DistributionPattern.ALL_TO_ALL) {
+                ((AllToAllBlockingResultInfo) resultInfo).setBroadcast(result.isBroadcast());
             }
         }
     }

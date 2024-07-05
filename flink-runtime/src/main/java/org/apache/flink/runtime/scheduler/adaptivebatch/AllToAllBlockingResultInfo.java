@@ -37,7 +37,7 @@ import static org.apache.flink.util.Preconditions.checkState;
 /** Information of All-To-All result. */
 public class AllToAllBlockingResultInfo extends AbstractBlockingResultInfo {
 
-    private final boolean isBroadcast;
+    private boolean isBroadcast;
 
     private final boolean aggregateSubpartitionBytes;
 
@@ -76,6 +76,10 @@ public class AllToAllBlockingResultInfo extends AbstractBlockingResultInfo {
     @Override
     public boolean isBroadcast() {
         return isBroadcast;
+    }
+
+    public void setBroadcast(boolean broadcast) {
+        isBroadcast = broadcast;
     }
 
     @Override
