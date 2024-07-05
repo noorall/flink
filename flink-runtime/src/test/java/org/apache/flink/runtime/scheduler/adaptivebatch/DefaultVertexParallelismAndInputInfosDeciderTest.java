@@ -464,27 +464,44 @@ class DefaultVertexParallelismAndInputInfosDeciderTest {
         splitPartitions.add(new IndexRange(0, 9));
         splitPartitions.add(new IndexRange(0, 4));
         splitPartitions.add(new IndexRange(5, 9));
+        splitPartitions.add(new IndexRange(1, 2));
+        splitPartitions.add(new IndexRange(4, 9));
+        splitPartitions.add(new IndexRange(1, 2));
+        splitPartitions.add(new IndexRange(4, 9));
         combinedPartitionRanges.add(new IndexRange(0, 0));
         combinedPartitionRanges.add(new IndexRange(1, 5));
+        combinedPartitionRanges.add(new IndexRange(6, 6));
+        combinedPartitionRanges.add(new IndexRange(7, 8));
+        combinedPartitionRanges.add(new IndexRange(9, 9));
         mapToSubpartitionIdx.put(0, 0);
         mapToSubpartitionIdx.put(1, 0);
         mapToSubpartitionIdx.put(2, 1);
         mapToSubpartitionIdx.put(3, 2);
         mapToSubpartitionIdx.put(4, 3);
         mapToSubpartitionIdx.put(5, 3);
+        mapToSubpartitionIdx.put(6, 4);
+        mapToSubpartitionIdx.put(7, 4);
+        mapToSubpartitionIdx.put(8, 4);
+        mapToSubpartitionIdx.put(9, 4);
         List<ExecutionVertexInputInfo> executionVertexInputInfos =
                 DefaultVertexParallelismAndInputInfosDecider.createdExecutionVertexInputInfos(
                         blockingResultInfo,
                         combinedPartitionRanges,
                         splitPartitions,
                         mapToSubpartitionIdx);
-        assertThat(executionVertexInputInfos.size()).isEqualTo(2);
+        assertThat(executionVertexInputInfos.size()).isEqualTo(5);
         assertThat(executionVertexInputInfos.get(0).getSubpartitionIndexRange(new IndexRange(0, 4)))
                 .isEqualTo(new IndexRange(0, 0));
         assertThat(executionVertexInputInfos.get(1).getSubpartitionIndexRange(new IndexRange(0, 4)))
                 .isEqualTo(new IndexRange(1, 3));
         assertThat(executionVertexInputInfos.get(1).getSubpartitionIndexRange(new IndexRange(5, 9)))
                 .isEqualTo(new IndexRange(0, 3));
+        assertThat(executionVertexInputInfos.get(2).getSubpartitionIndexRange(new IndexRange(1, 2)))
+                .isEqualTo(new IndexRange(4, 4));
+        assertThat(executionVertexInputInfos.get(3).getSubpartitionIndexRange(new IndexRange(1, 2)))
+                .isEqualTo(new IndexRange(4, 4));
+        assertThat(executionVertexInputInfos.get(4).getSubpartitionIndexRange(new IndexRange(4, 9)))
+                .isEqualTo(new IndexRange(4, 4));
     }
 
     @Test
