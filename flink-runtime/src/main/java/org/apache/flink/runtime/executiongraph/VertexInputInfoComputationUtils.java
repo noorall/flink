@@ -84,7 +84,8 @@ public class VertexInputInfoComputationUtils {
                                 parallelism,
                                 input::getNumSubpartitions,
                                 isDynamicGraph,
-                                input.isBroadcast()));
+                                input.isBroadcast(),
+                                input.isHashConvertToBroadcast()));
             }
         }
 
@@ -124,6 +125,7 @@ public class VertexInputInfoComputationUtils {
                                 1,
                                 () -> numOfSubpartitionsRetriever.apply(start),
                                 isDynamicGraph,
+                                false,
                                 false);
                 executionVertexInputInfos.add(
                         new ExecutionVertexInputInfo(index, partitionRange, subpartitionRange));
@@ -145,6 +147,7 @@ public class VertexInputInfoComputationUtils {
                                     numConsumers,
                                     () -> numOfSubpartitionsRetriever.apply(finalPartitionNum),
                                     isDynamicGraph,
+                                    false,
                                     false);
                     executionVertexInputInfos.add(
                             new ExecutionVertexInputInfo(i, partitionRange, subpartitionRange));
@@ -172,7 +175,8 @@ public class VertexInputInfoComputationUtils {
             int targetCount,
             Function<Integer, Integer> numOfSubpartitionsRetriever,
             boolean isDynamicGraph,
-            boolean isBroadcast) {
+            boolean isBroadcast,
+            boolean isHashConvertToBroadcast) {
         final List<ExecutionVertexInputInfo> executionVertexInputInfos = new ArrayList<>();
         IndexRange partitionRange = new IndexRange(0, sourceCount - 1);
         for (int i = 0; i < targetCount; ++i) {
@@ -182,9 +186,11 @@ public class VertexInputInfoComputationUtils {
                             targetCount,
                             () -> numOfSubpartitionsRetriever.apply(0),
                             isDynamicGraph,
-                            isBroadcast);
+                            isBroadcast,
+                            isHashConvertToBroadcast);
             executionVertexInputInfos.add(
-                    new ExecutionVertexInputInfo(i, partitionRange, subpartitionRange));
+                    new ExecutionVertexInputInfo(
+                            i, partitionRange, subpartitionRange, isHashConvertToBroadcast));
         }
         return new JobVertexInputInfo(executionVertexInputInfos);
     }
@@ -207,15 +213,19 @@ public class VertexInputInfoComputationUtils {
             int numConsumers,
             Supplier<Integer> numOfSubpartitionsSupplier,
             boolean isDynamicGraph,
-            boolean isBroadcast) {
+            boolean isBroadcast,
+            boolean isHashConvertToBroadcast) {
         int consumerIndex = consumerSubtaskIndex % numConsumers;
         if (!isDynamicGraph) {
             return new IndexRange(consumerIndex, consumerIndex);
         } else {
             int numSubpartitions = numOfSubpartitionsSupplier.get();
             if (isBroadcast) {
-                // TODO verify this change is solid
-                return new IndexRange(0, numSubpartitions - 1);
+                if (isHashConvertToBroadcast) {
+                    return new IndexRange(0, numSubpartitions - 1);
+                } else {
+                    return new IndexRange(0, 0);
+                }
             } else {
                 checkArgument(consumerIndex < numConsumers);
                 checkArgument(numConsumers <= numSubpartitions);

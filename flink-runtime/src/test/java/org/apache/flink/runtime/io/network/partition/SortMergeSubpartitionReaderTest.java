@@ -237,7 +237,7 @@ class SortMergeSubpartitionReaderTest {
         PartitionedFileReader fileReader =
                 new PartitionedFileReader(
                         partitionedFile,
-                        0,
+                        new ResultSubpartitionIndexSet(0),
                         dataFileChannel,
                         indexFileChannel,
                         BufferReaderWriterUtil.allocatedHeaderBuffer(),

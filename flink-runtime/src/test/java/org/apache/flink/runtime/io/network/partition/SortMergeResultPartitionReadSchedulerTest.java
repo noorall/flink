@@ -95,7 +95,7 @@ class SortMergeResultPartitionReadSchedulerTest {
         fileReader =
                 new PartitionedFileReader(
                         partitionedFile,
-                        0,
+                        new ResultSubpartitionIndexSet(0),
                         dataFileChannel,
                         indexFileChannel,
                         BufferReaderWriterUtil.allocatedHeaderBuffer(),
@@ -125,7 +125,9 @@ class SortMergeResultPartitionReadSchedulerTest {
 
         SortMergeSubpartitionReader subpartitionReader =
                 readScheduler.createSubpartitionReader(
-                        new NoOpBufferAvailablityListener(), 0, partitionedFile);
+                        new NoOpBufferAvailablityListener(),
+                        new ResultSubpartitionIndexSet(0),
+                        partitionedFile);
 
         assertThat(readScheduler.isRunning()).isTrue();
         assertThat(readScheduler.getDataFileChannel().isOpen()).isTrue();
@@ -153,7 +155,9 @@ class SortMergeResultPartitionReadSchedulerTest {
     void testOnSubpartitionReaderError() throws Exception {
         SortMergeSubpartitionReader subpartitionReader =
                 readScheduler.createSubpartitionReader(
-                        new NoOpBufferAvailablityListener(), 0, partitionedFile);
+                        new NoOpBufferAvailablityListener(),
+                        new ResultSubpartitionIndexSet(0),
+                        partitionedFile);
 
         subpartitionReader.releaseAllResources();
         waitUntilReadFinish();
@@ -164,7 +168,9 @@ class SortMergeResultPartitionReadSchedulerTest {
     void testReleaseWhileReading() throws Exception {
         SortMergeSubpartitionReader subpartitionReader =
                 readScheduler.createSubpartitionReader(
-                        new NoOpBufferAvailablityListener(), 0, partitionedFile);
+                        new NoOpBufferAvailablityListener(),
+                        new ResultSubpartitionIndexSet(0),
+                        partitionedFile);
 
         Thread.sleep(1000);
         readScheduler.release();
@@ -185,7 +191,9 @@ class SortMergeResultPartitionReadSchedulerTest {
         assertThatThrownBy(
                         () ->
                                 readScheduler.createSubpartitionReader(
-                                        new NoOpBufferAvailablityListener(), 0, partitionedFile))
+                                        new NoOpBufferAvailablityListener(),
+                                        new ResultSubpartitionIndexSet(0),
+                                        partitionedFile))
                 .isInstanceOf(IllegalStateException.class);
         assertAllResourcesReleased();
     }
@@ -194,7 +202,9 @@ class SortMergeResultPartitionReadSchedulerTest {
     void testOnDataReadError() throws Exception {
         SortMergeSubpartitionReader subpartitionReader =
                 readScheduler.createSubpartitionReader(
-                        new NoOpBufferAvailablityListener(), 0, partitionedFile);
+                        new NoOpBufferAvailablityListener(),
+                        new ResultSubpartitionIndexSet(0),
+                        partitionedFile);
 
         // close file channel to trigger data read exception
         readScheduler.getDataFileChannel().close();
@@ -222,7 +232,9 @@ class SortMergeResultPartitionReadSchedulerTest {
                         bufferPool, schedulerExecutor, new Object());
         SortMergeSubpartitionReader subpartitionReader =
                 readScheduler.createSubpartitionReader(
-                        new NoOpBufferAvailablityListener(), 0, partitionedFile);
+                        new NoOpBufferAvailablityListener(),
+                        new ResultSubpartitionIndexSet(0),
+                        partitionedFile);
         bufferPool.destroy();
         assertThat(schedulerExecutor.numQueuedRunnables()).isEqualTo(1);
         // we should trigger the scheduled task to handle the buffer request error.
@@ -276,7 +288,9 @@ class SortMergeResultPartitionReadSchedulerTest {
                         bufferPool, executorService, this, bufferRequestTimeout);
         long startTimestamp = System.currentTimeMillis();
         readScheduler.createSubpartitionReader(
-                new NoOpBufferAvailablityListener(), 0, partitionedFile);
+                new NoOpBufferAvailablityListener(),
+                new ResultSubpartitionIndexSet(0),
+                partitionedFile);
         // request and use all buffers of buffer pool.
         readScheduler.run();
 

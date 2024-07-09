@@ -84,7 +84,7 @@ class VertexBlockingInputInfoComputationUtilsTest {
     @Test
     void testComputeVertexInputInfoForAllToAllWithNonDynamicGraph() {
         final JobVertexInputInfo nonBroadcast =
-                computeVertexInputInfoForAllToAll(2, 3, ignored -> 3, false, false);
+                computeVertexInputInfoForAllToAll(2, 3, ignored -> 3, false, false, false);
         assertThat(nonBroadcast.getExecutionVertexInputInfos())
                 .containsExactlyInAnyOrder(
                         new ExecutionVertexInputInfo(0, new IndexRange(0, 1), new IndexRange(0, 0)),
@@ -93,7 +93,7 @@ class VertexBlockingInputInfoComputationUtilsTest {
                                 2, new IndexRange(0, 1), new IndexRange(2, 2)));
 
         final JobVertexInputInfo broadcast =
-                computeVertexInputInfoForAllToAll(2, 3, ignored -> 3, false, true);
+                computeVertexInputInfoForAllToAll(2, 3, ignored -> 3, false, true, false);
         assertThat(broadcast.getExecutionVertexInputInfos())
                 .containsExactlyInAnyOrder(
                         new ExecutionVertexInputInfo(0, new IndexRange(0, 1), new IndexRange(0, 0)),
@@ -105,7 +105,7 @@ class VertexBlockingInputInfoComputationUtilsTest {
     @Test
     void testComputeVertexInputInfoForAllToAllWithDynamicGraph() {
         final JobVertexInputInfo nonBroadcast =
-                computeVertexInputInfoForAllToAll(2, 3, ignored -> 10, true, false);
+                computeVertexInputInfoForAllToAll(2, 3, ignored -> 10, true, false, false);
         assertThat(nonBroadcast.getExecutionVertexInputInfos())
                 .containsExactlyInAnyOrder(
                         new ExecutionVertexInputInfo(0, new IndexRange(0, 1), new IndexRange(0, 2)),
@@ -114,7 +114,7 @@ class VertexBlockingInputInfoComputationUtilsTest {
                                 2, new IndexRange(0, 1), new IndexRange(6, 9)));
 
         final JobVertexInputInfo broadcast =
-                computeVertexInputInfoForAllToAll(2, 3, ignored -> 1, true, true);
+                computeVertexInputInfoForAllToAll(2, 3, ignored -> 1, true, true, false);
         assertThat(broadcast.getExecutionVertexInputInfos())
                 .containsExactlyInAnyOrder(
                         new ExecutionVertexInputInfo(0, new IndexRange(0, 1), new IndexRange(0, 0)),
@@ -160,6 +160,11 @@ class VertexBlockingInputInfoComputationUtilsTest {
             boolean isDynamicGraph,
             boolean isBroadcast) {
         return VertexInputInfoComputationUtils.computeConsumedSubpartitionRange(
-                consumerIndex, numConsumers, () -> numSubpartitions, isDynamicGraph, isBroadcast);
+                consumerIndex,
+                numConsumers,
+                () -> numSubpartitions,
+                isDynamicGraph,
+                isBroadcast,
+                false);
     }
 }

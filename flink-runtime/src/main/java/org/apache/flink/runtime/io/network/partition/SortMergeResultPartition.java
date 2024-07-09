@@ -546,7 +546,33 @@ public class SortMergeResultPartition extends ResultPartition {
             }
 
             return readScheduler.createSubpartitionReader(
-                    availabilityListener, subpartitionIndex, resultFile);
+                    availabilityListener,
+                    new ResultSubpartitionIndexSet(subpartitionIndex),
+                    resultFile);
+        }
+    }
+
+    @Override
+    public ResultSubpartitionView createSubpartitionView(
+            ResultSubpartitionIndexSet indexSet, BufferAvailabilityListener availabilityListener)
+            throws IOException {
+        synchronized (lock) {
+            try {
+                checkElementIndex(
+                        indexSet.getEndIndex(), numSubpartitions, "Subpartition not found.");
+                checkState(!isReleased(), "Partition released.");
+                checkState(isFinished(), "Trying to read unfinished blocking partition.");
+
+                if (!resultFile.isReadable()) {
+                    throw new PartitionNotFoundException(getPartitionId());
+                }
+
+                return readScheduler.createSubpartitionReader(
+                        availabilityListener, indexSet, resultFile);
+            } catch (Exception e) {
+                LOG.error("Find error", e);
+                throw e;
+            }
         }
     }
 

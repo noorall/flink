@@ -135,6 +135,27 @@ public class InputGateDeploymentDescriptor implements Serializable {
         this.numberOfInputChannels = numberOfInputChannels;
     }
 
+    private boolean isHashConvertToBroadcast = false;
+
+    public InputGateDeploymentDescriptor(
+            IntermediateDataSetID consumedResultId,
+            ResultPartitionType consumedPartitionType,
+            IndexRange consumedSubpartitionIndexRange,
+            int numberOfInputChannels,
+            List<MaybeOffloaded<ShuffleDescriptorGroup>> serializedInputChannels,
+            boolean isHashConvertToBroadcast) {
+        this.consumedResultId = checkNotNull(consumedResultId);
+        this.consumedPartitionType = checkNotNull(consumedPartitionType);
+        this.consumedSubpartitionIndexRange = checkNotNull(consumedSubpartitionIndexRange);
+        this.serializedInputChannels = checkNotNull(serializedInputChannels);
+        this.numberOfInputChannels = numberOfInputChannels;
+        this.isHashConvertToBroadcast = isHashConvertToBroadcast;
+    }
+
+    public boolean isHashConvertToBroadcast() {
+        return isHashConvertToBroadcast;
+    }
+
     public IntermediateDataSetID getConsumedResultId() {
         return consumedResultId;
     }

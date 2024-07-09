@@ -28,6 +28,10 @@ import org.apache.flink.runtime.io.network.buffer.NetworkBuffer;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Queue;
 import java.util.function.Consumer;
 
@@ -36,7 +40,7 @@ import static org.apache.flink.util.Preconditions.checkArgument;
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
 /** Reader which can read all data of the target subpartition from a {@link PartitionedFile}. */
-class PartitionedFileReader {
+class CustomPartitionedFileReader extends PartitionedFileReader {
 
     /** Used to read buffer headers from file channel. */
     private final ByteBuffer headerBuf;
@@ -50,58 +54,92 @@ class PartitionedFileReader {
     /** Target subpartition to read. */
     private final ResultSubpartitionIndexSet indexSet;
 
-    private int targetSubpartition;
-
     /** Data file channel of the target {@link PartitionedFile}. */
     private final FileChannel dataFileChannel;
 
     /** Index file channel of the target {@link PartitionedFile}. */
     private final FileChannel indexFileChannel;
 
-    /** Next data region to be read. */
-    private int nextRegionToRead;
-
-    /** Next file offset to be read. */
-    private long nextOffsetToRead;
-
-    /** Number of remaining bytes in the current data region read. */
-    private long currentRegionRemainingBytes;
-
-    PartitionedFileReader(
+    CustomPartitionedFileReader(
             PartitionedFile partitionedFile,
             ResultSubpartitionIndexSet indexSet,
             FileChannel dataFileChannel,
             FileChannel indexFileChannel,
             ByteBuffer headerBuffer,
             ByteBuffer indexEntryBuffer) {
+        super(
+                partitionedFile,
+                indexSet,
+                dataFileChannel,
+                indexFileChannel,
+                headerBuffer,
+                indexEntryBuffer);
         checkArgument(checkNotNull(dataFileChannel).isOpen(), "Data file channel must be opened.");
         checkArgument(
                 checkNotNull(indexFileChannel).isOpen(), "Index file channel must be opened.");
 
         this.partitionedFile = checkNotNull(partitionedFile);
         this.indexSet = checkNotNull(indexSet);
-        this.targetSubpartition = indexSet.getStartIndex();
         this.dataFileChannel = dataFileChannel;
         this.indexFileChannel = indexFileChannel;
         this.headerBuf = headerBuffer;
         this.indexEntryBuf = indexEntryBuffer;
     }
 
-    private void moveToNextReadableRegion(ByteBuffer indexEntryBuf) throws IOException {
-        while (currentRegionRemainingBytes <= 0
-                && nextRegionToRead < partitionedFile.getNumRegions()) {
-            partitionedFile.getIndexEntry(
-                    indexFileChannel, indexEntryBuf, nextRegionToRead, targetSubpartition);
-            nextOffsetToRead = indexEntryBuf.getLong();
+    List<long[]> offsetAndSizes = new ArrayList<>();
 
-            currentRegionRemainingBytes = indexEntryBuf.getLong();
-            if (targetSubpartition == indexSet.getEndIndex()) {
-                targetSubpartition = indexSet.getStartIndex();
-                ++nextRegionToRead;
-            } else {
-                targetSubpartition++;
+    int currentIndex = 0;
+
+    long currentRegionRemainingBytes = 0;
+
+    long nextOffsetToRead = 0;
+
+    private void init(ByteBuffer indexEntryBuf) throws IOException {
+        List<long[]> list = new ArrayList<>();
+        List<long[]> endOfPartitions = new ArrayList<>(indexSet.size());
+        for (int i = 0; i < partitionedFile.getNumRegions(); i++) {
+            for (int target = indexSet.getStartIndex();
+                    target <= indexSet.getEndIndex();
+                    target++) {
+                partitionedFile.getIndexEntry(indexFileChannel, indexEntryBuf, i, target);
+                long start = indexEntryBuf.getLong();
+                long size = indexEntryBuf.getLong();
+                if (i < partitionedFile.getNumRegions() - 1) {
+                    list.add(new long[] {start, start + size});
+                } else {
+                    endOfPartitions.add(new long[] {start, start + size});
+                }
             }
         }
+
+        offsetAndSizes = merge(list);
+        offsetAndSizes.addAll(endOfPartitions);
+    }
+
+    private List<long[]> merge(List<long[]> intervals) {
+        if (intervals == null || intervals.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        // 根据区间的起始值对区间进行排序
+        intervals.sort(Comparator.comparingLong(a -> a[0]));
+
+        List<long[]> mergedIntervals = new ArrayList<>();
+
+        long[] currentInterval = intervals.get(0);
+        mergedIntervals.add(currentInterval);
+
+        for (long[] interval : intervals) {
+            if (currentInterval[1] >= interval[0]) { // 当前区间与下一个区间有重叠
+                currentInterval[1] = Math.max(currentInterval[1], interval[1]); // 合并区间
+            } else {
+                // 没有重叠，将当前区间加入结果列表，并更新当前区间为下一个区间
+                currentInterval = interval;
+                mergedIntervals.add(currentInterval);
+            }
+        }
+
+        return mergedIntervals; // 返回合并后的区间
     }
 
     /**
@@ -119,7 +157,14 @@ class PartitionedFileReader {
             Queue<MemorySegment> freeSegments, BufferRecycler recycler, Consumer<Buffer> consumer)
             throws IOException {
         if (currentRegionRemainingBytes == 0) {
-            return false;
+            if (currentIndex < offsetAndSizes.size()) {
+                currentRegionRemainingBytes =
+                        offsetAndSizes.get(currentIndex)[1] - offsetAndSizes.get(currentIndex)[0];
+                nextOffsetToRead = offsetAndSizes.get(currentIndex)[0];
+                currentIndex++;
+            } else {
+                return false;
+            }
         }
 
         checkArgument(!freeSegments.isEmpty(), "No buffer available for data reading.");
@@ -169,16 +214,20 @@ class PartitionedFileReader {
                 partialBuffer.buffer.recycleBuffer();
             }
         }
-        return hasRemaining();
+
+        boolean remaining = hasRemaining();
+        if (remaining && indexSet.isHashConvertToBroadcast() && !freeSegments.isEmpty()) {
+            return readCurrentRegion(freeSegments, recycler, consumer);
+        }
+        return remaining;
     }
 
     boolean hasRemaining() throws IOException {
-        moveToNextReadableRegion(indexEntryBuf);
-        return currentRegionRemainingBytes > 0;
+        return currentRegionRemainingBytes > 0 || currentIndex < offsetAndSizes.size();
     }
 
     void initRegionIndex(ByteBuffer initIndexEntryBuffer) throws IOException {
-        moveToNextReadableRegion(initIndexEntryBuffer);
+        init(initIndexEntryBuffer);
     }
 
     /** Gets read priority of this file reader. Smaller value indicates higher priority. */
