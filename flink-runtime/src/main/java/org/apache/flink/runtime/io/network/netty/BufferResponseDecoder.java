@@ -23,6 +23,9 @@ import org.apache.flink.shaded.netty4.io.netty.channel.ChannelHandlerContext;
 
 import javax.annotation.Nullable;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import static org.apache.flink.runtime.io.network.netty.NettyMessage.BufferResponse;
 import static org.apache.flink.runtime.io.network.netty.NettyMessage.BufferResponse.MESSAGE_HEADER_LENGTH;
 import static org.apache.flink.util.Preconditions.checkNotNull;
@@ -54,6 +57,8 @@ class BufferResponseDecoder extends NettyMessageDecoder {
         messageHeaderBuffer = ctx.alloc().directBuffer(MESSAGE_HEADER_LENGTH);
     }
 
+    private List<Byte> partialBytes;
+
     @Override
     public DecodingResult onChannelRead(ByteBuf data) throws Exception {
         if (bufferResponse == null) {
@@ -62,6 +67,37 @@ class BufferResponseDecoder extends NettyMessageDecoder {
 
         if (bufferResponse != null) {
             int remainingBufferSize = bufferResponse.bufferSize - decodedDataBufferSize;
+            if (bufferResponse.partialBuffersSize > 0
+                    && bufferResponse.getList().size() < bufferResponse.partialBuffersSize) {
+                if (partialBytes != null) {
+                    while (partialBytes.size() < 4 && data.isReadable()) {
+                        partialBytes.add(data.readByte());
+                    }
+
+                    if (partialBytes.size() == 4) {
+                        int i =
+                                ((partialBytes.get(0) & 0xFF) << 24)
+                                        | ((partialBytes.get(1) & 0xFF) << 16)
+                                        | ((partialBytes.get(2) & 0xFF) << 8)
+                                        | (partialBytes.get(3) & 0xFF);
+                        bufferResponse.getList().add(i);
+                        partialBytes = null;
+                    }
+                }
+
+                while (data.isReadable()
+                        && bufferResponse.getList().size() < bufferResponse.partialBuffersSize) {
+                    if (data.readableBytes() > 3) {
+                        bufferResponse.getList().add(data.readInt());
+                    } else {
+                        partialBytes = new ArrayList<>();
+                        while (data.isReadable()) {
+                            partialBytes.add(data.readByte());
+                        }
+                    }
+                }
+            }
+
             int actualBytesToDecode = Math.min(data.readableBytes(), remainingBufferSize);
 
             // For the case of data buffer really exists in BufferResponse now.

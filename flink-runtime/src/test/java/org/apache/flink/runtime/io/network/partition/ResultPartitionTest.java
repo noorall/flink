@@ -886,7 +886,7 @@ class ResultPartitionTest {
     void testReleaseAllResourcesAtFailure() {
         final int maxNumSubpartitions = 4;
         final ResultSubpartitionIndexSet indexSet =
-                new ResultSubpartitionIndexSet(0, maxNumSubpartitions);
+                new ResultSubpartitionIndexSet(0, maxNumSubpartitions, false);
         final BufferAvailabilityListener availabilityListener = (ResultSubpartitionView view) -> {};
 
         for (int numSubpartitions = 1; numSubpartitions < maxNumSubpartitions; numSubpartitions++) {

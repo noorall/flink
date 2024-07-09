@@ -798,7 +798,7 @@ class CreditBasedPartitionRequestClientHandlerTest {
             throws IOException {
         // Mock buffer to serialize
         BufferResponse resp =
-                new BufferResponse(buffer, sequenceNumber, receivingChannelId, 0, backlog);
+                new BufferResponse(buffer, sequenceNumber, receivingChannelId, 0, 0, backlog);
 
         ByteBuf serialized = resp.write(UnpooledByteBufAllocator.DEFAULT);
 

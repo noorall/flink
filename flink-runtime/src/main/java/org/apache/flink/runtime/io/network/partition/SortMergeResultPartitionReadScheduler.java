@@ -341,15 +341,15 @@ class SortMergeResultPartitionReadScheduler implements Runnable, BufferRecycler 
 
     SortMergeSubpartitionReader createSubpartitionReader(
             BufferAvailabilityListener availabilityListener,
-            int targetSubpartition,
+            ResultSubpartitionIndexSet indexSet,
             PartitionedFile resultFile)
             throws IOException {
         synchronized (lock) {
             checkState(!isReleased, "Partition is already released.");
-
-            PartitionedFileReader fileReader = createFileReader(resultFile, targetSubpartition);
+            PartitionedFileReader fileReader = createFileReader(resultFile, indexSet);
             SortMergeSubpartitionReader subpartitionReader =
-                    new SortMergeSubpartitionReader(availabilityListener, fileReader);
+                    new SortMergeSubpartitionReader(
+                            bufferPool.getBufferSize(), indexSet, availabilityListener, fileReader);
             if (allReaders.isEmpty()) {
                 bufferPool.registerRequester(this);
             }
@@ -374,23 +374,37 @@ class SortMergeResultPartitionReadScheduler implements Runnable, BufferRecycler 
 
     @GuardedBy("lock")
     private PartitionedFileReader createFileReader(
-            PartitionedFile resultFile, int targetSubpartition) throws IOException {
+            PartitionedFile resultFile, ResultSubpartitionIndexSet indexSet) throws IOException {
         assert Thread.holdsLock(lock);
 
         try {
             if (allReaders.isEmpty()) {
                 openFileChannels(resultFile);
             }
-            PartitionedFileReader partitionedFileReader =
-                    new PartitionedFileReader(
-                            resultFile,
-                            targetSubpartition,
-                            dataFileChannel,
-                            indexFileChannel,
-                            headerBuf,
-                            indexEntryBufferRead);
-            partitionedFileReader.initRegionIndex(indexEntryBufferInit);
-            return partitionedFileReader;
+
+            if (indexSet.isHashConvertToBroadcast()) {
+                CustomPartitionedFileReader partitionedFileReader =
+                        new CustomPartitionedFileReader(
+                                resultFile,
+                                indexSet,
+                                dataFileChannel,
+                                indexFileChannel,
+                                headerBuf,
+                                indexEntryBufferRead);
+                partitionedFileReader.initRegionIndex(indexEntryBufferInit);
+                return partitionedFileReader;
+            } else {
+                PartitionedFileReader partitionedFileReader =
+                        new PartitionedFileReader(
+                                resultFile,
+                                indexSet,
+                                dataFileChannel,
+                                indexFileChannel,
+                                headerBuf,
+                                indexEntryBufferRead);
+                partitionedFileReader.initRegionIndex(indexEntryBufferInit);
+                return partitionedFileReader;
+            }
         } catch (Throwable throwable) {
             if (allReaders.isEmpty()) {
                 closeFileChannels();

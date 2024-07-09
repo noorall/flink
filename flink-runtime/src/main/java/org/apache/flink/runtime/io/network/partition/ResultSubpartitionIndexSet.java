@@ -28,19 +28,27 @@ import java.util.Iterator;
 public class ResultSubpartitionIndexSet extends IndexRange {
 
     public ResultSubpartitionIndexSet(int index) {
-        this(index, index);
+        this(index, index, false);
     }
 
-    public ResultSubpartitionIndexSet(IndexRange indexRange) {
-        this(indexRange.getStartIndex(), indexRange.getEndIndex());
+    private final boolean isHashConvertToBroadcast;
+
+    public ResultSubpartitionIndexSet(IndexRange indexRange, boolean isHashConvertToBroadcast) {
+        this(indexRange.getStartIndex(), indexRange.getEndIndex(), isHashConvertToBroadcast);
     }
 
-    public ResultSubpartitionIndexSet(int startIndex, int endIndex) {
+    public ResultSubpartitionIndexSet(
+            int startIndex, int endIndex, boolean isHashConvertToBroadcast) {
         super(startIndex, endIndex);
+        this.isHashConvertToBroadcast = isHashConvertToBroadcast;
     }
 
     public boolean contains(int index) {
         return index >= startIndex && index <= endIndex;
+    }
+
+    public boolean isHashConvertToBroadcast() {
+        return isHashConvertToBroadcast && size() > 1;
     }
 
     public Iterable<Integer> values() {
@@ -63,15 +71,17 @@ public class ResultSubpartitionIndexSet extends IndexRange {
     public void writeTo(ByteBuf target) {
         target.writeInt(startIndex);
         target.writeInt(endIndex);
+        target.writeBoolean(isHashConvertToBroadcast);
     }
 
     public static int getByteBufLength(ResultSubpartitionIndexSet indexSet) {
-        return Integer.BYTES * 2;
+        return Integer.BYTES * 2 + 1;
     }
 
     public static ResultSubpartitionIndexSet fromByteBuf(ByteBuf source) {
         int startIndex = source.readInt();
         int endIndex = source.readInt();
-        return new ResultSubpartitionIndexSet(startIndex, endIndex);
+        boolean b = source.readBoolean();
+        return new ResultSubpartitionIndexSet(startIndex, endIndex, b);
     }
 }
