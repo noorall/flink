@@ -87,7 +87,7 @@ class PartitionedFileWriteReadTest {
             PartitionedFileReader fileReader =
                     new PartitionedFileReader(
                             partitionedFile,
-                            subpartition,
+                            new ResultSubpartitionIndexSet(subpartition),
                             dataFileChannel,
                             indexFileChannel,
                             BufferReaderWriterUtil.allocatedHeaderBuffer(),
@@ -235,7 +235,7 @@ class PartitionedFileWriteReadTest {
             PartitionedFileReader fileReader =
                     new PartitionedFileReader(
                             partitionedFile,
-                            subpartition,
+                            new ResultSubpartitionIndexSet(subpartition),
                             dataFileChannel,
                             indexFileChannel,
                             BufferReaderWriterUtil.allocatedHeaderBuffer(),
@@ -335,7 +335,7 @@ class PartitionedFileWriteReadTest {
         PartitionedFileReader partitionedFileReader =
                 new PartitionedFileReader(
                         partitionedFile,
-                        1,
+                        new ResultSubpartitionIndexSet(1),
                         dataFileChannel,
                         indexFileChannel,
                         BufferReaderWriterUtil.allocatedHeaderBuffer(),

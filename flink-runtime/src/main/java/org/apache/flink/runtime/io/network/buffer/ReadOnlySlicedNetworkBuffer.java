@@ -58,7 +58,8 @@ public final class ReadOnlySlicedNetworkBuffer extends ReadOnlyByteBuf implement
      * @param length the length of the slice
      * @param isCompressed is the buffer compressed
      */
-    ReadOnlySlicedNetworkBuffer(NetworkBuffer buffer, int index, int length, boolean isCompressed) {
+    public ReadOnlySlicedNetworkBuffer(
+            NetworkBuffer buffer, int index, int length, boolean isCompressed) {
         super(new SlicedByteBuf(buffer, index, length));
         this.memorySegmentOffset = buffer.getMemorySegmentOffset() + index;
         this.dataType = buffer.getDataType();

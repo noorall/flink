@@ -18,9 +18,11 @@
 
 package org.apache.flink.runtime.io.network.partition;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.core.memory.MemorySegment;
 import org.apache.flink.runtime.io.network.buffer.Buffer;
 import org.apache.flink.runtime.io.network.buffer.BufferRecycler;
+import org.apache.flink.runtime.io.network.buffer.CustomBuffer;
 import org.apache.flink.runtime.io.network.partition.ResultSubpartition.BufferAndBacklog;
 
 import javax.annotation.Nullable;
@@ -29,7 +31,9 @@ import javax.annotation.concurrent.GuardedBy;
 import java.io.IOException;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.CompletableFuture;
 
@@ -70,10 +74,33 @@ class SortMergeSubpartitionReader
     /** Sequence number of the next buffer to be sent to the consumer. */
     private int sequenceNumber;
 
+    @GuardedBy("lock")
+    private final Map<String, List<CustomBuffer>> compressedBuffers = new HashMap<>();
+
+    @GuardedBy("lock")
+    private final Map<String, List<CustomBuffer>> unCompressedBuffers = new HashMap<>();
+
+    private final ResultSubpartitionIndexSet indexSet;
+
+    private int pageSize;
+
+    SortMergeSubpartitionReader(
+            int pageSize,
+            ResultSubpartitionIndexSet indexSet,
+            BufferAvailabilityListener listener,
+            PartitionedFileReader fileReader) {
+        this.availabilityListener = checkNotNull(listener);
+        this.fileReader = checkNotNull(fileReader);
+        this.indexSet = checkNotNull(indexSet);
+        this.pageSize = pageSize;
+    }
+
+    @VisibleForTesting
     SortMergeSubpartitionReader(
             BufferAvailabilityListener listener, PartitionedFileReader fileReader) {
         this.availabilityListener = checkNotNull(listener);
         this.fileReader = checkNotNull(fileReader);
+        this.indexSet = null;
     }
 
     @Nullable
@@ -86,15 +113,26 @@ class SortMergeSubpartitionReader
             }
 
             if (buffer.isBuffer()) {
-                --dataBufferBacklog;
+                if (buffer instanceof CustomBuffer) {
+                    dataBufferBacklog -= ((CustomBuffer) buffer).getPartialBuffers().size();
+                } else {
+                    --dataBufferBacklog;
+                }
             }
 
             Buffer lookAhead = buffersRead.peek();
-            return BufferAndBacklog.fromBufferAndLookahead(
-                    buffer,
-                    lookAhead == null ? Buffer.DataType.NONE : lookAhead.getDataType(),
-                    dataBufferBacklog,
-                    sequenceNumber++);
+            BufferAndBacklog bufferAndBacklog =
+                    BufferAndBacklog.fromBufferAndLookahead(
+                            buffer,
+                            lookAhead == null ? Buffer.DataType.NONE : lookAhead.getDataType(),
+                            dataBufferBacklog,
+                            sequenceNumber);
+            if (buffer instanceof CustomBuffer) {
+                sequenceNumber += ((CustomBuffer) buffer).getPartialBuffers().size();
+            } else {
+                sequenceNumber++;
+            }
+            return bufferAndBacklog;
         }
     }
 
@@ -125,9 +163,91 @@ class SortMergeSubpartitionReader
         }
     }
 
+    private void addBufferForSet(Buffer buffer) throws IOException {
+        boolean needRecycleBuffer = false;
+
+        synchronized (lock) {
+            if (isReleased) {
+                needRecycleBuffer = true;
+            } else {
+                addBufferToCustomBuffer(buffer);
+            }
+        }
+
+        if (needRecycleBuffer) {
+            buffer.recycleBuffer();
+            throw new IllegalStateException("Subpartition reader has been already released.");
+        }
+    }
+
+    private void addBufferToCustomBuffer(Buffer buffer) {
+        Map<String, List<CustomBuffer>> map;
+        if (buffer.isCompressed()) {
+            map = compressedBuffers;
+        } else {
+            map = unCompressedBuffers;
+        }
+
+        List<CustomBuffer> list =
+                map.computeIfAbsent(buffer.getDataType().name(), k -> new ArrayList<>());
+
+        if (list.isEmpty() || buffer.readableBytes() > list.get(list.size() - 1).missingLength()) {
+            CustomBuffer bb =
+                    new CustomBuffer(buffer.getDataType(), pageSize, buffer.isCompressed());
+            list.add(bb);
+        }
+
+        CustomBuffer target = list.get(list.size() - 1);
+
+        if (target.isBuffer()) {
+            ++dataBufferBacklog;
+        }
+        target.addPartialBuffer(buffer);
+    }
+
     /** This method is called by the IO thread of {@link SortMergeResultPartitionReadScheduler}. */
     boolean readBuffers(Queue<MemorySegment> buffers, BufferRecycler recycler) throws IOException {
-        return fileReader.readCurrentRegion(buffers, recycler, this::addBuffer);
+
+        boolean hasRemaining =
+                fileReader.readCurrentRegion(
+                        buffers,
+                        recycler,
+                        (buffer) -> {
+                            if (indexSet.isHashConvertToBroadcast()) {
+                                try {
+                                    addBufferForSet(buffer);
+                                } catch (IOException e) {
+                                    throw new RuntimeException(e);
+                                }
+                            } else {
+                                addBuffer(buffer);
+                            }
+                        });
+
+        if (indexSet.isHashConvertToBroadcast()) {
+            boolean canNotify;
+            synchronized (lock) {
+                boolean emptyBefore = buffersRead.isEmpty();
+                for (List<CustomBuffer> compositeBuffers : compressedBuffers.values()) {
+                    buffersRead.addAll(compositeBuffers);
+                }
+                for (List<CustomBuffer> compositeBuffers : unCompressedBuffers.values()) {
+                    buffersRead.addAll(compositeBuffers);
+                }
+                compressedBuffers.clear();
+                unCompressedBuffers.clear();
+
+                boolean notEmptyAfter = !buffersRead.isEmpty();
+                canNotify = notEmptyAfter && emptyBefore;
+            }
+
+            // can not be locked!
+            if (canNotify) {
+                notifyDataAvailable();
+            }
+        }
+
+        return hasRemaining;
     }
 
     CompletableFuture<?> getReleaseFuture() {
@@ -181,6 +301,14 @@ class SortMergeSubpartitionReader
             if (failureCause == null) {
                 failureCause = throwable;
             }
+            for (List<CustomBuffer> compositeBuffers : compressedBuffers.values()) {
+                buffersRead.addAll(compositeBuffers);
+            }
+            for (List<CustomBuffer> compositeBuffers : unCompressedBuffers.values()) {
+                buffersRead.addAll(compositeBuffers);
+            }
+            compressedBuffers.clear();
+            unCompressedBuffers.clear();
             buffersToRecycle = new ArrayList<>(buffersRead);
             buffersRead.clear();
             dataBufferBacklog = 0;
@@ -250,6 +378,6 @@ class SortMergeSubpartitionReader
 
     @Override
     public int peekNextBufferSubpartitionId() {
-        throw new UnsupportedOperationException();
+        return 0;
     }
 }

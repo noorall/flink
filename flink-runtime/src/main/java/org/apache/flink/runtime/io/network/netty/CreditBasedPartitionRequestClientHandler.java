@@ -21,6 +21,8 @@ package org.apache.flink.runtime.io.network.netty;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.runtime.io.network.ConnectionID;
 import org.apache.flink.runtime.io.network.NetworkClientHandler;
+import org.apache.flink.runtime.io.network.buffer.NetworkBuffer;
+import org.apache.flink.runtime.io.network.buffer.ReadOnlySlicedNetworkBuffer;
 import org.apache.flink.runtime.io.network.netty.exception.LocalTransportException;
 import org.apache.flink.runtime.io.network.netty.exception.RemoteTransportException;
 import org.apache.flink.runtime.io.network.netty.exception.TransportException;
@@ -40,6 +42,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.net.SocketAddress;
 import java.util.ArrayDeque;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicReference;
@@ -358,11 +361,41 @@ class CreditBasedPartitionRequestClientHandler extends ChannelInboundHandlerAdap
         if (bufferOrEvent.isBuffer() && bufferOrEvent.bufferSize == 0) {
             inputChannel.onEmptyBuffer(bufferOrEvent.sequenceNumber, bufferOrEvent.backlog);
         } else if (bufferOrEvent.getBuffer() != null) {
-            inputChannel.onBuffer(
-                    bufferOrEvent.getBuffer(),
-                    bufferOrEvent.sequenceNumber,
-                    bufferOrEvent.backlog,
-                    bufferOrEvent.subpartitionId);
+            if (bufferOrEvent.partialBuffersSize > 0) {
+                List<Integer> list = bufferOrEvent.getList();
+                int offset = 0;
+
+                int seq = bufferOrEvent.sequenceNumber;
+                int buffersInBacklog =
+                        bufferOrEvent.backlog
+                                + (bufferOrEvent.isBuffer() ? bufferOrEvent.partialBuffersSize : 0);
+                for (int size : list) {
+                    if (bufferOrEvent.isBuffer()) {
+                        buffersInBacklog--;
+                    }
+                    bufferOrEvent.getBuffer().retainBuffer();
+                    ReadOnlySlicedNetworkBuffer slicedNetworkBuffer =
+                            new ReadOnlySlicedNetworkBuffer(
+                                    (NetworkBuffer) bufferOrEvent.getBuffer(),
+                                    offset,
+                                    size,
+                                    bufferOrEvent.isCompressed);
+                    inputChannel.onBuffer(
+                            slicedNetworkBuffer,
+                            seq++,
+                            buffersInBacklog,
+                            bufferOrEvent.subpartitionId);
+                    offset += size;
+                }
+                bufferOrEvent.getBuffer().recycleBuffer();
+            } else {
+                inputChannel.onBuffer(
+                        bufferOrEvent.getBuffer(),
+                        bufferOrEvent.sequenceNumber,
+                        bufferOrEvent.backlog,
+                        bufferOrEvent.subpartitionId);
+            }
+
         } else {
             throw new IllegalStateException(
                     "The read buffer is null in credit-based input channel.");

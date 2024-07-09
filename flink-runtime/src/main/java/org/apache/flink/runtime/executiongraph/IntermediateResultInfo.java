@@ -35,6 +35,10 @@ public interface IntermediateResultInfo {
      */
     boolean isBroadcast();
 
+    default boolean isHashConvertToBroadcast() {
+        return false;
+    }
+
     /**
      * Whether it is a pointwise result.
      *
