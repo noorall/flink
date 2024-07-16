@@ -103,7 +103,7 @@ public class VertexInputInfoComputationUtils {
      * @param isDynamicGraph whether is dynamic graph
      * @return the computed {@link JobVertexInputInfo}
      */
-    static JobVertexInputInfo computeVertexInputInfoForPointwise(
+    public static JobVertexInputInfo computeVertexInputInfoForPointwise(
             int sourceCount,
             int targetCount,
             Function<Integer, Integer> numOfSubpartitionsRetriever,
@@ -167,7 +167,7 @@ public class VertexInputInfoComputationUtils {
      * @param isBroadcast whether the edge is broadcast
      * @return the computed {@link JobVertexInputInfo}
      */
-    static JobVertexInputInfo computeVertexInputInfoForAllToAll(
+    public static JobVertexInputInfo computeVertexInputInfoForAllToAll(
             int sourceCount,
             int targetCount,
             Function<Integer, Integer> numOfSubpartitionsRetriever,

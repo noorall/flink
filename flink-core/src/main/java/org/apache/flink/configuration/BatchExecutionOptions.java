@@ -50,6 +50,13 @@ public class BatchExecutionOptions {
                             "If true, Flink will automatically decide whether change join type to broadcast join in batch jobs.");
 
     @Documentation.Section({Documentation.Sections.EXPERT_SCHEDULING})
+    public static final ConfigOption<Boolean> RESCALE_OPTIMIZE_ENABLE =
+            key("execution.batch.adaptive.rescale-optimize.enabled")
+                    .booleanType()
+                    .defaultValue(true)
+                    .withDescription("If true, Flink will optimize rescale.");
+
+    @Documentation.Section({Documentation.Sections.EXPERT_SCHEDULING})
     public static final ConfigOption<MemorySize> ADAPTIVE_BROADCAST_JOIN_THRESHOLD =
             key("execution.batch.adaptive.join.broadcast-threshold")
                     .memoryType()

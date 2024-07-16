@@ -583,12 +583,10 @@ public class AdaptiveBatchScheduler extends DefaultScheduler implements JobGraph
                     getExecutionGraph().initializeJobVertex(jobVertex, createTimestamp);
                     newlyInitializedJobVertices.add(jobVertex);
                 } else {
-                    Optional<List<BlockingResultInfo>> consumedResultsInfo =
-                            tryGetConsumedResultsInfo(jobVertex);
-                    if (consumedResultsInfo.isPresent()) {
+                    Optional<List<BlockingInputInfo>> inputInfos = tryGetInputInfo(jobVertex);
+                    if (inputInfos.isPresent()) {
                         ParallelismAndInputInfos parallelismAndInputInfos =
-                                tryDecideParallelismAndInputInfos(
-                                        jobVertex, consumedResultsInfo.get());
+                                tryDecideParallelismAndInputInfos(jobVertex, inputInfos.get());
                         changeJobVertexParallelism(
                                 jobVertex, parallelismAndInputInfos.getParallelism());
                         checkState(canInitialize(jobVertex));
@@ -612,7 +610,7 @@ public class AdaptiveBatchScheduler extends DefaultScheduler implements JobGraph
     }
 
     private ParallelismAndInputInfos tryDecideParallelismAndInputInfos(
-            final ExecutionJobVertex jobVertex, List<BlockingResultInfo> inputs) {
+            final ExecutionJobVertex jobVertex, List<BlockingInputInfo> inputs) {
         int vertexInitialParallelism =
                 adaptiveExecutionHandler.getInitialParallelismByForwardGroup(jobVertex);
 
@@ -758,6 +756,31 @@ public class AdaptiveBatchScheduler extends DefaultScheduler implements JobGraph
         }
 
         return Optional.of(consumableResultInfo);
+    }
+
+    /** Get information of consumable results. */
+    private Optional<List<BlockingInputInfo>> tryGetInputInfo(final ExecutionJobVertex jobVertex) {
+        Optional<List<BlockingResultInfo>> consumedResultsInfo =
+                tryGetConsumedResultsInfo(jobVertex);
+        if (!consumedResultsInfo.isPresent()) {
+            return Optional.empty();
+        }
+        List<JobEdge> jobEdges = jobVertex.getJobVertex().getInputs();
+        List<BlockingResultInfo> consumedResultsInfoList = consumedResultsInfo.get();
+        List<BlockingInputInfo> inputsInfo = new ArrayList<>();
+
+        checkArgument(jobEdges.size() == consumedResultsInfoList.size());
+        for (int i = 0; i < consumedResultsInfoList.size(); ++i) {
+            JobEdge jobEdge = jobEdges.get(i);
+            inputsInfo.add(
+                    new BlockingInputInfo(
+                            consumedResultsInfoList.get(i),
+                            jobEdge.getTypeNumber(),
+                            jobEdge.getConnectType(),
+                            i));
+        }
+
+        return Optional.of(inputsInfo);
     }
 
     private Optional<List<BlockingResultInfo>> tryGetProducedResultsInfo(

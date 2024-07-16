@@ -26,6 +26,7 @@ import org.apache.flink.runtime.executiongraph.IndexRange;
 import org.apache.flink.runtime.executiongraph.JobVertexInputInfo;
 import org.apache.flink.runtime.executiongraph.ParallelismAndInputInfos;
 import org.apache.flink.runtime.executiongraph.ResultPartitionBytes;
+import org.apache.flink.runtime.jobgraph.ConnectType;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
@@ -299,7 +300,9 @@ class DefaultVertexParallelismAndInputInfosDeciderTest {
         ParallelismAndInputInfos parallelismAndInputInfos =
                 decider.decideParallelismAndInputInfosForVertex(
                         new JobVertexID(),
-                        Collections.singletonList(allToAllBlockingResultInfo),
+                        Collections.singletonList(
+                                new BlockingInputInfo(
+                                        allToAllBlockingResultInfo, -1, ConnectType.UNDEFINED, 0)),
                         3,
                         MIN_PARALLELISM,
                         MAX_PARALLELISM);
@@ -338,7 +341,9 @@ class DefaultVertexParallelismAndInputInfosDeciderTest {
         ParallelismAndInputInfos parallelismAndInputInfos =
                 decider.decideParallelismAndInputInfosForVertex(
                         new JobVertexID(),
-                        Collections.singletonList(allToAllBlockingResultInfo),
+                        Collections.singletonList(
+                                new BlockingInputInfo(
+                                        allToAllBlockingResultInfo, -1, ConnectType.UNDEFINED, 0)),
                         -1,
                         dynamicSourceParallelism,
                         MAX_PARALLELISM);
@@ -661,8 +666,12 @@ class DefaultVertexParallelismAndInputInfosDeciderTest {
             List<BlockingResultInfo> consumedResults) {
         final DefaultVertexParallelismAndInputInfosDecider decider =
                 createDecider(minParallelism, maxParallelism, dataVolumePerTask);
+        List<BlockingInputInfo> list = new ArrayList<>();
+        for (int i = 0; i < consumedResults.size(); i++) {
+            list.add(new BlockingInputInfo(consumedResults.get(i), -1, ConnectType.UNDEFINED, i));
+        }
         return decider.decideParallelismAndInputInfosForVertex(
-                new JobVertexID(), consumedResults, -1, minParallelism, maxParallelism);
+                new JobVertexID(), list, -1, minParallelism, maxParallelism);
     }
 
     private AllToAllBlockingResultInfo createAllToAllBlockingResultInfo(

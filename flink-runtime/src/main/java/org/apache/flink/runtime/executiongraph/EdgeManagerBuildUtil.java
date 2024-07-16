@@ -61,7 +61,7 @@ public class EdgeManagerBuildUtil {
 
         switch (distributionPattern) {
             case POINTWISE:
-                connectPointwise(vertex, intermediateResult, jobVertexInputInfo);
+                connectHybrid(vertex, intermediateResult, jobVertexInputInfo);
                 break;
             case ALL_TO_ALL:
                 connectAllToAll(vertex, intermediateResult, jobVertexInputInfo);

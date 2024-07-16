@@ -21,11 +21,11 @@ package org.apache.flink.runtime.executiongraph;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionType;
 import org.apache.flink.runtime.jobgraph.DistributionPattern;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
-import org.apache.flink.runtime.jobgraph.JobEdge;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.scheduler.strategy.ConsumedPartitionGroup;
 import org.apache.flink.runtime.scheduler.strategy.ConsumerVertexGroup;
 
+import java.math.BigInteger;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -97,7 +97,7 @@ public class IntermediateResultPartition {
         for (JobVertexID jobVertexId : totalResult.getConsumerVertices()) {
             // for dynamic graph, if any consumer vertex is still not initialized or not transfer to
             // job vertex, this result partition can not be released
-            if(!producer.getExecutionGraphAccessor().getJobVertex(jobVertexId).isInitialized()) {
+            if (!producer.getExecutionGraphAccessor().getJobVertex(jobVertexId).isInitialized()) {
                 return false;
             }
         }
@@ -180,7 +180,12 @@ public class IntermediateResultPartition {
             return maxConsumerJobVertexParallelism;
         } else {
             int numberOfPartitions = getIntermediateResult().getNumParallelProducers();
-            return (int) Math.ceil(((double) maxConsumerJobVertexParallelism) / numberOfPartitions);
+            return maxConsumerJobVertexParallelism
+                    / BigInteger.valueOf(maxConsumerJobVertexParallelism)
+                            .gcd(BigInteger.valueOf(numberOfPartitions))
+                            .intValue();
+            //            return (int) Math.ceil(((double) maxConsumerJobVertexParallelism) /
+            // numberOfPartitions);
         }
     }
 

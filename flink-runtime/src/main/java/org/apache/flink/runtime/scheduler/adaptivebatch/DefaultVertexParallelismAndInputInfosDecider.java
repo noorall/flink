@@ -28,8 +28,10 @@ import org.apache.flink.runtime.executiongraph.IndexRange;
 import org.apache.flink.runtime.executiongraph.JobVertexInputInfo;
 import org.apache.flink.runtime.executiongraph.ParallelismAndInputInfos;
 import org.apache.flink.runtime.executiongraph.VertexInputInfoComputationUtils;
+import org.apache.flink.runtime.jobgraph.ConnectType;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
+import org.apache.flink.util.FlinkRuntimeException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -89,6 +91,7 @@ public class DefaultVertexParallelismAndInputInfosDecider
     private final double skewedPartitionFactor;
     private final long skewedPartitionThreshold;
     private final double skewedPartitionMergeFactor;
+    private final boolean enableRescaleOptimize;
 
     private DefaultVertexParallelismAndInputInfosDecider(
             int globalMaxParallelism,
@@ -97,7 +100,8 @@ public class DefaultVertexParallelismAndInputInfosDecider
             int globalDefaultSourceParallelism,
             double skewedPartitionFactor,
             long skewedPartitionThreshold,
-            double skewedPartitionMergeFactor) {
+            double skewedPartitionMergeFactor,
+            boolean enableRescaleOptimize) {
 
         checkArgument(globalMinParallelism > 0, "The minimum parallelism must be larger than 0.");
         checkArgument(
@@ -124,12 +128,13 @@ public class DefaultVertexParallelismAndInputInfosDecider
         this.skewedPartitionFactor = skewedPartitionFactor;
         this.skewedPartitionThreshold = skewedPartitionThreshold;
         this.skewedPartitionMergeFactor = skewedPartitionMergeFactor;
+        this.enableRescaleOptimize = enableRescaleOptimize;
     }
 
     @Override
     public ParallelismAndInputInfos decideParallelismAndInputInfosForVertex(
             JobVertexID jobVertexId,
-            List<BlockingResultInfo> consumedResults,
+            List<BlockingInputInfo> inputs,
             int vertexInitialParallelism,
             int vertexMinParallelism,
             int vertexMaxParallelism) {
@@ -144,7 +149,7 @@ public class DefaultVertexParallelismAndInputInfosDecider
                         && vertexMaxParallelism >= vertexInitialParallelism
                         && vertexMaxParallelism >= vertexMinParallelism);
 
-        if (consumedResults.isEmpty()) {
+        if (inputs.isEmpty()) {
             // source job vertex
             int parallelism =
                     vertexInitialParallelism > 0
@@ -180,16 +185,34 @@ public class DefaultVertexParallelismAndInputInfosDecider
             checkState(maxParallelism >= minParallelism);
 
             if (vertexInitialParallelism == ExecutionConfig.PARALLELISM_DEFAULT
-                    && areAllInputsAllToAll(consumedResults)
-                    && !areAllInputsBroadcast(consumedResults)) {
+                    && areAllInputsAllToAll(inputs)
+                    && !areAllInputsBroadcast(inputs)) {
                 LOG.info(
                         "### DEBUG ### try decideParallelismAndEvenlyDistributeSkewedData for {}, the consumed results size is {}({})",
                         jobVertexId,
-                        consumedResults.size(),
-                        consumedResults);
+                        inputs.size(),
+                        inputs);
+                List<BlockingResultInfo> consumedResults =
+                        inputs.stream()
+                                .map(BlockingInputInfo::getConsumedResultInfo)
+                                .collect(Collectors.toList());
                 return decideParallelismAndEvenlyDistributeSkewedData(
                         jobVertexId,
                         consumedResults,
+                        vertexInitialParallelism,
+                        minParallelism,
+                        maxParallelism);
+            } else if (enableRescaleOptimize
+                    && areAllInputsDefined(inputs)
+                    && hasBalanceConnectType(inputs)) {
+                LOG.info(
+                        "### DEBUG ### try decideParallelismAndEvenlyDistribute for {}, the consumed results size is {}({})",
+                        jobVertexId,
+                        inputs.size(),
+                        inputs);
+                return decideParallelismAndEvenlyDistribute(
+                        jobVertexId,
+                        inputs,
                         vertexInitialParallelism,
                         minParallelism,
                         maxParallelism);
@@ -197,8 +220,12 @@ public class DefaultVertexParallelismAndInputInfosDecider
                 LOG.info(
                         "### DEBUG ### try decideParallelismAndEvenlyDistributeSubpartitions for {}, the consumed results size is {}({})",
                         jobVertexId,
-                        consumedResults.size(),
-                        consumedResults);
+                        inputs.size(),
+                        inputs);
+                List<BlockingResultInfo> consumedResults =
+                        inputs.stream()
+                                .map(BlockingInputInfo::getConsumedResultInfo)
+                                .collect(Collectors.toList());
                 return decideParallelismAndEvenlyDistributeSubpartitions(
                         jobVertexId,
                         consumedResults,
@@ -230,12 +257,22 @@ public class DefaultVertexParallelismAndInputInfosDecider
         return dataVolumePerTask;
     }
 
-    private static boolean areAllInputsAllToAll(List<BlockingResultInfo> consumedResults) {
-        return consumedResults.stream().noneMatch(BlockingResultInfo::isPointwise);
+    private static boolean areAllInputsAllToAll(List<BlockingInputInfo> inputs) {
+        return inputs.stream().noneMatch(BlockingInputInfo::isPointWise);
     }
 
-    private static boolean areAllInputsBroadcast(List<BlockingResultInfo> consumedResults) {
-        return consumedResults.stream().allMatch(BlockingResultInfo::isBroadcast);
+    private static boolean areAllInputsBroadcast(List<BlockingInputInfo> inputs) {
+        return inputs.stream().allMatch(BlockingInputInfo::isBroadcast);
+    }
+
+    private static boolean areAllInputsDefined(List<BlockingInputInfo> inputs) {
+        return inputs.stream()
+                .noneMatch(input -> input.getConnectType().equals(ConnectType.UNDEFINED));
+    }
+
+    private static boolean hasBalanceConnectType(List<BlockingInputInfo> inputs) {
+        return inputs.stream()
+                .anyMatch(input -> input.getConnectType().equals(ConnectType.ADAPTIVE_ALL_TO_ALL));
     }
 
     /**
@@ -266,6 +303,197 @@ public class DefaultVertexParallelismAndInputInfosDecider
                 parallelism,
                 VertexInputInfoComputationUtils.computeVertexInputInfos(
                         parallelism, consumedResults, true));
+    }
+
+    private ParallelismAndInputInfos decideParallelismAndEvenlyDistribute(
+            JobVertexID jobVertexId,
+            List<BlockingInputInfo> inputs,
+            int initialParallelism,
+            int minParallelism,
+            int maxParallelism) {
+        checkArgument(!inputs.isEmpty());
+        List<BlockingResultInfo> consumedResults =
+                inputs.stream()
+                        .map(BlockingInputInfo::getConsumedResultInfo)
+                        .collect(Collectors.toList());
+        int parallelism =
+                initialParallelism > 0
+                        ? initialParallelism
+                        : decideParallelism(
+                                jobVertexId, consumedResults, minParallelism, maxParallelism);
+
+        final Map<IntermediateDataSetID, JobVertexInputInfo> jobVertexInputInfos =
+                new LinkedHashMap<>();
+
+        for (BlockingInputInfo input : inputs) {
+            BlockingResultInfo consumedResultInfo = input.getConsumedResultInfo();
+            jobVertexInputInfos.put(
+                    consumedResultInfo.getResultId(),
+                    computeJobVertexInputInfo(input, parallelism));
+        }
+
+        return new ParallelismAndInputInfos(parallelism, jobVertexInputInfos);
+    }
+
+    JobVertexInputInfo computeJobVertexInputInfo(BlockingInputInfo input, int parallelism) {
+        BlockingResultInfo consumedResultInfo = input.getConsumedResultInfo();
+        int sourceParallelism = consumedResultInfo.getNumPartitions();
+        switch (input.getConnectType()) {
+            case POINT_WISE:
+                return VertexInputInfoComputationUtils.computeVertexInputInfoForPointwise(
+                        sourceParallelism,
+                        parallelism,
+                        consumedResultInfo::getNumSubpartitions,
+                        true);
+            case ALL_TO_ALL:
+                return VertexInputInfoComputationUtils.computeVertexInputInfoForAllToAll(
+                        sourceParallelism,
+                        parallelism,
+                        consumedResultInfo::getNumSubpartitions,
+                        true,
+                        consumedResultInfo.isBroadcast());
+            case ADAPTIVE_ALL_TO_ALL:
+                return computeVertexInputInfoForBalance(consumedResultInfo, parallelism);
+            case ADAPTIVE_POINT_WISE:
+            default:
+                throw new FlinkRuntimeException("UnSupport connect type!");
+        }
+    }
+
+    JobVertexInputInfo computeVertexInputInfoForBalance(
+            BlockingResultInfo consumedResultInfo, Integer parallelism) {
+        Map<Integer, long[]> subpartitionBytesByPartitionIndex =
+                consumedResultInfo.getSubpartitionBytesByPartitionIndex();
+        int numPartitions = consumedResultInfo.getNumPartitions();
+        int numSubPartitions =
+                checkAndGetSubpartitionNum(Collections.singletonList(consumedResultInfo));
+        long[] nums = new long[numPartitions * numSubPartitions];
+        long sum = 0L;
+        long min = Integer.MAX_VALUE;
+        for (int i = 0; i < numPartitions; ++i) {
+            long[] subpartitionBytes = subpartitionBytesByPartitionIndex.get(i);
+            for (int j = 0; j < numSubPartitions; ++j) {
+                int k = i * numSubPartitions + j;
+                nums[k] = subpartitionBytes[j];
+                sum += nums[k];
+                min = Math.min(nums[k], min);
+            }
+        }
+        long bytesLimit =
+                computeLimitForDividePartitionBalance(
+                        nums, sum, min, parallelism, Integer.MAX_VALUE);
+        LOG.info("The limit for per task is {}", bytesLimit);
+        List<IndexRange> combinedPartitionRanges =
+                computePartitionOrSubpartitionRangesEvenlyData(nums, bytesLimit, Integer.MAX_VALUE);
+
+        if (combinedPartitionRanges.size() != parallelism) {
+            LOG.info(
+                    "The parallelism {} is not equal to the expected parallelism {}, fallback to computePartitionOrSubpartitionRangesEvenlySum",
+                    combinedPartitionRanges.size(),
+                    parallelism);
+            combinedPartitionRanges =
+                    computePartitionOrSubpartitionRangesEvenlySum(nums.length, parallelism);
+        }
+
+        if (combinedPartitionRanges.size() != parallelism) {
+            Optional<List<IndexRange>> r =
+                    adjustToClosestLegalParallelism(
+                            dataVolumePerTask,
+                            combinedPartitionRanges.size(),
+                            parallelism,
+                            parallelism,
+                            min,
+                            sum,
+                            lim -> computeParallelism(nums, lim, Integer.MAX_VALUE),
+                            lim ->
+                                    computePartitionOrSubpartitionRangesEvenlyData(
+                                            nums, lim, Integer.MAX_VALUE));
+            LOG.info("The adjust result is: {},nums is {}", r, nums);
+            LOG.info(
+                    "The parallelism {} is not equal to the expected parallelism {}, fallback to computeVertexInputInfoForPointwise",
+                    combinedPartitionRanges.size(),
+                    parallelism);
+            return VertexInputInfoComputationUtils.computeVertexInputInfoForPointwise(
+                    numPartitions, parallelism, consumedResultInfo::getNumSubpartitions, true);
+        }
+        LOG.info("The combinedPartitionRanges is {}", combinedPartitionRanges);
+        List<ExecutionVertexInputInfo> executionVertexInputInfos = new ArrayList<>();
+        for (int i = 0; i < combinedPartitionRanges.size(); ++i) {
+            ExecutionVertexInputInfo executionVertexInputInfo;
+            if (consumedResultInfo.isBroadcast()) {
+                executionVertexInputInfo =
+                        new ExecutionVertexInputInfo(
+                                i, new IndexRange(0, numPartitions - 1), new IndexRange(0, 0));
+            } else {
+                Map<IndexRange, IndexRange> mergedPartitionRanges =
+                        computePartitionRangeForBalance(
+                                combinedPartitionRanges.get(i), numSubPartitions);
+                if (mergedPartitionRanges.size() > 1) {
+                    LOG.info("Input info for Task(balance) {} is {}", i, mergedPartitionRanges);
+                }
+                executionVertexInputInfo = new ExecutionVertexInputInfo(i, mergedPartitionRanges);
+            }
+            executionVertexInputInfos.add(executionVertexInputInfo);
+        }
+        return new JobVertexInputInfo(executionVertexInputInfos);
+    }
+
+    public long computeLimitForDividePartitionBalance(
+            long[] nums, long sum, long min, int parallelism, int maxRangeSize) {
+        long startTime = System.currentTimeMillis();
+        long left = min;
+        long right = sum;
+        while (left < right) {
+            long mid = left + (right - left) / 2;
+            int count = computeParallelism(nums, mid, maxRangeSize);
+            if (count > parallelism) {
+                left = mid + 1;
+            } else {
+                right = mid;
+            }
+        }
+        LOG.info("Compute limit cost {} ms.", System.currentTimeMillis() - startTime);
+        return left;
+    }
+
+    public static Map<IndexRange, IndexRange> computePartitionRangeForBalance(
+            IndexRange combinedRange, int numSubPartitions) {
+        List<IndexRange> subPartitionRangeList = new ArrayList<>();
+        int prePartitionIdx = combinedRange.getStartIndex() / numSubPartitions;
+        int start = combinedRange.getStartIndex() % numSubPartitions;
+        int end = start;
+        for (int i = combinedRange.getStartIndex() + 1; i <= combinedRange.getEndIndex(); ++i) {
+            int partitionIdx = i / numSubPartitions;
+            if (partitionIdx == prePartitionIdx) {
+                ++end;
+            } else {
+                subPartitionRangeList.add(new IndexRange(start, end));
+                prePartitionIdx = partitionIdx;
+                start = 0;
+                end = start;
+            }
+        }
+        subPartitionRangeList.add(new IndexRange(start, end));
+
+        Map<IndexRange, IndexRange> partitionRangeMap = new LinkedHashMap<>();
+        int startPartitionIdx = combinedRange.getStartIndex() / numSubPartitions;
+        int endPartitionIdx = startPartitionIdx;
+        IndexRange preSubpartitionRange = subPartitionRangeList.get(0);
+        for (int i = 1; i < subPartitionRangeList.size(); ++i) {
+            IndexRange subPartitionRange = subPartitionRangeList.get(i);
+            if (subPartitionRange.equals(preSubpartitionRange)) {
+                ++endPartitionIdx;
+            } else {
+                partitionRangeMap.put(
+                        new IndexRange(startPartitionIdx, endPartitionIdx), preSubpartitionRange);
+                preSubpartitionRange = subPartitionRange;
+                startPartitionIdx = endPartitionIdx + 1;
+                endPartitionIdx = startPartitionIdx;
+            }
+        }
+        partitionRangeMap.put(
+                new IndexRange(startPartitionIdx, endPartitionIdx), preSubpartitionRange);
+        return partitionRangeMap;
     }
 
     int decideParallelism(
@@ -366,7 +594,8 @@ public class DefaultVertexParallelismAndInputInfosDecider
         int maxRangeSize = MAX_NUM_SUBPARTITIONS_PER_TASK_CONSUME / maxNumPartitions;
         // compute subpartition ranges
         List<IndexRange> subpartitionRanges =
-                computeSubpartitionRanges(bytesBySubpartition, dataVolumePerTask, maxRangeSize);
+                computePartitionOrSubpartitionRangesEvenlyData(
+                        bytesBySubpartition, dataVolumePerTask, maxRangeSize);
 
         // if the parallelism is not legal, adjust to a legal parallelism
         if (!isLegalParallelism(subpartitionRanges.size(), minParallelism, maxParallelism)) {
@@ -380,7 +609,7 @@ public class DefaultVertexParallelismAndInputInfosDecider
                             Arrays.stream(bytesBySubpartition).sum(),
                             limit -> computeParallelism(bytesBySubpartition, limit, maxRangeSize),
                             limit ->
-                                    computeSubpartitionRanges(
+                                    computePartitionOrSubpartitionRangesEvenlyData(
                                             bytesBySubpartition, limit, maxRangeSize));
             if (!adjustedSubpartitionRanges.isPresent()) {
                 // can't find any legal parallelism, fall back to evenly distribute subpartitions
@@ -441,6 +670,7 @@ public class DefaultVertexParallelismAndInputInfosDecider
         int subPartitionNum = checkAndGetSubpartitionNum(consumedResults);
         List<Long> leftSubpartitionBytes =
                 ((AllToAllBlockingResultInfo) leftResultInfo).getAggregatedSubpartitionBytes();
+
         List<Long> rightSubpartitionBytes =
                 ((AllToAllBlockingResultInfo) rightResultInfo).getAggregatedSubpartitionBytes();
 
@@ -663,7 +893,8 @@ public class DefaultVertexParallelismAndInputInfosDecider
             List<IndexRange> rightSplitSubPartitions,
             Map<Integer, Integer> mapToSubpartitionIdx) {
         checkArgument(consumedResults.size() == 2);
-        final Map<IntermediateDataSetID, JobVertexInputInfo> vertexInputInfos = new HashMap<>();
+        final Map<IntermediateDataSetID, JobVertexInputInfo> vertexInputInfos =
+                new LinkedHashMap<>();
         BlockingResultInfo leftResultInfo = consumedResults.get(0);
         BlockingResultInfo rightResultInfo = consumedResults.get(1);
         List<ExecutionVertexInputInfo> leftExecutionVertexInputInfos =
@@ -1037,9 +1268,9 @@ public class DefaultVertexParallelismAndInputInfosDecider
         return new ParallelismAndInputInfos(subpartitionRanges.size(), vertexInputInfos);
     }
 
-    private static List<IndexRange> computeSubpartitionRanges(
+    private static List<IndexRange> computePartitionOrSubpartitionRangesEvenlyData(
             long[] nums, long limit, int maxRangeSize) {
-        List<IndexRange> subpartitionRanges = new ArrayList<>();
+        List<IndexRange> ranges = new ArrayList<>();
         long tmpSum = 0;
         int startIndex = 0;
         for (int i = 0; i < nums.length; ++i) {
@@ -1048,13 +1279,31 @@ public class DefaultVertexParallelismAndInputInfosDecider
                     || (tmpSum + num <= limit && (i - startIndex + 1) <= maxRangeSize)) {
                 tmpSum += num;
             } else {
-                subpartitionRanges.add(new IndexRange(startIndex, i - 1));
+                ranges.add(new IndexRange(startIndex, i - 1));
                 startIndex = i;
                 tmpSum = num;
             }
         }
-        subpartitionRanges.add(new IndexRange(startIndex, nums.length - 1));
-        return subpartitionRanges;
+        ranges.add(new IndexRange(startIndex, nums.length - 1));
+        return ranges;
+    }
+
+    private static List<IndexRange> computePartitionOrSubpartitionRangesEvenlySum(
+            int totalSubpartitions, int parallelism) {
+        List<IndexRange> ranges = new ArrayList<>();
+        int baseSize = totalSubpartitions / parallelism;
+        int remainder = totalSubpartitions % parallelism;
+        int start = 0;
+        for (int i = 0; i < parallelism; i++) {
+            int end = start + baseSize - 1;
+            if (i < remainder) {
+                end += 1;
+            }
+            ranges.add(new IndexRange(start, end));
+            start = end + 1;
+        }
+        checkArgument(start == totalSubpartitions);
+        return ranges;
     }
 
     private static int computeParallelism(long[] nums, long limit, int maxRangeSize) {
@@ -1239,6 +1488,7 @@ public class DefaultVertexParallelismAndInputInfosDecider
                 configuration
                         .get(BatchExecutionOptions.SKEWED_PARTITION_THRESHOLD_IN_BYTES)
                         .getBytes(),
-                configuration.get(BatchExecutionOptions.SKEWED_PARTITION_MERGE_FACTOR));
+                configuration.get(BatchExecutionOptions.SKEWED_PARTITION_MERGE_FACTOR),
+                configuration.get(BatchExecutionOptions.RESCALE_OPTIMIZE_ENABLE));
     }
 }

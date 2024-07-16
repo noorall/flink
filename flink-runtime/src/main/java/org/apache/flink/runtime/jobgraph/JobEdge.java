@@ -65,6 +65,10 @@ public class JobEdge implements java.io.Serializable {
     /** Optional description of the caching inside an operator, to be displayed in the JSON plan. */
     private String operatorLevelCachingDescription;
 
+    private final ConnectType connectType;
+
+    private final int typeNumber;
+
     /**
      * Constructs a new job edge, that connects an intermediate result to a consumer task.
      *
@@ -77,7 +81,9 @@ public class JobEdge implements java.io.Serializable {
             IntermediateDataSet source,
             JobVertex target,
             DistributionPattern distributionPattern,
-            boolean isBroadcast) {
+            boolean isBroadcast,
+            ConnectType connectType,
+            int typeNumber) {
         if (source == null || target == null || distributionPattern == null) {
             throw new NullPointerException();
         }
@@ -85,6 +91,8 @@ public class JobEdge implements java.io.Serializable {
         this.distributionPattern = distributionPattern;
         this.source = source;
         this.isBroadcast = isBroadcast;
+        this.connectType = connectType;
+        this.typeNumber = typeNumber;
     }
 
     /**
@@ -234,6 +242,14 @@ public class JobEdge implements java.io.Serializable {
      */
     public void setOperatorLevelCachingDescription(String operatorLevelCachingDescription) {
         this.operatorLevelCachingDescription = operatorLevelCachingDescription;
+    }
+
+    public ConnectType getConnectType() {
+        return connectType;
+    }
+
+    public int getTypeNumber() {
+        return typeNumber;
     }
 
     // --------------------------------------------------------------------------------------------

@@ -525,8 +525,18 @@ public class JobVertex implements java.io.Serializable {
             DistributionPattern distPattern,
             ResultPartitionType partitionType,
             boolean isBroadcast) {
+        ConnectType connectType =
+                distPattern == DistributionPattern.POINTWISE
+                        ? ConnectType.POINT_WISE
+                        : ConnectType.ALL_TO_ALL;
         return connectNewDataSetAsInput(
-                input, distPattern, partitionType, new IntermediateDataSetID(), isBroadcast);
+                input,
+                distPattern,
+                partitionType,
+                new IntermediateDataSetID(),
+                isBroadcast,
+                connectType,
+                -1);
     }
 
     public JobEdge connectNewDataSetAsInput(
@@ -535,11 +545,34 @@ public class JobVertex implements java.io.Serializable {
             ResultPartitionType partitionType,
             IntermediateDataSetID intermediateDataSetId,
             boolean isBroadcast) {
+        ConnectType connectType =
+                distPattern == DistributionPattern.POINTWISE
+                        ? ConnectType.POINT_WISE
+                        : ConnectType.ALL_TO_ALL;
+        return connectNewDataSetAsInput(
+                input,
+                distPattern,
+                partitionType,
+                intermediateDataSetId,
+                isBroadcast,
+                connectType,
+                -1);
+    }
+
+    public JobEdge connectNewDataSetAsInput(
+            JobVertex input,
+            DistributionPattern distPattern,
+            ResultPartitionType partitionType,
+            IntermediateDataSetID intermediateDataSetId,
+            boolean isBroadcast,
+            ConnectType connectType,
+            int typeNumber) {
 
         IntermediateDataSet dataSet =
                 input.getOrCreateResultDataSet(intermediateDataSetId, partitionType);
 
-        JobEdge edge = new JobEdge(dataSet, this, distPattern, isBroadcast);
+        JobEdge edge =
+                new JobEdge(dataSet, this, distPattern, isBroadcast, connectType, typeNumber);
         this.inputs.add(edge);
         dataSet.addConsumer(edge);
         return edge;

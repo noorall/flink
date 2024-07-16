@@ -25,7 +25,7 @@ import static org.apache.flink.runtime.executiongraph.VertexInputInfoComputation
 import static org.assertj.core.api.Assertions.assertThat;
 
 /** Test for {@link VertexInputInfoComputationUtils}. */
-class VertexInputInfoComputationUtilsTest {
+class VertexBlockingInputInfoComputationUtilsTest {
 
     @Test
     void testComputeConsumedSubpartitionRange3to1() {
