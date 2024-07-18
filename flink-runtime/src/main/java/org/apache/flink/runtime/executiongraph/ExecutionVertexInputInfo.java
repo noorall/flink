@@ -39,11 +39,13 @@ public class ExecutionVertexInputInfo implements Serializable {
             final int subtaskIndex,
             final IndexRange partitionIndexRange,
             final IndexRange subpartitionIndexRange) {
-        this(subtaskIndex, Collections.singletonMap(partitionIndexRange, subpartitionIndexRange));
+        this(subtaskIndex, partitionIndexRange, subpartitionIndexRange, false);
     }
 
     public ExecutionVertexInputInfo(
-            final int subtaskIndex, final Map<IndexRange, IndexRange> partitionInfo) {
+            final int subtaskIndex,
+            final Map<IndexRange, IndexRange> partitionInfo,
+            boolean isHashConvertToBroadcast) {
         this.subtaskIndex = subtaskIndex;
         this.partitionInfo = partitionInfo;
     }
@@ -55,10 +57,10 @@ public class ExecutionVertexInputInfo implements Serializable {
             final IndexRange partitionIndexRange,
             final IndexRange subpartitionIndexRange,
             boolean isHashConvertToBroadcast) {
-        this.subtaskIndex = subtaskIndex;
-        this.partitionIndexRange = checkNotNull(partitionIndexRange);
-        this.subpartitionIndexRange = checkNotNull(subpartitionIndexRange);
-        this.isHashConvertToBroadcast = isHashConvertToBroadcast;
+        this(
+                subtaskIndex,
+                Collections.singletonMap(partitionIndexRange, subpartitionIndexRange),
+                isHashConvertToBroadcast);
     }
 
     public boolean isHashConvertToBroadcast() {

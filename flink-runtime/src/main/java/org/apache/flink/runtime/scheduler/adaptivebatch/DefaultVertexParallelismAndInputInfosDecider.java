@@ -708,7 +708,8 @@ public class DefaultVertexParallelismAndInputInfosDecider
                 if (mergedPartitionRanges.size() > 1) {
                     LOG.info("Input info for Task {} is {}", i, mergedPartitionRanges);
                 }
-                executionVertexInputInfo = new ExecutionVertexInputInfo(i, mergedPartitionRanges);
+                executionVertexInputInfo =
+                        new ExecutionVertexInputInfo(i, mergedPartitionRanges, false);
             }
             executionVertexInputInfos.add(executionVertexInputInfo);
         }
