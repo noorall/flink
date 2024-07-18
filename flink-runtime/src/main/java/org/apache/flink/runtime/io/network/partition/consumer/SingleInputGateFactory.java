@@ -182,9 +182,6 @@ public class SingleInputGateFactory {
         final String owningTaskName = owner.getOwnerName();
         final MetricGroup networkInputGroup = owner.getInputGroup();
 
-        ResultSubpartitionIndexSet subpartitionIndexSet =
-                new ResultSubpartitionIndexSet(
-                        igdd.getConsumedSubpartitionIndexRange(), igdd.isHashConvertToBroadcast());
         SingleInputGate inputGate =
                 new SingleInputGate(
                         owningTaskName,
@@ -263,7 +260,11 @@ public class SingleInputGateFactory {
                         .collect(
                                 Collectors.toMap(
                                         Map.Entry::getKey,
-                                        entry -> new ResultSubpartitionIndexSet(entry.getValue())));
+                                        entry ->
+                                                new ResultSubpartitionIndexSet(
+                                                        entry.getValue(),
+                                                        inputGateDeploymentDescriptor
+                                                                .isHashConvertToBroadcast())));
 
         int channelIdx = 0;
         final List<TieredStorageConsumerSpec> tieredStorageConsumerSpecs = new ArrayList<>();

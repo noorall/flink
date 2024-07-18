@@ -333,7 +333,8 @@ public class DefaultVertexParallelismAndInputInfosDeciderV2
                 if (mergedPartitionRanges.size() > 1) {
                     LOG.info("Input info for Task(balance) {} is {}", i, mergedPartitionRanges);
                 }
-                executionVertexInputInfo = new ExecutionVertexInputInfo(i, mergedPartitionRanges);
+                executionVertexInputInfo =
+                        new ExecutionVertexInputInfo(i, mergedPartitionRanges, true);
             }
             executionVertexInputInfos.add(executionVertexInputInfo);
         }
@@ -917,7 +918,8 @@ public class DefaultVertexParallelismAndInputInfosDeciderV2
                 if (mergedPartitionRanges.size() > 1) {
                     LOG.info("Input info for Task {} is {}", i, mergedPartitionRanges);
                 }
-                executionVertexInputInfo = new ExecutionVertexInputInfo(i, mergedPartitionRanges);
+                executionVertexInputInfo =
+                        new ExecutionVertexInputInfo(i, mergedPartitionRanges, true);
             }
             executionVertexInputInfos.add(executionVertexInputInfo);
         }
