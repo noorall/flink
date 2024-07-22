@@ -18,14 +18,16 @@
 
 package org.apache.flink.runtime.jobgraph;
 
-public enum ConnectType {
+public enum DataDistributionType {
     ALL_TO_ALL,
 
     POINT_WISE,
 
+    ADAPTIVE_POINT_WISE,
+
     ADAPTIVE_ALL_TO_ALL,
 
-    ADAPTIVE_POINT_WISE,
+    ADAPTIVE_CORRELATED_ALL_TO_ALL,
 
     UNDEFINED
 }

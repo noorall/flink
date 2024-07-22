@@ -18,22 +18,22 @@
 
 package org.apache.flink.runtime.scheduler.adaptivebatch;
 
-import org.apache.flink.runtime.jobgraph.ConnectType;
+import org.apache.flink.runtime.jobgraph.DataDistributionType;
 
-public class BlockingInputInfo {
+public class BlockingInputInfo implements Comparable<BlockingInputInfo> {
     private final BlockingResultInfo blockingResultInfo;
-    private final ConnectType connectType;
+    private final DataDistributionType dataDistributionType;
     private final int typeNumber;
     private final int index;
 
     public BlockingInputInfo(
             BlockingResultInfo blockingResultInfo,
             int typeNumber,
-            ConnectType connectType,
+            DataDistributionType dataDistributionType,
             int index) {
         this.blockingResultInfo = blockingResultInfo;
         this.typeNumber = typeNumber;
-        this.connectType = connectType;
+        this.dataDistributionType = dataDistributionType;
         this.index = index;
     }
 
@@ -53,11 +53,16 @@ public class BlockingInputInfo {
         return typeNumber;
     }
 
-    public ConnectType getConnectType() {
-        return connectType;
+    public DataDistributionType getConnectType() {
+        return dataDistributionType;
     }
 
     public int getIndex() {
         return index;
+    }
+
+    @Override
+    public int compareTo(BlockingInputInfo o) {
+        return Integer.compare(this.getIndex(), o.getIndex());
     }
 }

@@ -32,7 +32,7 @@ import org.apache.flink.core.execution.CheckpointingMode;
 import org.apache.flink.core.memory.ManagedMemoryUseCase;
 import org.apache.flink.runtime.OperatorIDPair;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionType;
-import org.apache.flink.runtime.jobgraph.ConnectType;
+import org.apache.flink.runtime.jobgraph.DataDistributionType;
 import org.apache.flink.runtime.jobgraph.DistributionPattern;
 import org.apache.flink.runtime.jobgraph.InputOutputFormatContainer;
 import org.apache.flink.runtime.jobgraph.InputOutputFormatVertex;
@@ -1518,10 +1518,10 @@ public class StreamingJobGraphGenerator {
 
         JobEdge jobEdge;
         if (partitioner.isPointwise()) {
-            ConnectType connectType = ConnectType.POINT_WISE;
+            DataDistributionType dataDistributionType = DataDistributionType.POINT_WISE;
             if (partitioner instanceof RescalePartitioner) {
                 LOG.info("Rescale optimize for vertex {}", downStreamVertex.getName());
-                connectType = ConnectType.ADAPTIVE_ALL_TO_ALL;
+                dataDistributionType = DataDistributionType.ADAPTIVE_POINT_WISE;
             }
             jobEdge =
                     downStreamVertex.connectNewDataSetAsInput(
@@ -1530,7 +1530,7 @@ public class StreamingJobGraphGenerator {
                             resultPartitionType,
                             output.getDataSetId(),
                             partitioner.isBroadcast(),
-                            connectType,
+                            dataDistributionType,
                             edge.getTypeNumber());
         } else {
             jobEdge =
@@ -1540,7 +1540,7 @@ public class StreamingJobGraphGenerator {
                             resultPartitionType,
                             output.getDataSetId(),
                             partitioner.isBroadcast(),
-                            ConnectType.ALL_TO_ALL,
+                            DataDistributionType.ALL_TO_ALL,
                             edge.getTypeNumber());
         }
 

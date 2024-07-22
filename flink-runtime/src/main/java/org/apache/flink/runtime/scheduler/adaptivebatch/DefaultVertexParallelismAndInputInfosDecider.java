@@ -28,7 +28,7 @@ import org.apache.flink.runtime.executiongraph.IndexRange;
 import org.apache.flink.runtime.executiongraph.JobVertexInputInfo;
 import org.apache.flink.runtime.executiongraph.ParallelismAndInputInfos;
 import org.apache.flink.runtime.executiongraph.VertexInputInfoComputationUtils;
-import org.apache.flink.runtime.jobgraph.ConnectType;
+import org.apache.flink.runtime.jobgraph.DataDistributionType;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.util.FlinkRuntimeException;
@@ -267,12 +267,15 @@ public class DefaultVertexParallelismAndInputInfosDecider
 
     private static boolean areAllInputsDefined(List<BlockingInputInfo> inputs) {
         return inputs.stream()
-                .noneMatch(input -> input.getConnectType().equals(ConnectType.UNDEFINED));
+                .noneMatch(input -> input.getConnectType().equals(DataDistributionType.UNDEFINED));
     }
 
     private static boolean hasBalanceConnectType(List<BlockingInputInfo> inputs) {
         return inputs.stream()
-                .anyMatch(input -> input.getConnectType().equals(ConnectType.ADAPTIVE_ALL_TO_ALL));
+                .anyMatch(
+                        input ->
+                                input.getConnectType()
+                                        .equals(DataDistributionType.ADAPTIVE_POINT_WISE));
     }
 
     /**
@@ -325,12 +328,19 @@ public class DefaultVertexParallelismAndInputInfosDecider
         final Map<IntermediateDataSetID, JobVertexInputInfo> jobVertexInputInfos =
                 new LinkedHashMap<>();
 
+        final Map<BlockingInputInfo, JobVertexInputInfo> jobVertexInputInfoMap = new TreeMap<>();
+
         for (BlockingInputInfo input : inputs) {
-            BlockingResultInfo consumedResultInfo = input.getConsumedResultInfo();
-            jobVertexInputInfos.put(
-                    consumedResultInfo.getResultId(),
-                    computeJobVertexInputInfo(input, parallelism));
+            jobVertexInputInfoMap.put(input, computeJobVertexInputInfo(input, parallelism));
         }
+
+        jobVertexInputInfoMap
+                .entrySet()
+                .forEach(
+                        e ->
+                                jobVertexInputInfos.put(
+                                        e.getKey().getConsumedResultInfo().getResultId(),
+                                        e.getValue()));
 
         return new ParallelismAndInputInfos(parallelism, jobVertexInputInfos);
     }
@@ -352,15 +362,15 @@ public class DefaultVertexParallelismAndInputInfosDecider
                         consumedResultInfo::getNumSubpartitions,
                         true,
                         consumedResultInfo.isBroadcast());
-            case ADAPTIVE_ALL_TO_ALL:
-                return computeVertexInputInfoForBalance(consumedResultInfo, parallelism);
             case ADAPTIVE_POINT_WISE:
+                return computeVertexInputInfoForAdaptivePointWise(consumedResultInfo, parallelism);
+            case ADAPTIVE_ALL_TO_ALL:
             default:
                 throw new FlinkRuntimeException("UnSupport connect type!");
         }
     }
 
-    JobVertexInputInfo computeVertexInputInfoForBalance(
+    JobVertexInputInfo computeVertexInputInfoForAdaptivePointWise(
             BlockingResultInfo consumedResultInfo, Integer parallelism) {
         Map<Integer, long[]> subpartitionBytesByPartitionIndex =
                 consumedResultInfo.getSubpartitionBytesByPartitionIndex();
@@ -380,8 +390,8 @@ public class DefaultVertexParallelismAndInputInfosDecider
             }
         }
         long bytesLimit =
-                computeLimitForDividePartitionBalance(
-                        nums, sum, min, parallelism, Integer.MAX_VALUE);
+                computeLimitForAdaptivePointWise(nums, sum, min, parallelism, Integer.MAX_VALUE);
+
         LOG.info("The limit for per task is {}", bytesLimit);
         List<IndexRange> combinedPartitionRanges =
                 computePartitionOrSubpartitionRangesEvenlyData(nums, bytesLimit, Integer.MAX_VALUE);
@@ -438,7 +448,7 @@ public class DefaultVertexParallelismAndInputInfosDecider
         return new JobVertexInputInfo(executionVertexInputInfos);
     }
 
-    public long computeLimitForDividePartitionBalance(
+    public long computeLimitForAdaptivePointWise(
             long[] nums, long sum, long min, int parallelism, int maxRangeSize) {
         long startTime = System.currentTimeMillis();
         long left = min;

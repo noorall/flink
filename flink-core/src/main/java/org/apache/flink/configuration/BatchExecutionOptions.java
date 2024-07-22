@@ -57,6 +57,13 @@ public class BatchExecutionOptions {
                     .withDescription("If true, Flink will optimize rescale.");
 
     @Documentation.Section({Documentation.Sections.EXPERT_SCHEDULING})
+    public static final ConfigOption<Integer> ADAPTIVE_SPLIT_FRACTION =
+            key("execution.batch.adaptive.adaptive.split-fraction")
+                    .intType()
+                    .defaultValue(1)
+                    .withDescription("Split fraction.");
+
+    @Documentation.Section({Documentation.Sections.EXPERT_SCHEDULING})
     public static final ConfigOption<MemorySize> ADAPTIVE_BROADCAST_JOIN_THRESHOLD =
             key("execution.batch.adaptive.join.broadcast-threshold")
                     .memoryType()

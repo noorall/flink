@@ -525,17 +525,17 @@ public class JobVertex implements java.io.Serializable {
             DistributionPattern distPattern,
             ResultPartitionType partitionType,
             boolean isBroadcast) {
-        ConnectType connectType =
+        DataDistributionType dataDistributionType =
                 distPattern == DistributionPattern.POINTWISE
-                        ? ConnectType.POINT_WISE
-                        : ConnectType.ALL_TO_ALL;
+                        ? DataDistributionType.POINT_WISE
+                        : DataDistributionType.ALL_TO_ALL;
         return connectNewDataSetAsInput(
                 input,
                 distPattern,
                 partitionType,
                 new IntermediateDataSetID(),
                 isBroadcast,
-                connectType,
+                dataDistributionType,
                 -1);
     }
 
@@ -545,17 +545,17 @@ public class JobVertex implements java.io.Serializable {
             ResultPartitionType partitionType,
             IntermediateDataSetID intermediateDataSetId,
             boolean isBroadcast) {
-        ConnectType connectType =
+        DataDistributionType dataDistributionType =
                 distPattern == DistributionPattern.POINTWISE
-                        ? ConnectType.POINT_WISE
-                        : ConnectType.ALL_TO_ALL;
+                        ? DataDistributionType.POINT_WISE
+                        : DataDistributionType.ALL_TO_ALL;
         return connectNewDataSetAsInput(
                 input,
                 distPattern,
                 partitionType,
                 intermediateDataSetId,
                 isBroadcast,
-                connectType,
+                dataDistributionType,
                 -1);
     }
 
@@ -565,14 +565,15 @@ public class JobVertex implements java.io.Serializable {
             ResultPartitionType partitionType,
             IntermediateDataSetID intermediateDataSetId,
             boolean isBroadcast,
-            ConnectType connectType,
+            DataDistributionType dataDistributionType,
             int typeNumber) {
 
         IntermediateDataSet dataSet =
                 input.getOrCreateResultDataSet(intermediateDataSetId, partitionType);
 
         JobEdge edge =
-                new JobEdge(dataSet, this, distPattern, isBroadcast, connectType, typeNumber);
+                new JobEdge(
+                        dataSet, this, distPattern, isBroadcast, dataDistributionType, typeNumber);
         this.inputs.add(edge);
         dataSet.addConsumer(edge);
         return edge;
