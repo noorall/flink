@@ -82,14 +82,15 @@ public class DefaultAdaptiveExecutionHandler implements AdaptiveExecutionHandler
             Executor serializationExecutor,
             Configuration configuration,
             Function<Integer, OperatorID> findOperatorIdByStreamNodeId) {
+        this.findOperatorIdByStreamNodeId = checkNotNull(findOperatorIdByStreamNodeId);
+        this.configuration = checkNotNull(configuration);
         this.jobGraphManager =
                 new AdaptiveJobGraphManager(
                         userClassloader,
                         streamGraph,
                         serializationExecutor,
-                        AdaptiveJobGraphManager.GenerateMode.LAZILY);
-        this.findOperatorIdByStreamNodeId = checkNotNull(findOperatorIdByStreamNodeId);
-        this.configuration = checkNotNull(configuration);
+                        AdaptiveJobGraphManager.GenerateMode.LAZILY,
+                        getSplitFactor());
     }
 
     @Override

@@ -180,12 +180,19 @@ public class IntermediateResultPartition {
             return maxConsumerJobVertexParallelism;
         } else {
             int numberOfPartitions = getIntermediateResult().getNumParallelProducers();
-            return maxConsumerJobVertexParallelism
-                    / BigInteger.valueOf(maxConsumerJobVertexParallelism)
-                            .gcd(BigInteger.valueOf(numberOfPartitions))
-                            .intValue();
-            //            return (int) Math.ceil(((double) maxConsumerJobVertexParallelism) /
-            // numberOfPartitions);
+            int splitFactor = getIntermediateResult().getSplitFactor();
+
+            int originSubpartitionPerTask =
+                    (int) Math.ceil(((double) maxConsumerJobVertexParallelism) / numberOfPartitions)
+                            * splitFactor;
+
+            int subpartitionPerTaskByGCD =
+                    maxConsumerJobVertexParallelism
+                            / BigInteger.valueOf(maxConsumerJobVertexParallelism)
+                                    .gcd(BigInteger.valueOf(numberOfPartitions))
+                                    .intValue();
+
+            return Math.min(subpartitionPerTaskByGCD, originSubpartitionPerTask);
         }
     }
 

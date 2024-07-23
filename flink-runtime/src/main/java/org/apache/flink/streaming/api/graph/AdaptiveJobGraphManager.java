@@ -167,14 +167,29 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
 
     private final Set<JobVertexID> finishedJobVertices;
 
+    private final int splitFactor;
+
     @VisibleForTesting
     public AdaptiveJobGraphManager(
             ClassLoader userClassloader,
             StreamGraph streamGraph,
             Executor serializationExecutor,
             GenerateMode generateMode) {
+        this(userClassloader, streamGraph, serializationExecutor, generateMode, 1);
+    }
+
+    @VisibleForTesting
+    public AdaptiveJobGraphManager(
+            ClassLoader userClassloader,
+            StreamGraph streamGraph,
+            Executor serializationExecutor,
+            GenerateMode generateMode,
+            int splitFactor) {
         preValidate(streamGraph, userClassloader);
         this.streamGraph = streamGraph;
+
+        this.splitFactor = splitFactor;
+
         this.defaultStreamGraphHasher = new StreamGraphHasherV2();
         this.legacyStreamGraphHasher = new StreamGraphUserHashHasher();
 
@@ -741,7 +756,12 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
                     .get(streamNodeId)
                     .write(new TaskConfig(jobVertex.getConfiguration()));
         } else {
-            jobVertex = new JobVertex(chainedNames.get(streamNodeId), jobVertexId, operatorIDPairs);
+            jobVertex =
+                    new JobVertex(
+                            chainedNames.get(streamNodeId),
+                            jobVertexId,
+                            operatorIDPairs,
+                            splitFactor);
         }
 
         if (streamNode.getConsumeClusterDatasetId() != null) {
