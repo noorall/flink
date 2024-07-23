@@ -272,14 +272,17 @@ public class DefaultVertexParallelismAndInputInfosDecider
 
     private static boolean areAllInputsDefined(List<BlockingInputInfo> inputs) {
         return inputs.stream()
-                .noneMatch(input -> input.getConnectType().equals(DataDistributionType.UNDEFINED));
+                .noneMatch(
+                        input ->
+                                input.getDataDistributionType()
+                                        .equals(DataDistributionType.UNDEFINED));
     }
 
     private static boolean hasBalanceConnectType(List<BlockingInputInfo> inputs) {
         return inputs.stream()
                 .anyMatch(
                         input ->
-                                input.getConnectType()
+                                input.getDataDistributionType()
                                         .equals(DataDistributionType.ADAPTIVE_POINT_WISE));
     }
 
@@ -330,14 +333,25 @@ public class DefaultVertexParallelismAndInputInfosDecider
                         : decideParallelism(
                                 jobVertexId, consumedResults, minParallelism, maxParallelism);
 
-        final Map<IntermediateDataSetID, JobVertexInputInfo> jobVertexInputInfos =
-                new LinkedHashMap<>();
+        final Map<DataDistributionType, List<BlockingInputInfo>> inputByDistType =
+                inputs.stream()
+                        .collect(Collectors.groupingBy(BlockingInputInfo::getDataDistributionType));
 
-        final Map<BlockingInputInfo, JobVertexInputInfo> jobVertexInputInfoMap = new TreeMap<>();
+        final Map<Integer, JobVertexInputInfo> jobVertexInputInfoMap = new TreeMap<>();
+
+        for (Map.Entry<DataDistributionType, List<BlockingInputInfo>> entry :
+                inputByDistType.entrySet()) {
+            DataDistributionType dataDistType = entry.getKey();
+            List<BlockingInputInfo> input = entry.getValue();
+        }
 
         for (BlockingInputInfo input : inputs) {
-            jobVertexInputInfoMap.put(input, computeJobVertexInputInfo(input, parallelism));
+            jobVertexInputInfoMap.put(
+                    input.getIndex(), computeJobVertexInputInfo(input, parallelism));
         }
+
+        final Map<IntermediateDataSetID, JobVertexInputInfo> jobVertexInputInfos =
+                new LinkedHashMap<>();
 
         jobVertexInputInfoMap
                 .entrySet()
@@ -353,7 +367,7 @@ public class DefaultVertexParallelismAndInputInfosDecider
     JobVertexInputInfo computeJobVertexInputInfo(BlockingInputInfo input, int parallelism) {
         BlockingResultInfo consumedResultInfo = input.getConsumedResultInfo();
         int sourceParallelism = consumedResultInfo.getNumPartitions();
-        switch (input.getConnectType()) {
+        switch (input.getDataDistributionType()) {
             case POINT_WISE:
                 return VertexInputInfoComputationUtils.computeVertexInputInfoForPointwise(
                         sourceParallelism,
@@ -370,9 +384,41 @@ public class DefaultVertexParallelismAndInputInfosDecider
             case ADAPTIVE_POINT_WISE:
                 return computeVertexInputInfoForAdaptivePointWise(consumedResultInfo, parallelism);
             case ADAPTIVE_ALL_TO_ALL:
+            case ADAPTIVE_CORRELATED_ALL_TO_ALL:
             default:
                 throw new FlinkRuntimeException("UnSupport connect type!");
         }
+    }
+
+    Map<Integer, JobVertexInputInfo> computeVertexInputInfoForPointwise(
+            List<BlockingInputInfo> inputs, int parallelism) {
+        Map<Integer, JobVertexInputInfo> jobVertexInputInfos = new TreeMap<>();
+        for (BlockingInputInfo input : inputs) {
+            jobVertexInputInfos.put(
+                    input.getIndex(),
+                    VertexInputInfoComputationUtils.computeVertexInputInfoForAllToAll(
+                            input.getNumPartitions(),
+                            parallelism,
+                            input::getNumSubpartitions,
+                            true,
+                            input.isBroadcast()));
+        }
+        return jobVertexInputInfos;
+    }
+
+    Map<Integer, JobVertexInputInfo> computeVertexInputInfoForAllToALl(
+            List<BlockingInputInfo> inputs, int parallelism) {
+        Map<Integer, JobVertexInputInfo> jobVertexInputInfos = new TreeMap<>();
+        for (BlockingInputInfo input : inputs) {
+            jobVertexInputInfos.put(
+                    input.getIndex(),
+                    VertexInputInfoComputationUtils.computeVertexInputInfoForPointwise(
+                            input.getNumPartitions(),
+                            parallelism,
+                            input::getNumSubpartitions,
+                            true));
+        }
+        return jobVertexInputInfos;
     }
 
     JobVertexInputInfo computeVertexInputInfoForAdaptivePointWise(

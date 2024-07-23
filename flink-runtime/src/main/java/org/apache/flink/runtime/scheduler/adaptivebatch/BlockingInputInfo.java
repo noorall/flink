@@ -53,16 +53,19 @@ public class BlockingInputInfo implements Comparable<BlockingInputInfo> {
         return typeNumber;
     }
 
-    public DataDistributionType getConnectType() {
+    public DataDistributionType getDataDistributionType() {
         return dataDistributionType;
+    }
+
+    public int getNumPartitions() {
+        return blockingResultInfo.getNumPartitions();
+    }
+
+    public int getNumSubpartitions(int partitionIndex) {
+        return blockingResultInfo.getNumSubpartitions(partitionIndex);
     }
 
     public int getIndex() {
         return index;
-    }
-
-    @Override
-    public int compareTo(BlockingInputInfo o) {
-        return Integer.compare(this.getIndex(), o.getIndex());
     }
 }
