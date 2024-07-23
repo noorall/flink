@@ -53,13 +53,24 @@ public class IntermediateDataSet implements java.io.Serializable {
 
     private boolean isBroadcast;
 
+    private final int splitFactor;
+
     // --------------------------------------------------------------------------------------------
 
     public IntermediateDataSet(
             IntermediateDataSetID id, ResultPartitionType resultType, JobVertex producer) {
+        this(id, resultType, producer, 1);
+    }
+
+    public IntermediateDataSet(
+            IntermediateDataSetID id,
+            ResultPartitionType resultType,
+            JobVertex producer,
+            int splitFactor) {
         this.id = checkNotNull(id);
         this.producer = checkNotNull(producer);
         this.resultType = checkNotNull(resultType);
+        this.splitFactor = splitFactor;
     }
 
     // --------------------------------------------------------------------------------------------
@@ -94,6 +105,10 @@ public class IntermediateDataSet implements java.io.Serializable {
 
     public ResultPartitionType getResultType() {
         return resultType;
+    }
+
+    public int getSplitFactor() {
+        return splitFactor;
     }
 
     // --------------------------------------------------------------------------------------------

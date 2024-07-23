@@ -354,6 +354,10 @@ public class IntermediateResult {
         }
     }
 
+    public int getSplitFactor() {
+        return intermediateDataSet.getSplitFactor();
+    }
+
     @Override
     public String toString() {
         return "IntermediateResult " + id.toString();

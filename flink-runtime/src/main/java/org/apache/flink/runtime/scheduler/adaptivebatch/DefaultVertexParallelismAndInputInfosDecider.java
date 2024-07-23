@@ -93,6 +93,8 @@ public class DefaultVertexParallelismAndInputInfosDecider
     private final double skewedPartitionMergeFactor;
     private final boolean enableRescaleOptimize;
 
+    private final int spiltFactor;
+
     private DefaultVertexParallelismAndInputInfosDecider(
             int globalMaxParallelism,
             int globalMinParallelism,
@@ -101,7 +103,8 @@ public class DefaultVertexParallelismAndInputInfosDecider
             double skewedPartitionFactor,
             long skewedPartitionThreshold,
             double skewedPartitionMergeFactor,
-            boolean enableRescaleOptimize) {
+            boolean enableRescaleOptimize,
+            int splitFactor) {
 
         checkArgument(globalMinParallelism > 0, "The minimum parallelism must be larger than 0.");
         checkArgument(
@@ -129,6 +132,8 @@ public class DefaultVertexParallelismAndInputInfosDecider
         this.skewedPartitionThreshold = skewedPartitionThreshold;
         this.skewedPartitionMergeFactor = skewedPartitionMergeFactor;
         this.enableRescaleOptimize = enableRescaleOptimize;
+
+        this.spiltFactor = splitFactor;
     }
 
     @Override
@@ -445,7 +450,7 @@ public class DefaultVertexParallelismAndInputInfosDecider
             }
             executionVertexInputInfos.add(executionVertexInputInfo);
         }
-        return new JobVertexInputInfo(executionVertexInputInfos);
+        return new JobVertexInputInfo(executionVertexInputInfos, spiltFactor);
     }
 
     public long computeLimitForAdaptivePointWise(
@@ -1499,6 +1504,7 @@ public class DefaultVertexParallelismAndInputInfosDecider
                         .get(BatchExecutionOptions.SKEWED_PARTITION_THRESHOLD_IN_BYTES)
                         .getBytes(),
                 configuration.get(BatchExecutionOptions.SKEWED_PARTITION_MERGE_FACTOR),
-                configuration.get(BatchExecutionOptions.RESCALE_OPTIMIZE_ENABLE));
+                configuration.get(BatchExecutionOptions.RESCALE_OPTIMIZE_ENABLE),
+                configuration.get(BatchExecutionOptions.ADAPTIVE_SPLIT_FACTOR));
     }
 }

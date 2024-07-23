@@ -155,6 +155,10 @@ public class DefaultAdaptiveExecutionHandler implements AdaptiveExecutionHandler
         return configuration.get(BatchExecutionOptions.SKEWED_JOIN_FORCE_OPTIMIZE);
     }
 
+    private int getSplitFactor() {
+        return configuration.get(BatchExecutionOptions.ADAPTIVE_SPLIT_FACTOR);
+    }
+
     private void tryAdjustSkewJoin(ExecutionJobVertexFinishedEvent event) {
         JobVertexID jobVertexId = event.getVertexId();
 
