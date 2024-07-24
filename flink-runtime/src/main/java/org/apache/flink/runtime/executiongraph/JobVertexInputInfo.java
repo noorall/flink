@@ -31,25 +31,13 @@ public class JobVertexInputInfo implements Serializable {
 
     private final List<ExecutionVertexInputInfo> executionVertexInputInfos;
 
-    private final int splitFactor;
-
     public JobVertexInputInfo(final List<ExecutionVertexInputInfo> executionVertexInputInfos) {
-        this(executionVertexInputInfos, 1);
-    }
-
-    public JobVertexInputInfo(
-            final List<ExecutionVertexInputInfo> executionVertexInputInfos, int splitFactor) {
-        this.splitFactor = splitFactor;
         this.executionVertexInputInfos = checkNotNull(executionVertexInputInfos);
     }
 
     /** The input information of subtasks of this job vertex. */
     public List<ExecutionVertexInputInfo> getExecutionVertexInputInfos() {
         return executionVertexInputInfos;
-    }
-
-    public int getSplitFactor() {
-        return splitFactor;
     }
 
     @Override

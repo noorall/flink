@@ -25,6 +25,7 @@ public class BlockingInputInfo implements Comparable<BlockingInputInfo> {
     private final DataDistributionType dataDistributionType;
     private final int typeNumber;
     private final int index;
+    private final boolean isSplittable;
 
     public BlockingInputInfo(
             BlockingResultInfo blockingResultInfo,
@@ -67,5 +68,14 @@ public class BlockingInputInfo implements Comparable<BlockingInputInfo> {
 
     public int getIndex() {
         return index;
+    }
+
+    public boolean isSplittable() {
+        return isSplittable;
+    }
+
+    @Override
+    public int compareTo(BlockingInputInfo o) {
+        return Integer.compare(o.getIndex(), this.getIndex());
     }
 }
