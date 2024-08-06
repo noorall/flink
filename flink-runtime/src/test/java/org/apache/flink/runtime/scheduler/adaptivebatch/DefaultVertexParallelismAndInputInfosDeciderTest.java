@@ -581,6 +581,65 @@ class DefaultVertexParallelismAndInputInfosDeciderTest {
         assertThat(parallelismAndInputInfos.getParallelism()).isEqualTo(7);
     }
 
+    @Test
+    void testBalancedAllToAllWithUnion() {
+        Configuration configuration = new Configuration();
+        configuration.set(
+                BatchExecutionOptions.SKEWED_PARTITION_THRESHOLD_IN_BYTES, new MemorySize(1200));
+        configuration.set(BatchExecutionOptions.SKEWED_PARTITION_FACTOR, 2.0);
+        MemorySize memorySize = new MemorySize(1200);
+        configuration.set(
+                BatchExecutionOptions.ADAPTIVE_AUTO_PARALLELISM_AVG_DATA_VOLUME_PER_TASK,
+                memorySize);
+        DefaultVertexParallelismAndInputInfosDeciderV2 vertexParallelismAndInputInfosDecider =
+                DefaultVertexParallelismAndInputInfosDeciderV2.from(MAX_PARALLELISM, configuration);
+
+        AllToAllBlockingResultInfo leftResultInfo =
+                new AllToAllBlockingResultInfo(
+                        new IntermediateDataSetID(), 5, 4, false, false, new HashMap<>());
+        AllToAllBlockingResultInfo leftResultInfo2 =
+                new AllToAllBlockingResultInfo(
+                        new IntermediateDataSetID(), 2, 4, false, false, new HashMap<>());
+        AllToAllBlockingResultInfo rightResultInfo =
+                new AllToAllBlockingResultInfo(
+                        new IntermediateDataSetID(), 5, 4, false, false, new HashMap<>());
+        leftResultInfo2.recordPartitionInfo(
+                0, new ResultPartitionBytes(new long[] {200, 2000, 200, 200}));
+        leftResultInfo2.recordPartitionInfo(
+                1, new ResultPartitionBytes(new long[] {200, 2000, 200, 200}));
+
+        leftResultInfo.recordPartitionInfo(
+                0, new ResultPartitionBytes(new long[] {200, 2000, 200, 200}));
+        leftResultInfo.recordPartitionInfo(
+                1, new ResultPartitionBytes(new long[] {200, 2000, 200, 200}));
+        leftResultInfo.recordPartitionInfo(
+                2, new ResultPartitionBytes(new long[] {200, 2000, 200, 200}));
+        leftResultInfo.recordPartitionInfo(
+                3, new ResultPartitionBytes(new long[] {200, 2000, 200, 2000}));
+        leftResultInfo.recordPartitionInfo(
+                4, new ResultPartitionBytes(new long[] {200, 2000, 200, 2000}));
+
+        rightResultInfo.recordPartitionInfo(
+                0, new ResultPartitionBytes(new long[] {200, 200, 2000, 2000}));
+        rightResultInfo.recordPartitionInfo(
+                1, new ResultPartitionBytes(new long[] {200, 200, 2000, 2000}));
+        rightResultInfo.recordPartitionInfo(
+                2, new ResultPartitionBytes(new long[] {200, 200, 2000, 200}));
+        rightResultInfo.recordPartitionInfo(
+                3, new ResultPartitionBytes(new long[] {200, 200, 2000, 200}));
+        rightResultInfo.recordPartitionInfo(
+                4, new ResultPartitionBytes(new long[] {200, 200, 2000, 200}));
+
+        List<BlockingInputInfo> blockingResultInfos = new ArrayList<>();
+        blockingResultInfos.add(new BlockingInputInfo(leftResultInfo, 0, true, false, true));
+        blockingResultInfos.add(new BlockingInputInfo(leftResultInfo2, 0, true, false, true));
+        blockingResultInfos.add(new BlockingInputInfo(rightResultInfo, 1, true, false, true));
+        ParallelismAndInputInfos parallelismAndInputInfos =
+                vertexParallelismAndInputInfosDecider.decideParallelismAndInputInfosForVertex(
+                        new JobVertexID(), blockingResultInfos, -1, 5, 10);
+        assertThat(parallelismAndInputInfos.getParallelism()).isEqualTo(8);
+    }
+
     private static void checkAllToAllJobVertexInputInfo(
             JobVertexInputInfo jobVertexInputInfo, List<IndexRange> subpartitionRanges) {
         checkAllToAllJobVertexInputInfo(

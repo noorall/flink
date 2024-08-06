@@ -176,6 +176,9 @@ public class DefaultAdaptiveExecutionHandler implements AdaptiveExecutionHandler
         if (jobGraphManager.findVertexByStreamNodeId(node.getId()).isPresent()) {
             return;
         }
+        if (edge.getPartitioner().isBroadcast() || edge.getPartitioner().isPointwise()) {
+            return;
+        }
         if (node.getOperatorFactory() instanceof SkewedJoin) {
             log.info("Try optimize skewed join {}.", node);
             SkewedJoin skewedJoin = (SkewedJoin) node.getOperatorFactory();

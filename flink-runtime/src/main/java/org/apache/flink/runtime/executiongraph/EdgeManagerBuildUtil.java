@@ -29,16 +29,15 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static org.apache.flink.util.Preconditions.checkArgument;
 import static org.apache.flink.util.Preconditions.checkState;
 
 /** Utilities for building {@link EdgeManager}. */
@@ -61,10 +60,8 @@ public class EdgeManagerBuildUtil {
 
         switch (distributionPattern) {
             case POINTWISE:
-                connectHybrid(vertex, intermediateResult, jobVertexInputInfo);
-                break;
             case ALL_TO_ALL:
-                connectAllToAll(vertex, intermediateResult, jobVertexInputInfo);
+                connectHybrid(vertex, intermediateResult, jobVertexInputInfo);
                 break;
             default:
                 throw new IllegalArgumentException("Unrecognized distribution pattern.");
@@ -93,78 +90,6 @@ public class EdgeManagerBuildUtil {
         }
     }
 
-    private static void connectAllToAll(
-            ExecutionJobVertex jobVertex,
-            IntermediateResult result,
-            JobVertexInputInfo jobVertexInputInfo) {
-        if (jobVertex.isSkewed()) {
-            LOG.info("Discover the skewed flag and use connectHybrid to handle the connection");
-            connectHybrid(jobVertex, result, jobVertexInputInfo);
-            return;
-        }
-        // check the vertex input info is legal
-        jobVertexInputInfo
-                .getExecutionVertexInputInfos()
-                .forEach(
-                        executionVertexInputInfo -> {
-                            IndexRange partitionRange =
-                                    executionVertexInputInfo.getPartitionIndexRange();
-                            checkArgument(partitionRange.getStartIndex() == 0);
-                            checkArgument(
-                                    partitionRange.getEndIndex()
-                                            == (result.getNumberOfAssignedPartitions() - 1));
-                        });
-
-        connectInternal(
-                Arrays.asList(jobVertex.getTaskVertices()),
-                Arrays.asList(result.getPartitions()),
-                result.getResultType(),
-                jobVertex.getGraph().getEdgeManager(),
-                Collections.singleton(
-                        new IndexRange(0, result.getNumberOfAssignedPartitions() - 1)));
-    }
-
-    private static void connectPointwise(
-            ExecutionJobVertex jobVertex,
-            IntermediateResult result,
-            JobVertexInputInfo jobVertexInputInfo) {
-
-        Map<IndexRange, List<Integer>> consumersByPartition = new LinkedHashMap<>();
-
-        for (ExecutionVertexInputInfo executionVertexInputInfo :
-                jobVertexInputInfo.getExecutionVertexInputInfos()) {
-            int consumerIndex = executionVertexInputInfo.getSubtaskIndex();
-            IndexRange range = executionVertexInputInfo.getPartitionIndexRange();
-            consumersByPartition.compute(
-                    range,
-                    (ignore, consumers) -> {
-                        if (consumers == null) {
-                            consumers = new ArrayList<>();
-                        }
-                        consumers.add(consumerIndex);
-                        return consumers;
-                    });
-        }
-
-        consumersByPartition.forEach(
-                (range, subtasks) -> {
-                    List<ExecutionVertex> taskVertices = new ArrayList<>();
-                    List<IntermediateResultPartition> partitions = new ArrayList<>();
-                    for (int index : subtasks) {
-                        taskVertices.add(jobVertex.getTaskVertices()[index]);
-                    }
-                    for (int i = range.getStartIndex(); i <= range.getEndIndex(); ++i) {
-                        partitions.add(result.getPartitions()[i]);
-                    }
-                    connectInternal(
-                            taskVertices,
-                            partitions,
-                            result.getResultType(),
-                            jobVertex.getGraph().getEdgeManager(),
-                            Collections.singleton(range));
-                });
-    }
-
     private static void connectHybrid(
             ExecutionJobVertex jobVertex,
             IntermediateResult result,
@@ -175,9 +100,18 @@ public class EdgeManagerBuildUtil {
                 jobVertexInputInfo.getExecutionVertexInputInfos()) {
             int consumerIndex = executionVertexInputInfo.getSubtaskIndex();
             Set<IndexRange> ranges = executionVertexInputInfo.getPartitionIndexRanges();
-            consumersByPartition
-                    .computeIfAbsent(ranges, ignored -> new ArrayList<>())
-                    .add(consumerIndex);
+            Optional<IndexRange> mergedRange = mergeIndexRanges(new ArrayList<>(ranges));
+            if (mergedRange.isPresent()) {
+                consumersByPartition
+                        .computeIfAbsent(
+                                Collections.singleton(mergedRange.get()),
+                                ignored -> new ArrayList<>())
+                        .add(consumerIndex);
+            } else {
+                consumersByPartition
+                        .computeIfAbsent(ranges, ignored -> new ArrayList<>())
+                        .add(consumerIndex);
+            }
         }
 
         consumersByPartition.forEach(
@@ -197,8 +131,7 @@ public class EdgeManagerBuildUtil {
                             taskVertices,
                             new ArrayList<>(partitions),
                             result.getResultType(),
-                            jobVertex.getGraph().getEdgeManager(),
-                            ranges);
+                            jobVertex.getGraph().getEdgeManager());
                 });
     }
 
@@ -207,18 +140,13 @@ public class EdgeManagerBuildUtil {
             List<ExecutionVertex> taskVertices,
             List<IntermediateResultPartition> partitions,
             ResultPartitionType resultPartitionType,
-            EdgeManager edgeManager,
-            Set<IndexRange> partitionIndexRanges) {
+            EdgeManager edgeManager) {
         checkState(!taskVertices.isEmpty());
         checkState(!partitions.isEmpty());
 
         ConsumedPartitionGroup consumedPartitionGroup =
                 createAndRegisterConsumedPartitionGroupToEdgeManager(
-                        taskVertices.size(),
-                        partitions,
-                        resultPartitionType,
-                        edgeManager,
-                        partitionIndexRanges);
+                        taskVertices.size(), partitions, resultPartitionType, edgeManager);
         for (ExecutionVertex ev : taskVertices) {
             ev.addConsumedPartitionGroup(consumedPartitionGroup);
         }
@@ -239,15 +167,14 @@ public class EdgeManagerBuildUtil {
             int numConsumers,
             List<IntermediateResultPartition> partitions,
             ResultPartitionType resultPartitionType,
-            EdgeManager edgeManager,
-            Set<IndexRange> partitionIndexRanges) {
+            EdgeManager edgeManager) {
         List<IntermediateResultPartitionID> partitionIds =
                 partitions.stream()
                         .map(IntermediateResultPartition::getPartitionId)
                         .collect(Collectors.toList());
         ConsumedPartitionGroup consumedPartitionGroup =
                 ConsumedPartitionGroup.fromMultiplePartitions(
-                        numConsumers, partitionIds, resultPartitionType, partitionIndexRanges);
+                        numConsumers, partitionIds, resultPartitionType);
         finishAllDataProducedPartitions(partitions, consumedPartitionGroup);
         edgeManager.registerConsumedPartitionGroup(consumedPartitionGroup);
         return consumedPartitionGroup;
@@ -263,5 +190,20 @@ public class EdgeManagerBuildUtil {
                 consumedPartitionGroup.partitionFinished();
             }
         }
+    }
+
+    public static Optional<IndexRange> mergeIndexRanges(List<IndexRange> indexRanges) {
+        if (indexRanges.isEmpty()) {
+            return Optional.empty();
+        }
+        int start = indexRanges.get(0).startIndex, end = indexRanges.get(0).endIndex;
+        for (int i = 1; i < indexRanges.size(); i++) {
+            if (indexRanges.get(i).startIndex > end) {
+                return Optional.empty();
+            }
+            start = Math.min(start, indexRanges.get(i).startIndex);
+            end = Math.max(end, indexRanges.get(i).endIndex);
+        }
+        return Optional.of(new IndexRange(start, end));
     }
 }

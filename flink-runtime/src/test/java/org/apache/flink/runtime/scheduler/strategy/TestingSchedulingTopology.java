@@ -19,7 +19,6 @@
 package org.apache.flink.runtime.scheduler.strategy;
 
 import org.apache.flink.runtime.execution.ExecutionState;
-import org.apache.flink.runtime.executiongraph.IndexRange;
 import org.apache.flink.runtime.executiongraph.failover.SchedulingPipelinedRegionComputeUtil;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionType;
 import org.apache.flink.runtime.jobgraph.DistributionPattern;
@@ -316,10 +315,7 @@ public class TestingSchedulingTopology implements SchedulingTopology {
             final List<IntermediateResultPartitionID> consumedPartitions,
             final ResultPartitionType resultPartitionType) {
         return ConsumedPartitionGroup.fromMultiplePartitions(
-                numConsumers,
-                consumedPartitions,
-                resultPartitionType,
-                Collections.singleton(new IndexRange(0, consumedPartitions.size() - 1)));
+                numConsumers, consumedPartitions, resultPartitionType);
     }
 
     private static ConsumerVertexGroup createConsumerVertexGroup(

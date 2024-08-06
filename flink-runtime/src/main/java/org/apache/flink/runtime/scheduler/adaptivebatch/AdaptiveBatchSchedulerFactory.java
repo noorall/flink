@@ -150,11 +150,13 @@ public class AdaptiveBatchSchedulerFactory implements SchedulerNGFactory {
 
         VertexParallelismAndInputInfosDecider vertexParallelismAndInputInfosDecider;
         if (jobMasterConfiguration.get(BatchExecutionOptions.USE_BALANCED_DISTRIBUTION_V2)) {
+            LOG.info("Use DefaultVertexParallelismAndInputInfosDeciderV2");
             vertexParallelismAndInputInfosDecider =
                     DefaultVertexParallelismAndInputInfosDeciderV2.from(
                             getDefaultMaxParallelism(jobMasterConfiguration, executionConfig),
                             jobMasterConfiguration);
         } else {
+            LOG.info("Use DefaultVertexParallelismAndInputInfosDeciderV1");
             vertexParallelismAndInputInfosDecider =
                     DefaultVertexParallelismAndInputInfosDecider.from(
                             getDefaultMaxParallelism(jobMasterConfiguration, executionConfig),

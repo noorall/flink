@@ -189,8 +189,10 @@ public class DefaultVertexParallelismAndInputInfosDeciderV2
                         ? vertexInitialParallelism
                         : decideParallelism(
                                 jobVertexId, inputInfos, minParallelism, maxParallelism);
+
         if (inputsGroupByInterCorrelation.size() == 2
-                || inputsGroupByInterCorrelation.containsKey(false)) {
+                || inputsGroupByInterCorrelation.containsKey(false)
+                || vertexInitialParallelism > 0) {
             minParallelism = parallelism;
             maxParallelism = parallelism;
         }
@@ -227,6 +229,7 @@ public class DefaultVertexParallelismAndInputInfosDeciderV2
             }
         }
         int finalParallelism = checkAndGetParallelism(vertexInputInfoMap.values());
+
         Map<IntermediateDataSetID, JobVertexInputInfo> vertexInputInfoMapInOrder =
                 new LinkedHashMap<>();
 
@@ -420,6 +423,7 @@ public class DefaultVertexParallelismAndInputInfosDeciderV2
         checkArgument(isLegalGroups(inputsByTypeNumber));
 
         int subPartitionNum = checkAndGetSubpartitionNum(nonBroadcastInputInfos);
+
         Map<Integer, Integer> maxPartitionNumByTypeNumber =
                 computeMaxNumPartitionMap(inputsByTypeNumber);
 
@@ -594,10 +598,6 @@ public class DefaultVertexParallelismAndInputInfosDeciderV2
             List<BlockingInputInfo> inputInfos = entry.getValue();
             long[] subpartitionBytes = new long[subpartitionNum];
             for (BlockingInputInfo inputInfo : inputInfos) {
-                if (inputInfo.getConsumedResultInfo() instanceof PointwiseBlockingResultInfo) {
-                    int a = 1;
-                }
-
                 List<Long> aggSubpartitionBytes =
                         ((AllToAllBlockingResultInfo) inputInfo.getConsumedResultInfo())
                                 .getAggregatedSubpartitionBytes();
@@ -619,13 +619,25 @@ public class DefaultVertexParallelismAndInputInfosDeciderV2
         return intraCorrelationSet.iterator().next();
     }
 
+    private boolean hasSamePartitionNums(List<BlockingInputInfo> inputInfos) {
+        Set<Integer> intraCorrelationSet =
+                inputInfos.stream()
+                        .map(BlockingInputInfo::getNumPartitions)
+                        .collect(Collectors.toSet());
+        return intraCorrelationSet.size() == 1;
+    }
+
     private Map<Integer, Boolean> computeIsExistIntraCorrelationMap(
             Map<Integer, List<BlockingInputInfo>> inputsByTypeNumber) {
+        // TODO: When supporting splitting unions with inconsistent parallelism, modify the
+        // implementation here
         return inputsByTypeNumber.entrySet().stream()
                 .collect(
                         Collectors.toMap(
                                 Map.Entry::getKey,
-                                entry -> checkAndGetIntraCorrelation(entry.getValue())));
+                                entry ->
+                                        checkAndGetIntraCorrelation(entry.getValue())
+                                                || !hasSamePartitionNums(entry.getValue())));
     }
 
     private Map<Integer, Map<Integer, long[]>> computeSubpartitionBytesByPartitionIndexMap(
@@ -848,6 +860,7 @@ public class DefaultVertexParallelismAndInputInfosDeciderV2
         final Map<IntermediateDataSetID, JobVertexInputInfo> vertexInputInfos = new HashMap<>();
         for (BlockingInputInfo inputInfo : nonBroadcastInputInfos) {
             int typeNumber = inputInfo.getInputTypeNumber();
+            // TODO: modify this part
             List<IndexRange> splitPartitionRanges =
                     splitPartitionRangesByTypeNumber.get(typeNumber).stream()
                             .map(
@@ -876,7 +889,6 @@ public class DefaultVertexParallelismAndInputInfosDeciderV2
                             splitSubPartitionRanges,
                             Collections.emptyList(),
                             mapToSubpartitionIdx);
-
             vertexInputInfos.put(
                     inputInfo.getResultId(), new JobVertexInputInfo(executionVertexInputInfos));
         }
