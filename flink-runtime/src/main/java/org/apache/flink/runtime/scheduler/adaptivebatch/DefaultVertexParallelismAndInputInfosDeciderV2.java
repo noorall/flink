@@ -201,8 +201,8 @@ public class DefaultVertexParallelismAndInputInfosDeciderV2
             vertexInputInfoMap.putAll(
                     computeVertexInputInfoForBalancedAllToAll(
                             jobVertexId,
-                            inputInfos,
-                            vertexInitialParallelism,
+                            inputsGroupByInterCorrelation.get(true),
+                            parallelism,
                             minParallelism,
                             maxParallelism));
         }
@@ -215,7 +215,7 @@ public class DefaultVertexParallelismAndInputInfosDeciderV2
                     vertexInputInfoMap.putAll(
                             computeVertexInputInfoForBalancedAllToAll(
                                     jobVertexId,
-                                    inputInfos,
+                                    Collections.singletonList(input),
                                     parallelism,
                                     minParallelism,
                                     maxParallelism));
@@ -402,6 +402,17 @@ public class DefaultVertexParallelismAndInputInfosDeciderV2
                     int maxParallelism) {
         List<BlockingInputInfo> nonBroadcastInputInfos = getNonBroadcastInputInfos(inputInfos);
         List<BlockingInputInfo> broadcastInputInfos = getBroadcastInputInfos(inputInfos);
+        if (nonBroadcastInputInfos.isEmpty()) {
+            LOG.info(
+                    "All inputs are nonBroadcast for vertex {}, fallback to num based all to all.",
+                    jobVertexId);
+            List<BlockingResultInfo> consumedResults =
+                    inputInfos.stream()
+                            .map(BlockingInputInfo::getConsumedResultInfo)
+                            .collect(Collectors.toList());
+            return VertexInputInfoComputationUtils.computeVertexInputInfos(
+                    parallelism, consumedResults, true);
+        }
         Map<Integer, List<BlockingInputInfo>> inputsByTypeNumber =
                 nonBroadcastInputInfos.stream()
                         .collect(Collectors.groupingBy(BlockingInputInfo::getInputTypeNumber));
@@ -426,8 +437,7 @@ public class DefaultVertexParallelismAndInputInfosDeciderV2
                 computeTargetSizeMap(skewedThresholdByTypeNumber, subpartitionBytesByTypeNumber);
 
         Map<Integer, Map<Integer, long[]>> subpartitionBytesByPartitionIndexMap =
-                computeSubpartitionBytesByPartitionIndexMap(
-                        inputsByTypeNumber, existIntraCorrelationByTypeNumber, subPartitionNum);
+                computeSubpartitionBytesByPartitionIndexMap(inputsByTypeNumber, subPartitionNum);
 
         Map<Integer, List<IndexRange>> splitPartitionRangesByTypeNumber = new HashMap<>();
 
@@ -584,6 +594,10 @@ public class DefaultVertexParallelismAndInputInfosDeciderV2
             List<BlockingInputInfo> inputInfos = entry.getValue();
             long[] subpartitionBytes = new long[subpartitionNum];
             for (BlockingInputInfo inputInfo : inputInfos) {
+                if (inputInfo.getConsumedResultInfo() instanceof PointwiseBlockingResultInfo) {
+                    int a = 1;
+                }
+
                 List<Long> aggSubpartitionBytes =
                         ((AllToAllBlockingResultInfo) inputInfo.getConsumedResultInfo())
                                 .getAggregatedSubpartitionBytes();
@@ -615,15 +629,10 @@ public class DefaultVertexParallelismAndInputInfosDeciderV2
     }
 
     private Map<Integer, Map<Integer, long[]>> computeSubpartitionBytesByPartitionIndexMap(
-            Map<Integer, List<BlockingInputInfo>> inputsByTypeNumber,
-            Map<Integer, Boolean> existIntraCorrelationByTypeNumber,
-            int subpartitionNum) {
+            Map<Integer, List<BlockingInputInfo>> inputsByTypeNumber, int subpartitionNum) {
         Map<Integer, Map<Integer, long[]>> subpartitionBytesMap = new HashMap<>();
         for (Map.Entry<Integer, List<BlockingInputInfo>> entry : inputsByTypeNumber.entrySet()) {
             Integer typeNumber = entry.getKey();
-            if (existIntraCorrelationByTypeNumber.get(typeNumber)) {
-                continue;
-            }
             List<BlockingInputInfo> inputInfos = entry.getValue();
             Map<Integer, long[]> subPartitionBytesByPartition = new HashMap<>();
             for (BlockingInputInfo inputInfo : inputInfos) {

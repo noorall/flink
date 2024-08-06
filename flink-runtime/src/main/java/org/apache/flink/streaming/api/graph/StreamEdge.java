@@ -196,6 +196,8 @@ public class StreamEdge implements Serializable {
 
     public void setPartitioner(StreamPartitioner<?> partitioner) {
         this.outputPartitioner = partitioner;
+        this.existIntraInputCorrelation = !partitioner.isPointwise();
+        this.existInterInputsCorrelation = !partitioner.isPointwise() && !partitioner.isBroadcast();
     }
 
     public void setBufferTimeout(long bufferTimeout) {
