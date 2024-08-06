@@ -65,9 +65,11 @@ public class JobEdge implements java.io.Serializable {
     /** Optional description of the caching inside an operator, to be displayed in the JSON plan. */
     private String operatorLevelCachingDescription;
 
-    private final DataDistributionType dataDistributionType;
-
     private final int typeNumber;
+
+    private final boolean existInterInputsCorrelation;
+
+    private final boolean existIntraInputCorrelation;
 
     /**
      * Constructs a new job edge, that connects an intermediate result to a consumer task.
@@ -82,8 +84,9 @@ public class JobEdge implements java.io.Serializable {
             JobVertex target,
             DistributionPattern distributionPattern,
             boolean isBroadcast,
-            DataDistributionType dataDistributionType,
-            int typeNumber) {
+            int typeNumber,
+            boolean existInterInputsCorrelation,
+            boolean existIntraInputCorrelation) {
         if (source == null || target == null || distributionPattern == null) {
             throw new NullPointerException();
         }
@@ -91,8 +94,9 @@ public class JobEdge implements java.io.Serializable {
         this.distributionPattern = distributionPattern;
         this.source = source;
         this.isBroadcast = isBroadcast;
-        this.dataDistributionType = dataDistributionType;
         this.typeNumber = typeNumber;
+        this.existInterInputsCorrelation = existInterInputsCorrelation;
+        this.existIntraInputCorrelation = existIntraInputCorrelation;
     }
 
     /**
@@ -244,12 +248,16 @@ public class JobEdge implements java.io.Serializable {
         this.operatorLevelCachingDescription = operatorLevelCachingDescription;
     }
 
-    public DataDistributionType getConnectType() {
-        return dataDistributionType;
-    }
-
     public int getTypeNumber() {
         return typeNumber;
+    }
+
+    public boolean existInterInputsCorrelation() {
+        return existInterInputsCorrelation;
+    }
+
+    public boolean existIntraInputCorrelation() {
+        return existIntraInputCorrelation;
     }
 
     // --------------------------------------------------------------------------------------------

@@ -26,7 +26,6 @@ import org.apache.flink.runtime.executiongraph.IndexRange;
 import org.apache.flink.runtime.executiongraph.JobVertexInputInfo;
 import org.apache.flink.runtime.executiongraph.ParallelismAndInputInfos;
 import org.apache.flink.runtime.executiongraph.ResultPartitionBytes;
-import org.apache.flink.runtime.jobgraph.DataDistributionType;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
@@ -302,10 +301,7 @@ class DefaultVertexParallelismAndInputInfosDeciderTest {
                         new JobVertexID(),
                         Collections.singletonList(
                                 new BlockingInputInfo(
-                                        allToAllBlockingResultInfo,
-                                        -1,
-                                        DataDistributionType.UNDEFINED,
-                                        0)),
+                                        allToAllBlockingResultInfo, -1, true, true, false)),
                         3,
                         MIN_PARALLELISM,
                         MAX_PARALLELISM);
@@ -346,10 +342,7 @@ class DefaultVertexParallelismAndInputInfosDeciderTest {
                         new JobVertexID(),
                         Collections.singletonList(
                                 new BlockingInputInfo(
-                                        allToAllBlockingResultInfo,
-                                        -1,
-                                        DataDistributionType.UNDEFINED,
-                                        0)),
+                                        allToAllBlockingResultInfo, -1, true, true, false)),
                         -1,
                         dynamicSourceParallelism,
                         MAX_PARALLELISM);
@@ -434,32 +427,32 @@ class DefaultVertexParallelismAndInputInfosDeciderTest {
 
     @Test
     void testMedianFunction() {
-        List<Long> nums1 = Arrays.asList(5L, 3L, 1L, 4L, 2L);
-        assertThat(DefaultVertexParallelismAndInputInfosDecider.median(nums1)).isEqualTo(3L);
+        long[] nums1 = {5L, 3L, 1L, 4L, 2L};
+        assertThat(DefaultVertexParallelismAndInputInfosDeciderV2.median(nums1)).isEqualTo(3L);
 
-        List<Long> nums2 = Arrays.asList(5L, 3L, 1L, 4L);
-        assertThat(DefaultVertexParallelismAndInputInfosDecider.median(nums2)).isEqualTo(3L);
+        long[] nums2 = {5L, 3L, 1L, 4L};
+        assertThat(DefaultVertexParallelismAndInputInfosDeciderV2.median(nums2)).isEqualTo(3L);
 
-        List<Long> nums3 = Collections.singletonList(7L);
-        assertThat(DefaultVertexParallelismAndInputInfosDecider.median(nums3)).isEqualTo(7L);
+        long[] nums3 = {7L};
+        assertThat(DefaultVertexParallelismAndInputInfosDeciderV2.median(nums3)).isEqualTo(7L);
 
-        List<Long> nums4 = Arrays.asList(-3L, -1L, -2L, -4L);
-        assertThat(DefaultVertexParallelismAndInputInfosDecider.median(nums4)).isEqualTo(1L);
+        long[] nums4 = {-3L, -1L, -2L, -4L};
+        assertThat(DefaultVertexParallelismAndInputInfosDeciderV2.median(nums4)).isEqualTo(1L);
 
-        List<Long> nums5 = Arrays.asList(0L, 2L, 1L);
-        assertThat(DefaultVertexParallelismAndInputInfosDecider.median(nums5)).isEqualTo(1L);
+        long[] nums5 = {0L, 2L, 1L};
+        assertThat(DefaultVertexParallelismAndInputInfosDeciderV2.median(nums5)).isEqualTo(1L);
 
-        List<Long> nums6 = Arrays.asList(-7L, -2L, -5L);
-        assertThat(DefaultVertexParallelismAndInputInfosDecider.median(nums6)).isEqualTo(1L);
+        long[] nums6 = {-7L, -2L, -5L};
+        assertThat(DefaultVertexParallelismAndInputInfosDeciderV2.median(nums6)).isEqualTo(1L);
 
-        List<Long> nums7 = Arrays.asList(0L, 0L, 0L, 0L);
-        assertThat(DefaultVertexParallelismAndInputInfosDecider.median(nums7)).isEqualTo(1L);
+        long[] nums7 = {0L, 0L, 0L, 0L};
+        assertThat(DefaultVertexParallelismAndInputInfosDeciderV2.median(nums7)).isEqualTo(1L);
 
-        List<Long> nums8 = Arrays.asList(1L, 1L, 2L, 2L, 3L, 3L);
-        assertThat(DefaultVertexParallelismAndInputInfosDecider.median(nums8)).isEqualTo(2L);
+        long[] nums8 = {1L, 1L, 2L, 2L, 3L, 3L};
+        assertThat(DefaultVertexParallelismAndInputInfosDeciderV2.median(nums8)).isEqualTo(2L);
 
-        List<Long> nums9 = Arrays.asList(1L, 2L, 3L, 4L);
-        assertThat(DefaultVertexParallelismAndInputInfosDecider.median(nums9)).isEqualTo(2L);
+        long[] nums9 = {1L, 2L, 3L, 4L};
+        assertThat(DefaultVertexParallelismAndInputInfosDeciderV2.median(nums9)).isEqualTo(2L);
     }
 
     @Test
@@ -494,9 +487,11 @@ class DefaultVertexParallelismAndInputInfosDeciderTest {
         mapToSubpartitionIdx.put(7, 4);
         mapToSubpartitionIdx.put(8, 4);
         mapToSubpartitionIdx.put(9, 4);
+        BlockingInputInfo blockingInputInfo =
+                new BlockingInputInfo(blockingResultInfo, 0, true, false, true);
         List<ExecutionVertexInputInfo> executionVertexInputInfos =
-                DefaultVertexParallelismAndInputInfosDecider.createdExecutionVertexInputInfos(
-                        blockingResultInfo,
+                DefaultVertexParallelismAndInputInfosDeciderV2.createdExecutionVertexInputInfos(
+                        blockingInputInfo,
                         combinedPartitionRanges,
                         splitPartitions,
                         mapToSubpartitionIdx);
@@ -526,10 +521,10 @@ class DefaultVertexParallelismAndInputInfosDeciderTest {
         subPartitionBytesByPartitionIndex.put(3, new long[] {200, 256});
         subPartitionBytesByPartitionIndex.put(4, new long[] {200, 300});
         List<IndexRange> range1 =
-                DefaultVertexParallelismAndInputInfosDecider.splitSkewPartition(
+                DefaultVertexParallelismAndInputInfosDeciderV2.splitSkewPartition(
                         subPartitionBytesByPartitionIndex, 1, targetSize);
         List<IndexRange> range2 =
-                DefaultVertexParallelismAndInputInfosDecider.splitSkewPartition(
+                DefaultVertexParallelismAndInputInfosDeciderV2.splitSkewPartition(
                         subPartitionBytesByPartitionIndex, 0, targetSize);
         assertThat(range1.size()).isEqualTo(4);
         assertThat(range2.size()).isEqualTo(5);
@@ -539,15 +534,14 @@ class DefaultVertexParallelismAndInputInfosDeciderTest {
     void testDecideParallelismAndEvenlyDistributeSkewedData() {
         Configuration configuration = new Configuration();
         configuration.set(
-                BatchExecutionOptions.SKEWED_PARTITION_THRESHOLD_IN_BYTES,
-                MemorySize.ofMebiBytes(8));
+                BatchExecutionOptions.SKEWED_PARTITION_THRESHOLD_IN_BYTES, new MemorySize(1200));
         configuration.set(BatchExecutionOptions.SKEWED_PARTITION_FACTOR, 2.0);
         MemorySize memorySize = new MemorySize(1200);
         configuration.set(
                 BatchExecutionOptions.ADAPTIVE_AUTO_PARALLELISM_AVG_DATA_VOLUME_PER_TASK,
                 memorySize);
-        DefaultVertexParallelismAndInputInfosDecider vertexParallelismAndInputInfosDecider =
-                DefaultVertexParallelismAndInputInfosDecider.from(MAX_PARALLELISM, configuration);
+        DefaultVertexParallelismAndInputInfosDeciderV2 vertexParallelismAndInputInfosDecider =
+                DefaultVertexParallelismAndInputInfosDeciderV2.from(MAX_PARALLELISM, configuration);
 
         AllToAllBlockingResultInfo leftResultInfo =
                 new AllToAllBlockingResultInfo(
@@ -556,7 +550,6 @@ class DefaultVertexParallelismAndInputInfosDeciderTest {
                 new AllToAllBlockingResultInfo(
                         new IntermediateDataSetID(), 5, 4, false, false, new HashMap<>());
 
-        leftResultInfo.markAsSkewed();
         leftResultInfo.recordPartitionInfo(
                 0, new ResultPartitionBytes(new long[] {200, 2000, 200, 200}));
         leftResultInfo.recordPartitionInfo(
@@ -568,7 +561,6 @@ class DefaultVertexParallelismAndInputInfosDeciderTest {
         leftResultInfo.recordPartitionInfo(
                 4, new ResultPartitionBytes(new long[] {200, 2000, 200, 2000}));
 
-        rightResultInfo.markAsSkewed();
         rightResultInfo.recordPartitionInfo(
                 0, new ResultPartitionBytes(new long[] {200, 200, 2000, 2000}));
         rightResultInfo.recordPartitionInfo(
@@ -580,13 +572,12 @@ class DefaultVertexParallelismAndInputInfosDeciderTest {
         rightResultInfo.recordPartitionInfo(
                 4, new ResultPartitionBytes(new long[] {200, 200, 2000, 200}));
 
-        List<BlockingResultInfo> blockingResultInfos = new ArrayList<>();
-        blockingResultInfos.add(leftResultInfo);
-        blockingResultInfos.add(rightResultInfo);
+        List<BlockingInputInfo> blockingResultInfos = new ArrayList<>();
+        blockingResultInfos.add(new BlockingInputInfo(leftResultInfo, 0, true, false, true));
+        blockingResultInfos.add(new BlockingInputInfo(rightResultInfo, 1, true, false, true));
         ParallelismAndInputInfos parallelismAndInputInfos =
-                vertexParallelismAndInputInfosDecider
-                        .decideParallelismAndEvenlyDistributeSkewedData(
-                                new JobVertexID(), blockingResultInfos, 5, 5, 10);
+                vertexParallelismAndInputInfosDecider.decideParallelismAndInputInfosForVertex(
+                        new JobVertexID(), blockingResultInfos, -1, 5, 10);
         assertThat(parallelismAndInputInfos.getParallelism()).isEqualTo(7);
     }
 
@@ -674,9 +665,7 @@ class DefaultVertexParallelismAndInputInfosDeciderTest {
                 createDecider(minParallelism, maxParallelism, dataVolumePerTask);
         List<BlockingInputInfo> list = new ArrayList<>();
         for (int i = 0; i < consumedResults.size(); i++) {
-            list.add(
-                    new BlockingInputInfo(
-                            consumedResults.get(i), -1, DataDistributionType.UNDEFINED, i));
+            list.add(new BlockingInputInfo(consumedResults.get(i), -1, true, true, false));
         }
         return decider.decideParallelismAndInputInfosForVertex(
                 new JobVertexID(), list, -1, minParallelism, maxParallelism);
@@ -790,22 +779,6 @@ class DefaultVertexParallelismAndInputInfosDeciderTest {
         @Override
         public Map<Integer, long[]> getSubpartitionBytesByPartitionIndex() {
             return Collections.emptyMap();
-        }
-
-        @Override
-        public void markAsSkewed() {}
-
-        @Override
-        public boolean isSkewed() {
-            return false;
-        }
-
-        @Override
-        public void markAsSplittable() {}
-
-        @Override
-        public boolean isSplittable() {
-            return false;
         }
     }
 

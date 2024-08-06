@@ -148,6 +148,19 @@ public class AdaptiveBatchSchedulerFactory implements SchedulerNGFactory {
                 logicalGraph.getJobName(),
                 logicalGraph.getJobId());
 
+        VertexParallelismAndInputInfosDecider vertexParallelismAndInputInfosDecider;
+        if (jobMasterConfiguration.get(BatchExecutionOptions.USE_BALANCED_DISTRIBUTION_V2)) {
+            vertexParallelismAndInputInfosDecider =
+                    DefaultVertexParallelismAndInputInfosDeciderV2.from(
+                            getDefaultMaxParallelism(jobMasterConfiguration, executionConfig),
+                            jobMasterConfiguration);
+        } else {
+            vertexParallelismAndInputInfosDecider =
+                    DefaultVertexParallelismAndInputInfosDecider.from(
+                            getDefaultMaxParallelism(jobMasterConfiguration, executionConfig),
+                            jobMasterConfiguration);
+        }
+
         return createScheduler(
                 log,
                 logicalGraph,
@@ -172,9 +185,7 @@ public class AdaptiveBatchSchedulerFactory implements SchedulerNGFactory {
                 allocatorFactory,
                 restartBackoffTimeStrategy,
                 new ScheduledExecutorServiceAdapter(futureExecutor),
-                DefaultVertexParallelismAndInputInfosDecider.from(
-                        getDefaultMaxParallelism(jobMasterConfiguration, executionConfig),
-                        jobMasterConfiguration),
+                vertexParallelismAndInputInfosDecider,
                 serializationExecutor);
     }
 

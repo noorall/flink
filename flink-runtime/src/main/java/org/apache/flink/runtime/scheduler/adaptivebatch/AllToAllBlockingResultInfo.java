@@ -178,26 +178,6 @@ public class AllToAllBlockingResultInfo extends AbstractBlockingResultInfo {
         }
     }
 
-    @Override
-    public void markAsSkewed() {
-        this.isSkewed = true;
-    }
-
-    @Override
-    public boolean isSkewed() {
-        return this.isSkewed;
-    }
-
-    @Override
-    public void markAsSplittable() {
-        this.isSplittable = true;
-    }
-
-    @Override
-    public boolean isSplittable() {
-        return this.isSplittable;
-    }
-
     public List<Long> getAggregatedSubpartitionBytes() {
         checkState(aggregatedSubpartitionBytes != null, "Not all partition infos are ready");
         return Collections.unmodifiableList(aggregatedSubpartitionBytes);

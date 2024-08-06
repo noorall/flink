@@ -18,28 +18,46 @@
 
 package org.apache.flink.runtime.scheduler.adaptivebatch;
 
-import org.apache.flink.runtime.jobgraph.DataDistributionType;
+import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 
-public class BlockingInputInfo implements Comparable<BlockingInputInfo> {
+public class BlockingInputInfo {
     private final BlockingResultInfo blockingResultInfo;
-    private final DataDistributionType dataDistributionType;
-    private final int typeNumber;
-    private final int index;
-    private final boolean isSplittable;
+    private final int inputTypeNumber;
+    private final boolean existIntraInputCorrelation;
+    private final boolean existInterInputsCorrelation;
+    private final boolean useBalancedDistributionV2;
 
     public BlockingInputInfo(
             BlockingResultInfo blockingResultInfo,
-            int typeNumber,
-            DataDistributionType dataDistributionType,
-            int index) {
+            int inputTypeNumber,
+            boolean existInterInputsCorrelation,
+            boolean existIntraInputCorrelation,
+            boolean useBalancedDistributionV2) {
         this.blockingResultInfo = blockingResultInfo;
-        this.typeNumber = typeNumber;
-        this.dataDistributionType = dataDistributionType;
-        this.index = index;
+        this.inputTypeNumber = inputTypeNumber;
+        this.existInterInputsCorrelation = existInterInputsCorrelation;
+        this.existIntraInputCorrelation = existIntraInputCorrelation;
+        this.useBalancedDistributionV2 = useBalancedDistributionV2;
     }
 
     public BlockingResultInfo getConsumedResultInfo() {
         return blockingResultInfo;
+    }
+
+    public int getInputTypeNumber() {
+        return inputTypeNumber;
+    }
+
+    public boolean existIntraInputCorrelation() {
+        return existIntraInputCorrelation;
+    }
+
+    public boolean existInterInputsCorrelation() {
+        return existInterInputsCorrelation;
+    }
+
+    public boolean useBalancedDistributionV2() {
+        return useBalancedDistributionV2;
     }
 
     public boolean isPointWise() {
@@ -50,14 +68,6 @@ public class BlockingInputInfo implements Comparable<BlockingInputInfo> {
         return blockingResultInfo.isBroadcast();
     }
 
-    public int getTypeNumber() {
-        return typeNumber;
-    }
-
-    public DataDistributionType getDataDistributionType() {
-        return dataDistributionType;
-    }
-
     public int getNumPartitions() {
         return blockingResultInfo.getNumPartitions();
     }
@@ -66,16 +76,11 @@ public class BlockingInputInfo implements Comparable<BlockingInputInfo> {
         return blockingResultInfo.getNumSubpartitions(partitionIndex);
     }
 
-    public int getIndex() {
-        return index;
+    public long getNumBytesProduced() {
+        return blockingResultInfo.getNumBytesProduced();
     }
 
-    public boolean isSplittable() {
-        return isSplittable;
-    }
-
-    @Override
-    public int compareTo(BlockingInputInfo o) {
-        return Integer.compare(o.getIndex(), this.getIndex());
+    public IntermediateDataSetID getResultId() {
+        return blockingResultInfo.getResultId();
     }
 }

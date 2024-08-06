@@ -33,7 +33,8 @@ public class ExecutionVertexInputInfo implements Serializable {
 
     private final int subtaskIndex;
 
-    private final Map<IndexRange, IndexRange> partitionInfo;
+    // consumedSubpartitionGroups
+    private final Map<IndexRange, IndexRange> consumedPartitionInfos;
 
     public ExecutionVertexInputInfo(
             final int subtaskIndex,
@@ -45,29 +46,29 @@ public class ExecutionVertexInputInfo implements Serializable {
     public ExecutionVertexInputInfo(
             final int subtaskIndex, final Map<IndexRange, IndexRange> partitionInfo) {
         this.subtaskIndex = subtaskIndex;
-        this.partitionInfo = partitionInfo;
+        this.consumedPartitionInfos = partitionInfo;
     }
 
     /** Get the subpartition range this subtask should consume. */
     public IndexRange getSubpartitionIndexRange() {
-        return partitionInfo.entrySet().iterator().next().getValue();
+        return consumedPartitionInfos.entrySet().iterator().next().getValue();
     }
 
     /** Get the partition range this subtask should consume. */
     public IndexRange getPartitionIndexRange() {
-        return partitionInfo.entrySet().iterator().next().getKey();
+        return consumedPartitionInfos.entrySet().iterator().next().getKey();
     }
 
     public Set<IndexRange> getPartitionIndexRanges() {
-        return partitionInfo.keySet();
+        return consumedPartitionInfos.keySet();
     }
 
     public IndexRange getSubpartitionIndexRange(IndexRange partitionIndexRange) {
-        return partitionInfo.get(partitionIndexRange);
+        return consumedPartitionInfos.get(partitionIndexRange);
     }
 
-    public Map<IndexRange, IndexRange> getPartitionInfo() {
-        return partitionInfo;
+    public Map<IndexRange, IndexRange> getConsumedPartitionInfos() {
+        return consumedPartitionInfos;
     }
 
     /** Get the index of this subtask. */
@@ -82,7 +83,7 @@ public class ExecutionVertexInputInfo implements Serializable {
         } else if (obj != null && obj.getClass() == getClass()) {
             ExecutionVertexInputInfo that = (ExecutionVertexInputInfo) obj;
             return that.subtaskIndex == this.subtaskIndex
-                    && that.partitionInfo.equals(this.partitionInfo);
+                    && that.consumedPartitionInfos.equals(this.consumedPartitionInfos);
         } else {
             return false;
         }

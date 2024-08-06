@@ -538,18 +538,16 @@ public class JobVertex implements java.io.Serializable {
             DistributionPattern distPattern,
             ResultPartitionType partitionType,
             boolean isBroadcast) {
-        DataDistributionType dataDistributionType =
-                distPattern == DistributionPattern.POINTWISE
-                        ? DataDistributionType.POINT_WISE
-                        : DataDistributionType.ALL_TO_ALL;
+        boolean existInputCorrelation = distPattern == DistributionPattern.POINTWISE;
         return connectNewDataSetAsInput(
                 input,
                 distPattern,
                 partitionType,
                 new IntermediateDataSetID(),
                 isBroadcast,
-                dataDistributionType,
-                -1);
+                -1,
+                existInputCorrelation,
+                existInputCorrelation);
     }
 
     public JobEdge connectNewDataSetAsInput(
@@ -558,18 +556,16 @@ public class JobVertex implements java.io.Serializable {
             ResultPartitionType partitionType,
             IntermediateDataSetID intermediateDataSetId,
             boolean isBroadcast) {
-        DataDistributionType dataDistributionType =
-                distPattern == DistributionPattern.POINTWISE
-                        ? DataDistributionType.POINT_WISE
-                        : DataDistributionType.ALL_TO_ALL;
+        boolean existInputCorrelation = distPattern == DistributionPattern.POINTWISE;
         return connectNewDataSetAsInput(
                 input,
                 distPattern,
                 partitionType,
                 intermediateDataSetId,
                 isBroadcast,
-                dataDistributionType,
-                -1);
+                -1,
+                existInputCorrelation,
+                existInputCorrelation);
     }
 
     public JobEdge connectNewDataSetAsInput(
@@ -578,15 +574,23 @@ public class JobVertex implements java.io.Serializable {
             ResultPartitionType partitionType,
             IntermediateDataSetID intermediateDataSetId,
             boolean isBroadcast,
-            DataDistributionType dataDistributionType,
-            int typeNumber) {
+            int typeNumber,
+            boolean existInterInputsCorrelation,
+            boolean existIntraInputCorrelation) {
 
         IntermediateDataSet dataSet =
                 input.getOrCreateResultDataSet(intermediateDataSetId, partitionType);
 
         JobEdge edge =
                 new JobEdge(
-                        dataSet, this, distPattern, isBroadcast, dataDistributionType, typeNumber);
+                        dataSet,
+                        this,
+                        distPattern,
+                        isBroadcast,
+                        typeNumber,
+                        existInterInputsCorrelation,
+                        existIntraInputCorrelation);
+
         this.inputs.add(edge);
         dataSet.addConsumer(edge);
         return edge;

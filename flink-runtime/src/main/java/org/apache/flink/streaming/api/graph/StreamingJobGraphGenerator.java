@@ -32,7 +32,6 @@ import org.apache.flink.core.execution.CheckpointingMode;
 import org.apache.flink.core.memory.ManagedMemoryUseCase;
 import org.apache.flink.runtime.OperatorIDPair;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionType;
-import org.apache.flink.runtime.jobgraph.DataDistributionType;
 import org.apache.flink.runtime.jobgraph.DistributionPattern;
 import org.apache.flink.runtime.jobgraph.InputOutputFormatContainer;
 import org.apache.flink.runtime.jobgraph.InputOutputFormatVertex;
@@ -1518,11 +1517,6 @@ public class StreamingJobGraphGenerator {
 
         JobEdge jobEdge;
         if (partitioner.isPointwise()) {
-            DataDistributionType dataDistributionType = DataDistributionType.POINT_WISE;
-            if (partitioner instanceof RescalePartitioner) {
-                LOG.info("Rescale optimize for vertex {}", downStreamVertex.getName());
-                dataDistributionType = DataDistributionType.ADAPTIVE_POINT_WISE;
-            }
             jobEdge =
                     downStreamVertex.connectNewDataSetAsInput(
                             headVertex,
@@ -1530,8 +1524,9 @@ public class StreamingJobGraphGenerator {
                             resultPartitionType,
                             output.getDataSetId(),
                             partitioner.isBroadcast(),
-                            dataDistributionType,
-                            edge.getTypeNumber());
+                            edge.getTypeNumber(),
+                            edge.existInterInputsCorrelation(),
+                            edge.existIntraInputCorrelation());
         } else {
             jobEdge =
                     downStreamVertex.connectNewDataSetAsInput(
@@ -1540,8 +1535,9 @@ public class StreamingJobGraphGenerator {
                             resultPartitionType,
                             output.getDataSetId(),
                             partitioner.isBroadcast(),
-                            DataDistributionType.ALL_TO_ALL,
-                            edge.getTypeNumber());
+                            edge.getTypeNumber(),
+                            edge.existInterInputsCorrelation(),
+                            edge.existIntraInputCorrelation());
         }
 
         // set strategy name so that web interface can show it.

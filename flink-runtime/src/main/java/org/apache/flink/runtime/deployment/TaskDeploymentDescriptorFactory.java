@@ -161,7 +161,7 @@ public class TaskDeploymentDescriptorFactory {
                     constructSubPartitionRangeByChannel(
                             executionVertex
                                     .getExecutionVertexInputInfo(resultId)
-                                    .getPartitionInfo(),
+                                    .getConsumedPartitionInfos(),
                             consumedPartitionGroup.size());
 
             inputGates.add(

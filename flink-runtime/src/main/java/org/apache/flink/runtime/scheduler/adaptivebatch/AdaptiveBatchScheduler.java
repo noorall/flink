@@ -776,8 +776,9 @@ public class AdaptiveBatchScheduler extends DefaultScheduler implements JobGraph
                     new BlockingInputInfo(
                             consumedResultsInfoList.get(i),
                             jobEdge.getTypeNumber(),
-                            jobEdge.getConnectType(),
-                            i));
+                            jobEdge.existInterInputsCorrelation(),
+                            jobEdge.existIntraInputCorrelation(),
+                            true));
         }
 
         return Optional.of(inputsInfo);

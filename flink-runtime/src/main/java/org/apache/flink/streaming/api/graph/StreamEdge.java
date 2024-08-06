@@ -78,6 +78,10 @@ public class StreamEdge implements Serializable {
 
     private final IntermediateDataSetID intermediateDatasetIdToProduce;
 
+    private boolean existInterInputsCorrelation;
+
+    private boolean existIntraInputCorrelation;
+
     public StreamEdge(
             StreamNode sourceVertex,
             StreamNode targetVertex,
@@ -152,6 +156,10 @@ public class StreamEdge implements Serializable {
                         + "_"
                         + uniqueId;
         this.targetNode = targetVertex;
+
+        this.existIntraInputCorrelation = !outputPartitioner.isPointwise();
+        this.existInterInputsCorrelation =
+                !outputPartitioner.isPointwise() && !outputPartitioner.isBroadcast();
     }
 
     public StreamNode getTargetNode() {
@@ -248,5 +256,21 @@ public class StreamEdge implements Serializable {
 
     public IntermediateDataSetID getIntermediateDatasetIdToProduce() {
         return intermediateDatasetIdToProduce;
+    }
+
+    public boolean existInterInputsCorrelation() {
+        return existInterInputsCorrelation;
+    }
+
+    public boolean existIntraInputCorrelation() {
+        return existIntraInputCorrelation;
+    }
+
+    public void setExistInterInputsCorrelation(boolean existInterInputsCorrelation) {
+        this.existInterInputsCorrelation = existInterInputsCorrelation;
+    }
+
+    public void setExistIntraInputCorrelation(boolean existIntraInputCorrelation) {
+        this.existIntraInputCorrelation = existIntraInputCorrelation;
     }
 }

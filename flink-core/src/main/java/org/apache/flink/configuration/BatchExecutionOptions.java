@@ -57,6 +57,13 @@ public class BatchExecutionOptions {
                     .withDescription("If true, Flink will optimize rescale.");
 
     @Documentation.Section({Documentation.Sections.EXPERT_SCHEDULING})
+    public static final ConfigOption<Boolean> USE_BALANCED_DISTRIBUTION_V2 =
+            key("execution.batch.adaptive.balanced-distribution-v2.enable")
+                    .booleanType()
+                    .defaultValue(true)
+                    .withDescription("If true, Flink will use balanced distribution v2.");
+
+    @Documentation.Section({Documentation.Sections.EXPERT_SCHEDULING})
     public static final ConfigOption<Integer> ADAPTIVE_SPLIT_FACTOR =
             key("execution.batch.adaptive.adaptive.split-factor")
                     .intType()
@@ -102,16 +109,6 @@ public class BatchExecutionOptions {
                             "A partition is considered as skewed if its size is larger than "
                                     + "this factor multiplying the median partition size "
                                     + "and also larger than skewed-partition-threshold-in-bytes.");
-
-    @Documentation.Section({Documentation.Sections.EXPERT_SCHEDULING})
-    public static final ConfigOption<Double> SKEWED_PARTITION_MERGE_FACTOR =
-            key("execution.batch.adaptive.skewed-join.skewed-partition-merge-factor")
-                    .doubleType()
-                    .defaultValue(1.5)
-                    .withDescription(
-                            "We prefer that the split data skewed partitions be merged together. "
-                                    + "The larger the threshold, the greater the probability "
-                                    + "that the skewed partitions will be merged.");
 
     @Documentation.Section({Documentation.Sections.EXPERT_SCHEDULING})
     public static final ConfigOption<MemorySize> SKEWED_PARTITION_THRESHOLD_IN_BYTES =
