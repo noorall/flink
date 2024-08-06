@@ -19,6 +19,7 @@
 package org.apache.flink.streaming.api.graph;
 
 import org.apache.flink.runtime.jobgraph.forwardgroup.StreamNodeForwardGroup;
+import org.apache.flink.streaming.runtime.partitioner.ForwardForConsecutiveHashPartitioner;
 import org.apache.flink.streaming.runtime.partitioner.ForwardPartitioner;
 import org.apache.flink.streaming.runtime.partitioner.RescalePartitioner;
 import org.apache.flink.streaming.runtime.partitioner.StreamPartitioner;
@@ -28,6 +29,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 public class StreamGraphManagerContext {
     private static final Logger LOG = LoggerFactory.getLogger(StreamGraphManagerContext.class);
@@ -60,10 +62,14 @@ public class StreamGraphManagerContext {
             Integer targetNodeId = requestInfo.getTargetId();
             StreamEdge targetEdge =
                     getStreamEdge(sourceNodeId, targetNodeId, requestInfo.getEdgeId());
-            StreamPartitioner<?> newPartitioner = requestInfo.getOutputPartitioner();
-            if (newPartitioner != null) {
-                modifyOutputPartitioner(targetEdge, newPartitioner);
-            }
+            Optional<StreamPartitioner<?>> newPartitioner = requestInfo.getOutputPartitioner();
+            newPartitioner.ifPresent(
+                    streamPartitioner -> modifyOutputPartitioner(targetEdge, streamPartitioner));
+            Optional<Boolean> existIntraInputCorrelation =
+                    requestInfo.getExistIntraInputCorrelation();
+            existIntraInputCorrelation.ifPresent(
+                    intraInputCorrelation ->
+                            modifyIntraInputCorrelation(targetEdge, intraInputCorrelation));
         }
 
         return true;
@@ -92,18 +98,27 @@ public class StreamGraphManagerContext {
                     requestInfo.getEdgeId());
             return false;
         }
-        StreamPartitioner<?> newPartitioner = requestInfo.getOutputPartitioner();
-        if (newPartitioner != null) {
+        Optional<StreamPartitioner<?>> newPartitioner = requestInfo.getOutputPartitioner();
+        if (newPartitioner.isPresent()) {
             if (targetEdge.getPartitioner().getClass().equals(ForwardPartitioner.class)) {
                 return false;
             }
             if (streamGraph.isDynamic()
-                    && newPartitioner instanceof ForwardPartitioner
+                    && newPartitioner.get() instanceof ForwardPartitioner
                     && !canMergeForwardGroups(sourceNodeId, targetNodeId)) {
                 requestInfo.outputPartitioner(new RescalePartitioner<>());
                 LOG.info(
                         "The ForwardPartitioner of StreamEdge with Id {} has been rolled back to RescalePartitioner.",
                         requestInfo.getEdgeId());
+            }
+        }
+        Optional<Boolean> existIntraInputCorrelation = requestInfo.getExistIntraInputCorrelation();
+        if (existIntraInputCorrelation.isPresent()) {
+            StreamNode targetNode = targetEdge.getTargetNode();
+            for (StreamEdge edge : targetNode.getOutEdges()) {
+                if (edge.getPartitioner() instanceof ForwardForConsecutiveHashPartitioner) {
+                    return false;
+                }
             }
         }
         return true;
@@ -138,6 +153,14 @@ public class StreamGraphManagerContext {
         if (output != null) {
             output.setPartitioner(targetEdge.getPartitioner());
         }
+    }
+
+    private void modifyIntraInputCorrelation(
+            StreamEdge targetEdge, boolean existIntraInputCorrelation) {
+        if (targetEdge == null) {
+            return;
+        }
+        targetEdge.setExistIntraInputCorrelation(existIntraInputCorrelation);
     }
 
     private boolean canMergeForwardGroups(Integer sourceNodeId, Integer targetNodeId) {

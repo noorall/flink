@@ -46,6 +46,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -222,18 +223,17 @@ public class DefaultAdaptiveExecutionHandler implements AdaptiveExecutionHandler
                             info.getResultId());
                     continue;
                 }
-                info.markAsSplittable();
-                log.info("ResultInfo with id {} is marked as splittable.", info.getResultId());
-                if (!DefaultVertexParallelismAndInputInfosDecider.hasSkewPartitions(
+                if (!DefaultVertexParallelismAndInputInfosDeciderV2.hasSkewPartitions(
                         info, getSkewedPartitionThreshold(), getSkewedPartitionFactor())) {
                     log.info("No skewed partition found, skipped.");
                     continue;
                 }
                 if (jobGraphManager.updateStreamGraph(
-                        context -> tryTransferToHashPartitioner(node, context))) {
-                    log.info("ResultInfo with id {} is marked as skewed.", info.getResultId());
+                                context -> tryTransferToHashPartitioner(node, context))
+                        && jobGraphManager.updateStreamGraph(
+                                context -> tryModifyIntraInputCorrection(edge, context, false))) {
+                    log.info("ResultInfo with id {} is skewed.", info.getResultId());
                     skewedJoin.markAsSkewed();
-                    info.markAsSkewed();
                 } else {
                     log.info(
                             "ResultInfo with id {} is skewed, but an error occurred while trying to modify the edge.",
@@ -271,6 +271,17 @@ public class DefaultAdaptiveExecutionHandler implements AdaptiveExecutionHandler
         }
 
         return context.modifyStreamEdge(updateRequestInfos);
+    }
+
+    private boolean tryModifyIntraInputCorrection(
+            StreamEdge edge,
+            StreamGraphManagerContext context,
+            boolean existIntraInputCorrelation) {
+        StreamEdgeUpdateRequestInfo streamEdgeUpdateRequestInfo =
+                new StreamEdgeUpdateRequestInfo(
+                                edge.getId(), edge.getSourceId(), edge.getTargetId())
+                        .existIntraInputCorrelation(existIntraInputCorrelation);
+        return context.modifyStreamEdge(Collections.singletonList(streamEdgeUpdateRequestInfo));
     }
 
     private void tryAdjustJoinType(ExecutionJobVertexFinishedEvent event) {

@@ -20,21 +20,32 @@ package org.apache.flink.streaming.api.graph;
 
 import org.apache.flink.streaming.runtime.partitioner.StreamPartitioner;
 
+import java.util.Optional;
+
 public class StreamEdgeUpdateRequestInfo implements StreamGraphUpdateRequestInfo {
     private final String edgeId;
     private final Integer sourceId;
     private final Integer targetId;
 
     private StreamPartitioner<?> outputPartitioner;
+    private Boolean existIntraInputCorrelation;
 
     public StreamEdgeUpdateRequestInfo(String edgeId, Integer sourceId, Integer targetId) {
         this.edgeId = edgeId;
         this.sourceId = sourceId;
         this.targetId = targetId;
+        this.outputPartitioner = null;
+        this.existIntraInputCorrelation = null;
     }
 
     public StreamEdgeUpdateRequestInfo outputPartitioner(StreamPartitioner<?> outputPartitioner) {
         this.outputPartitioner = outputPartitioner;
+        return this;
+    }
+
+    public StreamEdgeUpdateRequestInfo existIntraInputCorrelation(
+            boolean existIntraInputCorrelation) {
+        this.existIntraInputCorrelation = existIntraInputCorrelation;
         return this;
     }
 
@@ -50,7 +61,11 @@ public class StreamEdgeUpdateRequestInfo implements StreamGraphUpdateRequestInfo
         return targetId;
     }
 
-    public StreamPartitioner<?> getOutputPartitioner() {
-        return outputPartitioner;
+    public Optional<StreamPartitioner<?>> getOutputPartitioner() {
+        return Optional.ofNullable(outputPartitioner);
+    }
+
+    public Optional<Boolean> getExistIntraInputCorrelation() {
+        return Optional.ofNullable(existIntraInputCorrelation);
     }
 }
