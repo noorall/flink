@@ -96,7 +96,7 @@ public class IntermediateDataSet implements java.io.Serializable {
         return resultType;
     }
 
-    public int getSplitFactor() {
+    public double getSplitFactor() {
         return producer.getSplitFactor();
     }
 

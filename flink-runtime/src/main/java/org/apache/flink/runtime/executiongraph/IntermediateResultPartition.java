@@ -176,15 +176,17 @@ public class IntermediateResultPartition {
         }
 
         // compute number of subpartitions according to the distribution pattern
+        double splitFactor = getIntermediateResult().getSplitFactor();
         if (distributionPattern == DistributionPattern.ALL_TO_ALL) {
-            return maxConsumerJobVertexParallelism;
+            return (int) (maxConsumerJobVertexParallelism * splitFactor);
         } else {
             int numberOfPartitions = getIntermediateResult().getNumParallelProducers();
-            int splitFactor = getIntermediateResult().getSplitFactor();
-
             int originSubpartitionPerTask =
-                    (int) Math.ceil(((double) maxConsumerJobVertexParallelism) / numberOfPartitions)
-                            * splitFactor;
+                    (int)
+                            (Math.ceil(
+                                            ((double) maxConsumerJobVertexParallelism)
+                                                    / numberOfPartitions)
+                                    * splitFactor);
 
             int subpartitionPerTaskByGCD =
                     maxConsumerJobVertexParallelism

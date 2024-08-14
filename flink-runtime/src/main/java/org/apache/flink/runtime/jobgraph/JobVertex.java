@@ -162,7 +162,7 @@ public class JobVertex implements java.io.Serializable {
 
     private boolean isSkewed = false;
 
-    private int splitFactor = 1;
+    private double splitFactor = 1.0;
 
     // --------------------------------------------------------------------------------------------
 
@@ -206,7 +206,7 @@ public class JobVertex implements java.io.Serializable {
             String name,
             JobVertexID primaryId,
             List<OperatorIDPair> operatorIDPairs,
-            int splitFactor) {
+            double splitFactor) {
         this.name = name == null ? DEFAULT_NAME : name;
         this.id = primaryId == null ? new JobVertexID() : primaryId;
         this.operatorIDs = Collections.unmodifiableList(operatorIDPairs);
@@ -627,7 +627,7 @@ public class JobVertex implements java.io.Serializable {
         return anyOutputBlocking;
     }
 
-    public int getSplitFactor() {
+    public double getSplitFactor() {
         return splitFactor;
     }
 

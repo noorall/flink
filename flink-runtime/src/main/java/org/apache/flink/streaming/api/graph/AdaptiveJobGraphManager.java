@@ -40,6 +40,7 @@ import org.apache.flink.runtime.operators.util.TaskConfig;
 import org.apache.flink.streaming.api.operators.ChainingStrategy;
 import org.apache.flink.streaming.api.operators.SkewedJoin;
 import org.apache.flink.streaming.api.operators.SourceOperatorFactory;
+import org.apache.flink.streaming.api.operators.StreamOperatorFactory;
 import org.apache.flink.streaming.runtime.partitioner.ForwardForConsecutiveHashPartitioner;
 import org.apache.flink.streaming.runtime.partitioner.ForwardForUnspecifiedPartitioner;
 import org.apache.flink.streaming.runtime.partitioner.ForwardPartitioner;
@@ -167,7 +168,7 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
 
     private final Set<JobVertexID> finishedJobVertices;
 
-    private final int splitFactor;
+    private final double splitFactor;
 
     @VisibleForTesting
     public AdaptiveJobGraphManager(
@@ -184,7 +185,7 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
             StreamGraph streamGraph,
             Executor serializationExecutor,
             GenerateMode generateMode,
-            int splitFactor) {
+            double splitFactor) {
         preValidate(streamGraph, userClassloader);
         this.streamGraph = streamGraph;
 
@@ -747,6 +748,15 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
             }
         }
 
+        double factor = 1.0;
+        for (StreamEdge outEdge : chainInfo.getTransitiveOutEdges()) {
+            StreamOperatorFactory<?> factory = outEdge.getTargetNode().getOperatorFactory();
+            if (factory instanceof SkewedJoin
+                    && !((SkewedJoin) factory).getSplittableJoinSide().isEmpty()) {
+                factor = splitFactor;
+                break;
+            }
+        }
         if (chainedInputOutputFormats.containsKey(streamNodeId)) {
             jobVertex =
                     new InputOutputFormatVertex(
@@ -758,11 +768,10 @@ public class AdaptiveJobGraphManager implements AdaptiveJobGraphGenerator, JobVe
         } else {
             jobVertex =
                     new JobVertex(
-                            chainedNames.get(streamNodeId),
-                            jobVertexId,
-                            operatorIDPairs,
-                            splitFactor);
+                            chainedNames.get(streamNodeId), jobVertexId, operatorIDPairs, factor);
         }
+
+        LOG.info("The split factor for vertex {} is {}", jobVertex, factor);
 
         if (streamNode.getConsumeClusterDatasetId() != null) {
             jobVertex.addIntermediateDataSetIdToConsume(streamNode.getConsumeClusterDatasetId());

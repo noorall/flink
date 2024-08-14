@@ -78,10 +78,6 @@ public class AllToAllBlockingResultInfo extends AbstractBlockingResultInfo {
         return isBroadcast;
     }
 
-    public void setBroadcast(boolean broadcast) {
-        isBroadcast = broadcast;
-    }
-
     @Override
     public boolean isPointwise() {
         return false;

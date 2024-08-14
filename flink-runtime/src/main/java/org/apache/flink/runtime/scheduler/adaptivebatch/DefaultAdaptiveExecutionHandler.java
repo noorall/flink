@@ -157,7 +157,7 @@ public class DefaultAdaptiveExecutionHandler implements AdaptiveExecutionHandler
         return configuration.get(BatchExecutionOptions.SKEWED_JOIN_FORCE_OPTIMIZE);
     }
 
-    private int getSplitFactor() {
+    private double getSplitFactor() {
         return configuration.get(BatchExecutionOptions.ADAPTIVE_SPLIT_FACTOR);
     }
 

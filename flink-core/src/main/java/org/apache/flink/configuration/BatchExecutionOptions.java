@@ -64,10 +64,10 @@ public class BatchExecutionOptions {
                     .withDescription("If true, Flink will use balanced distribution v2.");
 
     @Documentation.Section({Documentation.Sections.EXPERT_SCHEDULING})
-    public static final ConfigOption<Integer> ADAPTIVE_SPLIT_FACTOR =
+    public static final ConfigOption<Double> ADAPTIVE_SPLIT_FACTOR =
             key("execution.batch.adaptive.adaptive.split-factor")
-                    .intType()
-                    .defaultValue(1)
+                    .doubleType()
+                    .defaultValue(1.0)
                     .withDescription("Split factor.");
 
     @Documentation.Section({Documentation.Sections.EXPERT_SCHEDULING})

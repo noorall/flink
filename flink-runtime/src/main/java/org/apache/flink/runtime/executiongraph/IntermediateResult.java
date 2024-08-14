@@ -354,7 +354,7 @@ public class IntermediateResult {
         }
     }
 
-    public int getSplitFactor() {
+    public double getSplitFactor() {
         return intermediateDataSet.getSplitFactor();
     }
 
