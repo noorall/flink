@@ -99,6 +99,10 @@ public class AllToAllBlockingResultInfo extends AbstractBlockingResultInfo {
         return aggregatedSubpartitionBytes.stream().reduce(0L, Long::sum);
     }
 
+    public void setBroadcast(boolean broadcast) {
+        isBroadcast = broadcast;
+    }
+
     @Override
     public long getNumBytesProduced(
             IndexRange partitionIndexRange, IndexRange subpartitionIndexRange) {
