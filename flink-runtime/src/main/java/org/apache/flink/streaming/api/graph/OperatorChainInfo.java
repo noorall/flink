@@ -19,6 +19,7 @@
 package org.apache.flink.streaming.api.graph;
 
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.runtime.jobgraph.InputOutputFormatContainer;
 import org.apache.flink.runtime.jobgraph.OperatorID;
 import org.apache.flink.runtime.operators.coordination.OperatorCoordinator;
 
@@ -39,18 +40,24 @@ public class OperatorChainInfo {
     private final StreamGraph streamGraph;
     private final List<StreamNode> chainedNodes;
     private final List<StreamEdge> transitiveOutEdges;
+    private final List<StreamEdge> transitiveInEdges;
+    private final Map<Integer, StreamConfig> chainedConfigs;
+
+    private InputOutputFormatContainer inputOutputFormatContainer = null;
 
     public OperatorChainInfo(
             int startNodeId,
             Map<Integer, ChainedSourceInfo> chainedSources,
             StreamGraph streamGraph) {
         this.startNodeId = startNodeId;
-        this.chainedOperatorHashes = new HashMap<>();
-        this.coordinatorProviders = new ArrayList<>();
         this.chainedSources = chainedSources;
         this.streamGraph = streamGraph;
-        this.chainedNodes = new ArrayList<>();
-        this.transitiveOutEdges = new ArrayList<>();
+        chainedOperatorHashes = new HashMap<>();
+        coordinatorProviders = new ArrayList<>();
+        chainedNodes = new ArrayList<>();
+        transitiveOutEdges = new ArrayList<>();
+        transitiveInEdges = new ArrayList<>();
+        chainedConfigs = new HashMap<>();
     }
 
     public OperatorChainInfo(int startNodeId, StreamGraph streamGraph) {
@@ -131,5 +138,37 @@ public class OperatorChainInfo {
 
     public void addChainedSource(Integer sourceNodeId, ChainedSourceInfo chainedSourceInfo) {
         this.chainedSources.put(sourceNodeId, chainedSourceInfo);
+    }
+
+    public List<StreamEdge> getTransitiveInEdges() {
+        return this.transitiveInEdges;
+    }
+
+    public void addTransitiveInEdge(StreamEdge transitiveInEdge) {
+        transitiveInEdges.add(transitiveInEdge);
+    }
+
+    public boolean hasFormatContainer() {
+        return inputOutputFormatContainer != null;
+    }
+
+    public InputOutputFormatContainer getOrCreateFormatContainer() {
+        if (inputOutputFormatContainer == null) {
+            inputOutputFormatContainer =
+                    new InputOutputFormatContainer(Thread.currentThread().getContextClassLoader());
+        }
+        return inputOutputFormatContainer;
+    }
+
+    public void addChainedConfig(Integer streamNodeId, StreamConfig config) {
+        chainedConfigs.put(streamNodeId, config);
+    }
+
+    public Map<Integer, StreamConfig> getChainedConfigs() {
+        return chainedConfigs;
+    }
+
+    public StreamConfig getChainedConfig(Integer streamNodeId) {
+        return chainedConfigs.get(streamNodeId);
     }
 }
