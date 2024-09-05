@@ -102,7 +102,6 @@ import javax.annotation.Nullable;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
@@ -177,7 +176,7 @@ public class StreamingJobGraphGenerator {
     private final Collection<Integer> builtVertices;
 
     private final StreamGraphHasher defaultStreamGraphHasher;
-    private final List<StreamGraphHasher> legacyStreamGraphHashers;
+    private final StreamGraphHasher legacyStreamGraphHasher;
 
     private final Executor serializationExecutor;
 
@@ -198,7 +197,7 @@ public class StreamingJobGraphGenerator {
         this.userClassloader = userClassloader;
         this.streamGraph = streamGraph;
         this.defaultStreamGraphHasher = new StreamGraphHasherV2();
-        this.legacyStreamGraphHashers = Arrays.asList(new StreamGraphUserHashHasher());
+        this.legacyStreamGraphHasher = new StreamGraphUserHashHasher();
 
         this.builtVertices = new HashSet<>();
         this.serializationExecutor = Preconditions.checkNotNull(serializationExecutor);
@@ -220,10 +219,8 @@ public class StreamingJobGraphGenerator {
                 defaultStreamGraphHasher.traverseStreamGraphAndGenerateHashes(streamGraph);
 
         // Generate legacy version hashes for backwards compatibility
-        List<Map<Integer, byte[]>> legacyHashes = new ArrayList<>(legacyStreamGraphHashers.size());
-        for (StreamGraphHasher hasher : legacyStreamGraphHashers) {
-            legacyHashes.add(hasher.traverseStreamGraphAndGenerateHashes(streamGraph));
-        }
+        Map<Integer, byte[]> legacyHashes =
+                legacyStreamGraphHasher.traverseStreamGraphAndGenerateHashes(streamGraph);
 
         setChaining(hashes, legacyHashes);
 
@@ -552,7 +549,7 @@ public class StreamingJobGraphGenerator {
     }
 
     private Map<Integer, OperatorChainInfo> buildChainedInputsAndGetHeadInputs(
-            final Map<Integer, byte[]> hashes, final List<Map<Integer, byte[]>> legacyHashes) {
+            final Map<Integer, byte[]> hashes, final Map<Integer, byte[]> legacyHashes) {
 
         final Map<Integer, ChainedSourceInfo> chainedSources = new HashMap<>();
         final Map<Integer, OperatorChainInfo> chainEntryPoints = new HashMap<>();
@@ -624,7 +621,7 @@ public class StreamingJobGraphGenerator {
      *
      * <p>This will recursively create all {@link JobVertex} instances.
      */
-    private void setChaining(Map<Integer, byte[]> hashes, List<Map<Integer, byte[]>> legacyHashes) {
+    private void setChaining(Map<Integer, byte[]> hashes, Map<Integer, byte[]> legacyHashes) {
         // we separate out the sources that run as inputs to another operator (chained inputs)
         // from the sources that needs to run as the main (head) operator.
         final Map<Integer, OperatorChainInfo> chainEntryPoints =

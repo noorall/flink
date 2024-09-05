@@ -35,7 +35,7 @@ import java.util.Map;
 public class OperatorChainInfo {
     private final Integer startNodeId;
     private final Map<Integer, byte[]> hashes;
-    private final List<Map<Integer, byte[]>> legacyHashes;
+    private final Map<Integer, byte[]> legacyHashes;
     private final Map<Integer, List<Tuple2<byte[], byte[]>>> chainedOperatorHashes;
     private final Map<Integer, ChainedSourceInfo> chainedSources;
     private final List<OperatorCoordinator.Provider> coordinatorProviders;
@@ -49,7 +49,7 @@ public class OperatorChainInfo {
     public OperatorChainInfo(
             int startNodeId,
             Map<Integer, byte[]> hashes,
-            List<Map<Integer, byte[]>> legacyHashes,
+            Map<Integer, byte[]> legacyHashes,
             Map<Integer, ChainedSourceInfo> chainedSources,
             StreamGraph streamGraph) {
         this.startNodeId = startNodeId;
@@ -97,9 +97,7 @@ public class OperatorChainInfo {
 
         byte[] primaryHashBytes = hashes.get(currentNodeId);
 
-        for (Map<Integer, byte[]> legacyHash : legacyHashes) {
-            operatorHashes.add(new Tuple2<>(primaryHashBytes, legacyHash.get(currentNodeId)));
-        }
+        operatorHashes.add(new Tuple2<>(primaryHashBytes, legacyHashes.get(currentNodeId)));
 
         streamNode
                 .getCoordinatorProvider(operatorName, new OperatorID(getHash(currentNodeId)))
