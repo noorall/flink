@@ -46,8 +46,11 @@ public class JobVertexBuildContext {
     // the ids of nodes whose output result partition type should be set to BLOCKING
     private final Set<Integer> outputBlockingNodesID;
 
+    // The order of StreamEdge connected to other vertices should be consistent with the order in
+    // which JobEdge was created
     private final List<StreamEdge> physicalEdgesInOrder;
 
+    // In progressive generation mode, this boolean only contains information from the current stage
     private boolean hasHybridResultPartition;
 
     public JobVertexBuildContext(StreamGraph streamGraph) {
@@ -57,7 +60,7 @@ public class JobVertexBuildContext {
         this.jobVerticesInorder = new LinkedHashMap<>();
         this.outputBlockingNodesID = new HashSet<>();
         this.physicalEdgesInOrder = new ArrayList<>();
-        this.hasHybridResultPartition = true;
+        this.hasHybridResultPartition = false;
     }
 
     public void addChainInfo(Integer startNodeId, OperatorChainInfo chainInfo) {
@@ -66,6 +69,10 @@ public class JobVertexBuildContext {
 
     public OperatorChainInfo getChainInfo(Integer startNodeId) {
         return chainInfos.get(startNodeId);
+    }
+
+    public Map<Integer, OperatorChainInfo> getChainInfos() {
+        return chainInfos;
     }
 
     public OperatorInfo getOperatorInfo(Integer nodeId) {
@@ -114,5 +121,9 @@ public class JobVertexBuildContext {
 
     public Map<Integer, JobVertex> getJobVertices() {
         return jobVerticesInorder;
+    }
+
+    public JobVertex getJobVertex(Integer startNodeId) {
+        return jobVerticesInorder.get(startNodeId);
     }
 }

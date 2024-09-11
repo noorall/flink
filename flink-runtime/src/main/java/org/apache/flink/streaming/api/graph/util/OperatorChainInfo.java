@@ -139,4 +139,16 @@ public class OperatorChainInfo {
         }
         return inputOutputFormatContainer;
     }
+
+    public void addChainedSource(Integer sourceNodeId, ChainedSourceInfo chainedSourceInfo) {
+        chainedSources.put(sourceNodeId, chainedSourceInfo);
+    }
+
+    public void addTransitiveInEdge(StreamEdge streamEdge) {
+        transitiveInEdges.add(streamEdge);
+    }
+
+    public List<StreamEdge> getTransitiveInEdges() {
+        return transitiveInEdges;
+    }
 }
