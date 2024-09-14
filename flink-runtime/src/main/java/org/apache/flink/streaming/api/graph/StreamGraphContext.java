@@ -18,6 +18,12 @@
 
 package org.apache.flink.streaming.api.graph;
 
+import org.apache.flink.streaming.api.graph.util.ImmutableStreamGraph;
+import org.apache.flink.streaming.api.graph.util.StreamEdgeUpdateRequestInfo;
+import org.apache.flink.streaming.api.graph.util.StreamNodeUpdateRequestInfo;
+
+import java.util.List;
+
 /**
  * Defines a context for optimizing and working with a read-only view of a StreamGraph. It provides
  * methods to modify StreamEdges and StreamNodes within the StreamGraph.
@@ -29,19 +35,21 @@ public interface StreamGraphContext {
      *
      * @return a read-only view of the StreamGraph.
      */
-    StreamGraph getStreamGraph();
+    ImmutableStreamGraph getStreamGraph();
 
     /**
-     * Modifies a StreamEdge within the StreamGraph.
+     * Modifies stream edges within the StreamGraph.
      *
-     * @param streamEdge the StreamEdge to be modified.
+     * @param requestInfos the stream edges to be modified.
+     * @return true if the modification was successful, false otherwise.
      */
-    void modifyStreamEdge(StreamEdge streamEdge);
+    boolean modifyStreamEdge(List<StreamEdgeUpdateRequestInfo> requestInfos);
 
     /**
      * Modifies a StreamNode within the StreamGraph.
      *
-     * @param streamNode the StreamNode to be modified.
+     * @param requestInfo the StreamNode to be modified.
+     * @return true if the modification was successful, false otherwise.
      */
-    void modifyStreamNode(StreamNode streamNode);
+    boolean modifyStreamNode(StreamNodeUpdateRequestInfo requestInfo);
 }
