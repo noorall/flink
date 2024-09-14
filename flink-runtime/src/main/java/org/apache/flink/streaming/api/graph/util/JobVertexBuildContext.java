@@ -19,8 +19,11 @@
 package org.apache.flink.streaming.api.graph.util;
 
 import org.apache.flink.runtime.jobgraph.JobVertex;
+import org.apache.flink.runtime.jobgraph.JobVertexID;
+import org.apache.flink.runtime.operators.coordination.OperatorCoordinator;
 import org.apache.flink.streaming.api.graph.StreamEdge;
 import org.apache.flink.streaming.api.graph.StreamGraph;
+import org.apache.flink.util.SerializedValue;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -29,6 +32,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class JobVertexBuildContext {
 
@@ -43,6 +48,12 @@ public class JobVertexBuildContext {
     // The created JobVertex, the key is start node id
     private final Map<Integer, JobVertex> jobVerticesInorder;
 
+    // Futures for the serialization of operator coordinators
+    private final Map<
+                    JobVertexID,
+                    List<CompletableFuture<SerializedValue<OperatorCoordinator.Provider>>>>
+            coordinatorSerializationFuturesPerJobVertex;
+
     // the ids of nodes whose output result partition type should be set to BLOCKING
     private final Set<Integer> outputBlockingNodesID;
 
@@ -50,17 +61,17 @@ public class JobVertexBuildContext {
     // which JobEdge was created
     private final List<StreamEdge> physicalEdgesInOrder;
 
-    // In progressive generation mode, this boolean only contains information from the current stage
-    private boolean hasHybridResultPartition;
+    private final AtomicBoolean hasHybridResultPartition;
 
-    public JobVertexBuildContext(StreamGraph streamGraph) {
+    public JobVertexBuildContext(StreamGraph streamGraph, AtomicBoolean hasHybridResultPartition) {
         this.streamGraph = streamGraph;
-        this.chainInfos = new HashMap<>();
+        this.chainInfos = new LinkedHashMap<>();
         this.operatorInfosInorder = new LinkedHashMap<>();
         this.jobVerticesInorder = new LinkedHashMap<>();
         this.outputBlockingNodesID = new HashSet<>();
         this.physicalEdgesInOrder = new ArrayList<>();
-        this.hasHybridResultPartition = false;
+        this.hasHybridResultPartition = hasHybridResultPartition;
+        this.coordinatorSerializationFuturesPerJobVertex = new HashMap<>();
     }
 
     public void addChainInfo(Integer startNodeId, OperatorChainInfo chainInfo) {
@@ -92,11 +103,11 @@ public class JobVertexBuildContext {
     }
 
     public boolean hasHybridResultPartition() {
-        return hasHybridResultPartition;
+        return hasHybridResultPartition.get();
     }
 
     public void setHasHybridResultPartition(boolean hasHybridResultPartition) {
-        this.hasHybridResultPartition = hasHybridResultPartition;
+        this.hasHybridResultPartition.set(hasHybridResultPartition);
     }
 
     public void addPhysicalEdgesInOrder(StreamEdge edge) {
@@ -125,5 +136,17 @@ public class JobVertexBuildContext {
 
     public JobVertex getJobVertex(Integer startNodeId) {
         return jobVerticesInorder.get(startNodeId);
+    }
+
+    public void putCoordinatorSerializationFutures(
+            JobVertexID vertexID,
+            List<CompletableFuture<SerializedValue<OperatorCoordinator.Provider>>>
+                    serializationFutures) {
+        coordinatorSerializationFuturesPerJobVertex.put(vertexID, serializationFutures);
+    }
+
+    public Map<JobVertexID, List<CompletableFuture<SerializedValue<OperatorCoordinator.Provider>>>>
+            getCoordinatorSerializationFuturesPerJobVertex() {
+        return coordinatorSerializationFuturesPerJobVertex;
     }
 }

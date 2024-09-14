@@ -121,6 +121,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
@@ -181,14 +182,10 @@ public class StreamingJobGraphGenerator {
 
     private final Executor serializationExecutor;
 
-    // Futures for the serialization of operator coordinators
-    private final Map<
-                    JobVertexID,
-                    List<CompletableFuture<SerializedValue<OperatorCoordinator.Provider>>>>
-            coordinatorSerializationFuturesPerJobVertex = new HashMap<>();
-
     /** We save all the context needed to create the JobVertex in this structure */
     private final JobVertexBuildContext jobVertexBuildContext;
+
+    private final AtomicBoolean hasHybridResultPartition;
 
     private StreamingJobGraphGenerator(
             ClassLoader userClassloader,
@@ -202,7 +199,9 @@ public class StreamingJobGraphGenerator {
 
         this.builtVertices = new HashSet<>();
         this.serializationExecutor = Preconditions.checkNotNull(serializationExecutor);
-        this.jobVertexBuildContext = new JobVertexBuildContext(streamGraph);
+        this.hasHybridResultPartition = new AtomicBoolean(false);
+        this.jobVertexBuildContext =
+                new JobVertexBuildContext(streamGraph, hasHybridResultPartition);
         jobGraph = new JobGraph(jobID, streamGraph.getJobName());
     }
 
@@ -254,7 +253,7 @@ public class StreamingJobGraphGenerator {
                 id -> streamGraph.getStreamNode(id).getManagedMemoryOperatorScopeUseCaseWeights(),
                 id -> streamGraph.getStreamNode(id).getManagedMemorySlotScopeUseCases());
 
-        configureCheckpointing();
+        configureCheckpointing(streamGraph, jobGraph);
 
         jobGraph.setSavepointRestoreSettings(streamGraph.getSavepointRestoreSettings());
 
@@ -284,6 +283,20 @@ public class StreamingJobGraphGenerator {
         setVertexDescription(jobVertexBuildContext);
 
         // Wait for the serialization of operator coordinators and stream config.
+        serializeOperatorCoordinatorsAndStreamConfig(
+                jobGraph, serializationExecutor, jobVertexBuildContext);
+
+        if (!streamGraph.getJobStatusHooks().isEmpty()) {
+            jobGraph.setJobStatusHooks(streamGraph.getJobStatusHooks());
+        }
+
+        return jobGraph;
+    }
+
+    public static void serializeOperatorCoordinatorsAndStreamConfig(
+            JobGraph jobGraph,
+            Executor serializationExecutor,
+            JobVertexBuildContext jobVertexBuildContext) {
         try {
             FutureUtils.combineAll(
                             jobVertexBuildContext.getOperatorInfos().values().stream()
@@ -296,24 +309,22 @@ public class StreamingJobGraphGenerator {
                                     .collect(Collectors.toList()))
                     .get();
 
-            waitForSerializationFuturesAndUpdateJobVertices();
+            waitForSerializationFuturesAndUpdateJobVertices(jobGraph, jobVertexBuildContext);
         } catch (Exception e) {
             throw new FlinkRuntimeException("Error in serialization.", e);
         }
-
-        if (!streamGraph.getJobStatusHooks().isEmpty()) {
-            jobGraph.setJobStatusHooks(streamGraph.getJobStatusHooks());
-        }
-
-        return jobGraph;
     }
 
-    private void waitForSerializationFuturesAndUpdateJobVertices()
+    private static void waitForSerializationFuturesAndUpdateJobVertices(
+            JobGraph jobGraph, JobVertexBuildContext jobVertexBuildContext)
             throws ExecutionException, InterruptedException {
         for (Map.Entry<
                         JobVertexID,
                         List<CompletableFuture<SerializedValue<OperatorCoordinator.Provider>>>>
-                futuresPerJobVertex : coordinatorSerializationFuturesPerJobVertex.entrySet()) {
+                futuresPerJobVertex :
+                        jobVertexBuildContext
+                                .getCoordinatorSerializationFuturesPerJobVertex()
+                                .entrySet()) {
             final JobVertexID jobVertexId = futuresPerJobVertex.getKey();
             final JobVertex jobVertex = jobGraph.findVertexByID(jobVertexId);
 
@@ -1079,7 +1090,8 @@ public class StreamingJobGraphGenerator {
                             serializationExecutor));
         }
         if (!serializationFutures.isEmpty()) {
-            coordinatorSerializationFuturesPerJobVertex.put(jobVertexId, serializationFutures);
+            jobVertexBuildContext.putCoordinatorSerializationFutures(
+                    jobVertexId, serializationFutures);
         }
 
         jobVertex.setResources(
@@ -1284,7 +1296,7 @@ public class StreamingJobGraphGenerator {
                     edge,
                     output,
                     jobVertexBuildContext.getJobVertices(),
-                    jobVertexBuildContext.getPhysicalEdgesInOrder());
+                    jobVertexBuildContext);
         }
 
         config.setVertexNonChainedOutputs(new ArrayList<>(transitiveOutputs));
@@ -1505,9 +1517,9 @@ public class StreamingJobGraphGenerator {
             StreamEdge edge,
             NonChainedOutput output,
             Map<Integer, JobVertex> jobVertices,
-            List<StreamEdge> physicalEdgesInOrder) {
+            JobVertexBuildContext jobVertexBuildContext) {
 
-        physicalEdgesInOrder.add(edge);
+        jobVertexBuildContext.addPhysicalEdgesInOrder(edge);
 
         Integer downStreamVertexID = edge.getTargetId();
 
@@ -2065,7 +2077,7 @@ public class StreamingJobGraphGenerator {
         }
     }
 
-    private void configureCheckpointing() {
+    public static void configureCheckpointing(StreamGraph streamGraph, JobGraph jobGraph) {
         CheckpointConfig cfg = streamGraph.getCheckpointConfig();
 
         long interval = cfg.getCheckpointInterval();
