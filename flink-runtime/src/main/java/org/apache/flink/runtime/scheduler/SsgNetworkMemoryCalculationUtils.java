@@ -28,6 +28,7 @@ import org.apache.flink.runtime.executiongraph.IndexRange;
 import org.apache.flink.runtime.executiongraph.IntermediateResult;
 import org.apache.flink.runtime.executiongraph.IntermediateResultPartition;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionType;
+import org.apache.flink.runtime.io.network.partition.consumer.SingleInputGateFactory;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSet;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 import org.apache.flink.runtime.jobgraph.JobEdge;
@@ -190,15 +191,18 @@ public class SsgNetworkMemoryCalculationUtils {
 
                 IntermediateResultPartition resultPartition =
                         ejv.getGraph().getResultPartitionOrThrow((partitionGroup.getFirst()));
-                IndexRange subpartitionIndexRange =
+
+                Map<IndexRange, IndexRange> consumedSubpartitionGroups =
                         vertex.getExecutionVertexInputInfo(
                                         resultPartition.getIntermediateResult().getId())
-                                .getSubpartitionIndexRange();
+                                .getConsumedSubpartitionGroups();
+
+                int inputChannelNums =
+                        SingleInputGateFactory.calculateNumInputChannels(
+                                consumedSubpartitionGroups);
 
                 maxInputChannelNums.merge(
-                        partitionGroup.getIntermediateDataSetID(),
-                        subpartitionIndexRange.size() * partitionGroup.size(),
-                        Integer::max);
+                        partitionGroup.getIntermediateDataSetID(), inputChannelNums, Integer::max);
                 inputPartitionTypes.putIfAbsent(
                         partitionGroup.getIntermediateDataSetID(),
                         partitionGroup.getResultPartitionType());
