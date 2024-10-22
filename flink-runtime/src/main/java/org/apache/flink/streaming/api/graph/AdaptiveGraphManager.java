@@ -261,7 +261,7 @@ public class AdaptiveGraphManager implements AdaptiveGraphGenerator {
         JobVertex jobVertex = jobGraph.findVertexByID(jobVertexId);
         List<StreamEdge> outputEdges = new ArrayList<>();
         for (IntermediateDataSet result : jobVertex.getProducedDataSets()) {
-            outputEdges.addAll(result.getConsumerStreamEdges());
+            outputEdges.addAll(result.getOutputStreamEdges());
         }
         return outputEdges;
     }
@@ -455,7 +455,7 @@ public class AdaptiveGraphManager implements AdaptiveGraphGenerator {
                 IntermediateDataSet dataSet =
                         jobVertex.getOrCreateResultDataSet(
                                 output.getDataSetId(), output.getPartitionType());
-                dataSet.addStreamEdge(edge);
+                dataSet.addOutputStreamEdge(edge);
                 // we cache the output here for downstream vertex to create jobEdge.
                 intermediateOutputsCaches
                         .computeIfAbsent(edge.getSourceId(), k -> new HashMap<>())

@@ -37,6 +37,7 @@ import java.util.stream.Collectors;
 import static org.apache.flink.util.Preconditions.checkNotNull;
 import static org.apache.flink.util.Preconditions.checkState;
 
+/** Stream node level implement for {@link ForwardGroup}. */
 public class StreamNodeForwardGroup {
 
     private int parallelism = ExecutionConfig.PARALLELISM_DEFAULT;
