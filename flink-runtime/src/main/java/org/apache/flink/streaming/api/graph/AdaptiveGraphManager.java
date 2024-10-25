@@ -33,6 +33,7 @@ import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.jobgraph.JobVertex;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.jobgraph.OperatorID;
+import org.apache.flink.runtime.jobgraph.forwardgroup.ForwardGroupComputeUtil;
 import org.apache.flink.runtime.jobgraph.forwardgroup.StreamNodeForwardGroup;
 import org.apache.flink.runtime.operators.coordination.OperatorCoordinator;
 import org.apache.flink.runtime.operators.util.TaskConfig;
@@ -630,7 +631,7 @@ public class AdaptiveGraphManager implements AdaptiveGraphGenerator {
                     streamNodeId,
                     ignored -> new OperatorChainInfo(streamNodeId, new HashMap<>(), streamGraph));
         } else {
-            generateHashesByStreamNode(streamNode);
+            generateHashesByStreamNodeId(streamNodeId);
 
             final StreamEdge sourceOutEdge = streamNode.getOutEdges().get(0);
             final int startNodeId = sourceOutEdge.getTargetId();
@@ -707,7 +708,7 @@ public class AdaptiveGraphManager implements AdaptiveGraphGenerator {
 
         StreamNode currentNode = streamGraph.getStreamNode(currentNodeId);
 
-        generateHashesByStreamNode(currentNode);
+        generateHashesByStreamNodeId(currentNodeId);
 
         Attribute currentNodeAttribute = currentNode.getAttribute();
         boolean isNoOutputUntilEndOfInput =
@@ -816,34 +817,38 @@ public class AdaptiveGraphManager implements AdaptiveGraphGenerator {
         List<StreamEdge> chainableOutputs = new ArrayList<>();
 
         Map<Integer, List<StreamEdge>> transitiveOutEdgesMap = new HashMap<>();
-        Map<Integer, List<StreamNode>> chainedStreamNodesMap = new LinkedHashMap<>();
+        Map<StreamNode, List<StreamNode>> topologicallySortedChainedStreamNodesMap =
+                new LinkedHashMap<>();
         Set<Integer> finishedChain = new HashSet<>();
 
-        List<StreamNode> enterPoints = getEnterPoints(streamNodes, chainedStreamNodesMap);
+        List<StreamNode> enterPoints =
+                getEnterPoints(streamNodes, topologicallySortedChainedStreamNodesMap);
         for (StreamNode streamNode : enterPoints) {
             traverseFullGraph(
                     streamNode.getId(),
                     streamNode.getId(),
                     chainableOutputs,
                     transitiveOutEdgesMap,
-                    chainedStreamNodesMap,
+                    topologicallySortedChainedStreamNodesMap,
                     finishedChain);
         }
         computeForwardGroupAndSetNodeParallelisms(
-                transitiveOutEdgesMap, chainedStreamNodesMap, chainableOutputs);
+                transitiveOutEdgesMap, topologicallySortedChainedStreamNodesMap, chainableOutputs);
     }
 
     private List<StreamNode> getEnterPoints(
-            List<StreamNode> sourceNodes, Map<Integer, List<StreamNode>> chainedStreamNodesMap) {
+            List<StreamNode> sourceNodes, Map<StreamNode, List<StreamNode>> chainedStreamNodesMap) {
         List<StreamNode> enterPoints = new ArrayList<>();
         for (StreamNode sourceNode : sourceNodes) {
             if (isSourceChainable(sourceNode)) {
                 StreamEdge outEdge = sourceNode.getOutEdges().get(0);
+                StreamNode startNode = streamGraph.getStreamNode(outEdge.getTargetId());
                 chainedStreamNodesMap
-                        .computeIfAbsent(outEdge.getTargetId(), k -> new ArrayList<>())
+                        .computeIfAbsent(startNode, k -> new ArrayList<>())
                         .add(sourceNode);
-                enterPoints.add(streamGraph.getStreamNode(outEdge.getTargetId()));
+                enterPoints.add(startNode);
             } else {
+                chainedStreamNodesMap.computeIfAbsent(sourceNode, k -> new ArrayList<>());
                 enterPoints.add(sourceNode);
             }
         }
@@ -855,7 +860,7 @@ public class AdaptiveGraphManager implements AdaptiveGraphGenerator {
             Integer currentNodeId,
             List<StreamEdge> allChainableOutputs,
             Map<Integer, List<StreamEdge>> transitiveOutEdgesMap,
-            Map<Integer, List<StreamNode>> chainedStreamNodesMap,
+            Map<StreamNode, List<StreamNode>> topologicallySortedChainedStreamNodesMap,
             Set<Integer> finishedChain) {
         if (finishedChain.contains(startNodeId)) {
             return;
@@ -863,11 +868,15 @@ public class AdaptiveGraphManager implements AdaptiveGraphGenerator {
         List<StreamEdge> chainableOutputs = new ArrayList<>();
         List<StreamEdge> nonChainableOutputs = new ArrayList<>();
         StreamNode currentNode = streamGraph.getStreamNode(currentNodeId);
+        StreamNode startNode = streamGraph.getStreamNode(startNodeId);
         for (StreamEdge streamEdge : currentNode.getOutEdges()) {
             if (isChainable(streamEdge, streamGraph)) {
                 chainableOutputs.add(streamEdge);
             } else {
                 nonChainableOutputs.add(streamEdge);
+                topologicallySortedChainedStreamNodesMap.computeIfAbsent(
+                        streamGraph.getStreamNode(streamEdge.getTargetId()),
+                        k -> new ArrayList<>());
             }
         }
 
@@ -877,7 +886,7 @@ public class AdaptiveGraphManager implements AdaptiveGraphGenerator {
                 .computeIfAbsent(startNodeId, k -> new ArrayList<>())
                 .addAll(nonChainableOutputs);
 
-        chainedStreamNodesMap.computeIfAbsent(startNodeId, k -> new ArrayList<>()).add(currentNode);
+        topologicallySortedChainedStreamNodesMap.get(startNode).add(currentNode);
 
         for (StreamEdge chainable : chainableOutputs) {
             traverseFullGraph(
@@ -885,7 +894,7 @@ public class AdaptiveGraphManager implements AdaptiveGraphGenerator {
                     chainable.getTargetId(),
                     allChainableOutputs,
                     transitiveOutEdgesMap,
-                    chainedStreamNodesMap,
+                    topologicallySortedChainedStreamNodesMap,
                     finishedChain);
         }
         for (StreamEdge nonChainable : nonChainableOutputs) {
@@ -894,7 +903,7 @@ public class AdaptiveGraphManager implements AdaptiveGraphGenerator {
                     nonChainable.getTargetId(),
                     allChainableOutputs,
                     transitiveOutEdgesMap,
-                    chainedStreamNodesMap,
+                    topologicallySortedChainedStreamNodesMap,
                     finishedChain);
         }
         if (currentNodeId.equals(startNodeId)) {
@@ -904,10 +913,11 @@ public class AdaptiveGraphManager implements AdaptiveGraphGenerator {
 
     private void computeForwardGroupAndSetNodeParallelisms(
             Map<Integer, List<StreamEdge>> transitiveOutEdgesMap,
-            Map<Integer, List<StreamNode>> chainedStreamNodesMap,
+            Map<StreamNode, List<StreamNode>> topologicallySortedChainedStreamNodesMap,
             List<StreamEdge> chainableOutputs) {
-        // reset parallelism for job vertices whose parallelism is not configured.
-        for (List<StreamNode> chainedStreamNodes : chainedStreamNodesMap.values()) {
+        // reset parallelism for chained stream nodes whose parallelism is not configured.
+        for (List<StreamNode> chainedStreamNodes :
+                topologicallySortedChainedStreamNodesMap.values()) {
             boolean isParallelismConfigured =
                     chainedStreamNodes.stream().anyMatch(StreamNode::isParallelismConfigured);
             if (!isParallelismConfigured && streamGraph.isAutoParallelismEnabled()) {
@@ -918,7 +928,8 @@ public class AdaptiveGraphManager implements AdaptiveGraphGenerator {
 
         final Map<StreamNode, Set<StreamNode>> forwardProducersByStartNode = new LinkedHashMap<>();
 
-        for (int startNodeId : chainedStreamNodesMap.keySet()) {
+        for (StreamNode startNode : topologicallySortedChainedStreamNodesMap.keySet()) {
+            int startNodeId = startNode.getId();
             Set<StreamNode> forwardConsumers =
                     transitiveOutEdgesMap.get(startNodeId).stream()
                             .filter(
@@ -945,13 +956,11 @@ public class AdaptiveGraphManager implements AdaptiveGraphGenerator {
         }
 
         final Map<Integer, StreamNodeForwardGroup> forwardGroupsByStartNodeId =
-                StreamNodeForwardGroup.computeForwardGroup(
-                        chainedStreamNodesMap.keySet(),
+                ForwardGroupComputeUtil.computeStreamNodeForwardGroup(
+                        topologicallySortedChainedStreamNodesMap,
                         startNode ->
                                 forwardProducersByStartNode.getOrDefault(
-                                        startNode, Collections.emptySet()),
-                        chainedStreamNodesMap::get,
-                        streamGraph);
+                                        startNode, Collections.emptySet()));
 
         forwardGroupsByStartNodeId.forEach(
                 (startNodeId, forwardGroup) -> {
@@ -965,12 +974,12 @@ public class AdaptiveGraphManager implements AdaptiveGraphGenerator {
                                     });
                 });
 
-        chainedStreamNodesMap.forEach(this::setNodeParallelism);
+        topologicallySortedChainedStreamNodesMap.forEach(this::setNodeParallelism);
     }
 
-    private void setNodeParallelism(Integer startNodeId, List<StreamNode> chainedStreamNodes) {
+    private void setNodeParallelism(StreamNode startNode, List<StreamNode> chainedStreamNodes) {
         StreamNodeForwardGroup streamNodeForwardGroup =
-                forwardGroupsByEndpointNodeIdCache.get(startNodeId);
+                forwardGroupsByEndpointNodeIdCache.get(startNode.getId());
         // set parallelism for vertices in forward group.
         if (streamNodeForwardGroup != null && streamNodeForwardGroup.isParallelismDecided()) {
             chainedStreamNodes.forEach(
@@ -986,22 +995,22 @@ public class AdaptiveGraphManager implements AdaptiveGraphGenerator {
         }
     }
 
-    private void generateHashesByStreamNode(StreamNode streamNode) {
+    private void generateHashesByStreamNodeId(Integer streamNodeId) {
         // Generate deterministic hashes for the nodes in order to identify them across
         // submission if they didn't change.
-        if (hashes.containsKey(streamNode.getId())) {
+        if (hashes.containsKey(streamNodeId)) {
             return;
         }
         for (int i = 0; i < legacyStreamGraphHasher.size(); ++i) {
             legacyStreamGraphHasher
                     .get(i)
-                    .generateHashesByStreamNode(streamNode, streamGraph, legacyHashes.get(i));
+                    .generateHashesByStreamNodeId(streamNodeId, streamGraph, legacyHashes.get(i));
         }
         Preconditions.checkState(
-                defaultStreamGraphHasher.generateHashesByStreamNode(
-                        streamNode, streamGraph, hashes),
+                defaultStreamGraphHasher.generateHashesByStreamNodeId(
+                        streamNodeId, streamGraph, hashes),
                 "Failed to generate hash for streamNode with ID '%s'",
-                streamNode.getId());
+                streamNodeId);
     }
 
     private boolean isReadyToCreateJobVertex(OperatorChainInfo chainInfo) {
@@ -1019,7 +1028,7 @@ public class AdaptiveGraphManager implements AdaptiveGraphGenerator {
                 continue;
             }
             Optional<JobVertexID> upstreamJobVertex = findVertexByStreamNodeId(sourceNodeId);
-            if (!upstreamJobVertex.isPresent()
+            if (upstreamJobVertex.isEmpty()
                     || !finishedJobVertices.contains(upstreamJobVertex.get())) {
                 return false;
             }

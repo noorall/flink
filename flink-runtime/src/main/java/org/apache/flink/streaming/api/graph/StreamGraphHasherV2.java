@@ -149,8 +149,9 @@ public class StreamGraphHasherV2 implements StreamGraphHasher {
     }
 
     @Override
-    public boolean generateHashesByStreamNode(
-            StreamNode streamNode, StreamGraph streamGraph, Map<Integer, byte[]> hashes) {
+    public boolean generateHashesByStreamNodeId(
+            int streamNodeId, StreamGraph streamGraph, Map<Integer, byte[]> hashes) {
+        StreamNode streamNode = streamGraph.getStreamNode(streamNodeId);
         return generateNodeHash(
                 streamNode,
                 Hashing.murmur3_128(0),

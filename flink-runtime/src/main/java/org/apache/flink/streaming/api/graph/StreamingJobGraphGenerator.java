@@ -50,8 +50,8 @@ import org.apache.flink.runtime.jobgraph.JobType;
 import org.apache.flink.runtime.jobgraph.JobVertex;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.jobgraph.OperatorID;
-import org.apache.flink.runtime.jobgraph.forwardgroup.ForwardGroup;
 import org.apache.flink.runtime.jobgraph.forwardgroup.ForwardGroupComputeUtil;
+import org.apache.flink.runtime.jobgraph.forwardgroup.JobVertexForwardGroup;
 import org.apache.flink.runtime.jobgraph.tasks.CheckpointCoordinatorConfiguration;
 import org.apache.flink.runtime.jobgraph.tasks.JobCheckpointingSettings;
 import org.apache.flink.runtime.jobgraph.tasks.TaskInvokable;
@@ -904,7 +904,7 @@ public class StreamingJobGraphGenerator {
                 });
 
         // compute forward groups
-        final Map<JobVertexID, ForwardGroup> forwardGroupsByJobVertexId =
+        final Map<JobVertexID, JobVertexForwardGroup> forwardGroupsByJobVertexId =
                 ForwardGroupComputeUtil.computeForwardGroups(
                         topologicalOrderVertices,
                         jobVertex ->
@@ -913,7 +913,8 @@ public class StreamingJobGraphGenerator {
 
         jobVertices.forEach(
                 (startNodeId, jobVertex) -> {
-                    ForwardGroup forwardGroup = forwardGroupsByJobVertexId.get(jobVertex.getID());
+                    JobVertexForwardGroup forwardGroup =
+                            forwardGroupsByJobVertexId.get(jobVertex.getID());
                     // set parallelism for vertices in forward group
                     if (forwardGroup != null && forwardGroup.isParallelismDecided()) {
                         jobVertex.setParallelism(forwardGroup.getParallelism());

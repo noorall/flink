@@ -40,7 +40,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-public class StreamGraphContextTest {
+public class DefaultStreamGraphContextTest {
     @Test
     void testModifyStreamEdge() {
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();

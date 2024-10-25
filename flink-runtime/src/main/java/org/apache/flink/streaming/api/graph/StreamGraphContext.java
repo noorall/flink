@@ -21,7 +21,6 @@ package org.apache.flink.streaming.api.graph;
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.streaming.api.graph.util.ImmutableStreamGraph;
 import org.apache.flink.streaming.api.graph.util.StreamEdgeUpdateRequestInfo;
-import org.apache.flink.streaming.api.graph.util.StreamNodeUpdateRequestInfo;
 
 import java.util.List;
 
@@ -46,12 +45,4 @@ public interface StreamGraphContext {
      * @return true if the modification was successful, false otherwise.
      */
     boolean modifyStreamEdge(List<StreamEdgeUpdateRequestInfo> requestInfos);
-
-    /**
-     * Modifies a StreamNode within the StreamGraph.
-     *
-     * @param requestInfo the StreamNode to be modified.
-     * @return true if the modification was successful, false otherwise.
-     */
-    boolean modifyStreamNode(StreamNodeUpdateRequestInfo requestInfo);
 }

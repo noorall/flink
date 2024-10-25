@@ -33,10 +33,10 @@ public interface StreamGraphHasher {
     Map<Integer, byte[]> traverseStreamGraphAndGenerateHashes(StreamGraph streamGraph);
 
     /**
-     * Generates a hash for the specified {@link StreamNode} within the {@link StreamGraph}. This
-     * hash is stored in the provided map and can be used to uniquely identify the {@link
-     * StreamNode} across job submissions, assuming its configuration remains unchanged.
+     * Generates a hash for {@link StreamNode} with the specified stream node id in the {@link
+     * StreamGraph}. This hash is stored in the provided map and can be used to uniquely identify
+     * the {@link StreamNode} across job submissions, assuming its configuration remains unchanged.
      */
-    boolean generateHashesByStreamNode(
-            StreamNode streamNode, StreamGraph streamGraph, Map<Integer, byte[]> hashes);
+    boolean generateHashesByStreamNodeId(
+            int streamNodeId, StreamGraph streamGraph, Map<Integer, byte[]> hashes);
 }

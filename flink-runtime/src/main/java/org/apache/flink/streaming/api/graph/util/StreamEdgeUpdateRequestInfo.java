@@ -21,12 +21,9 @@ package org.apache.flink.streaming.api.graph.util;
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.streaming.runtime.partitioner.StreamPartitioner;
 
-/**
- * This class implements the {@link StreamGraphUpdateRequestInfo} interface and carries the data
- * required to updates a stream edge.
- */
+/** Helper class carries the data required to updates a stream edge. */
 @Internal
-public class StreamEdgeUpdateRequestInfo implements StreamGraphUpdateRequestInfo {
+public class StreamEdgeUpdateRequestInfo {
     private final String edgeId;
     private final Integer sourceId;
     private final Integer targetId;
