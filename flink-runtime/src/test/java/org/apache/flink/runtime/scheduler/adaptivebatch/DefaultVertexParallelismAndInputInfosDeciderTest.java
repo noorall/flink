@@ -37,6 +37,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -297,7 +298,8 @@ class DefaultVertexParallelismAndInputInfosDeciderTest {
         ParallelismAndInputInfos parallelismAndInputInfos =
                 decider.decideParallelismAndInputInfosForVertex(
                         new JobVertexID(),
-                        Collections.singletonList(allToAllBlockingResultInfo),
+                        Collections.singletonList(
+                                toBlockingInputInfoView(allToAllBlockingResultInfo)),
                         3,
                         MIN_PARALLELISM,
                         MAX_PARALLELISM);
@@ -336,7 +338,8 @@ class DefaultVertexParallelismAndInputInfosDeciderTest {
         ParallelismAndInputInfos parallelismAndInputInfos =
                 decider.decideParallelismAndInputInfosForVertex(
                         new JobVertexID(),
-                        Collections.singletonList(allToAllBlockingResultInfo),
+                        Collections.singletonList(
+                                toBlockingInputInfoView(allToAllBlockingResultInfo)),
                         -1,
                         dynamicSourceParallelism,
                         MAX_PARALLELISM);
@@ -491,7 +494,10 @@ class DefaultVertexParallelismAndInputInfosDeciderTest {
         final DefaultVertexParallelismAndInputInfosDecider decider =
                 createDecider(minParallelism, maxParallelism, dataVolumePerTask);
         return decider.decideParallelism(
-                new JobVertexID(), consumedResults, minParallelism, maxParallelism);
+                new JobVertexID(),
+                toBlockingInputInfoViews(consumedResults),
+                minParallelism,
+                maxParallelism);
     }
 
     private static ParallelismAndInputInfos createDeciderAndDecideParallelismAndInputInfos(
@@ -502,7 +508,11 @@ class DefaultVertexParallelismAndInputInfosDeciderTest {
         final DefaultVertexParallelismAndInputInfosDecider decider =
                 createDecider(minParallelism, maxParallelism, dataVolumePerTask);
         return decider.decideParallelismAndInputInfosForVertex(
-                new JobVertexID(), consumedResults, -1, minParallelism, maxParallelism);
+                new JobVertexID(),
+                toBlockingInputInfoViews(consumedResults),
+                -1,
+                minParallelism,
+                maxParallelism);
     }
 
     private AllToAllBlockingResultInfo createAllToAllBlockingResultInfo(
@@ -609,6 +619,11 @@ class DefaultVertexParallelismAndInputInfosDeciderTest {
 
         @Override
         public void resetPartitionInfo(int partitionIndex) {}
+
+        @Override
+        public Map<Integer, long[]> getSubpartitionBytesByPartitionIndex() {
+            return Collections.emptyMap();
+        }
     }
 
     private static BlockingResultInfo createFromBroadcastResult(long producedBytes) {
@@ -617,5 +632,28 @@ class DefaultVertexParallelismAndInputInfosDeciderTest {
 
     private static BlockingResultInfo createFromNonBroadcastResult(long producedBytes) {
         return new TestingBlockingResultInfo(false, producedBytes);
+    }
+
+    public static BlockingInputInfoView toBlockingInputInfoView(
+            BlockingResultInfo blockingResultInfo) {
+        boolean existIntraInputKeyCorrelation =
+                blockingResultInfo instanceof AllToAllBlockingResultInfo;
+        boolean existInterInputsKeyCorrelation =
+                blockingResultInfo instanceof AllToAllBlockingResultInfo
+                        && !blockingResultInfo.isBroadcast();
+        return new BlockingInputInfoView(
+                blockingResultInfo,
+                0,
+                existInterInputsKeyCorrelation,
+                existIntraInputKeyCorrelation);
+    }
+
+    public static List<BlockingInputInfoView> toBlockingInputInfoViews(
+            List<BlockingResultInfo> blockingResultInfos) {
+        List<BlockingInputInfoView> blockingInputInfoViews = new ArrayList<>();
+        for (BlockingResultInfo blockingResultInfo : blockingResultInfos) {
+            blockingInputInfoViews.add(toBlockingInputInfoView(blockingResultInfo));
+        }
+        return blockingInputInfoViews;
     }
 }

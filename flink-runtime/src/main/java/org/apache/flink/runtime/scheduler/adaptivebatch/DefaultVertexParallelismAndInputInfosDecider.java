@@ -104,7 +104,7 @@ public class DefaultVertexParallelismAndInputInfosDecider
     @Override
     public ParallelismAndInputInfos decideParallelismAndInputInfosForVertex(
             JobVertexID jobVertexId,
-            List<BlockingResultInfo> consumedResults,
+            List<BlockingInputInfoView> consumedResults,
             int vertexInitialParallelism,
             int vertexMinParallelism,
             int vertexMaxParallelism) {
@@ -195,12 +195,12 @@ public class DefaultVertexParallelismAndInputInfosDecider
         return dataVolumePerTask;
     }
 
-    private static boolean areAllInputsAllToAll(List<BlockingResultInfo> consumedResults) {
-        return consumedResults.stream().noneMatch(BlockingResultInfo::isPointwise);
+    private static boolean areAllInputsAllToAll(List<BlockingInputInfoView> consumedResults) {
+        return consumedResults.stream().noneMatch(BlockingInputInfoView::isPointwise);
     }
 
-    private static boolean areAllInputsBroadcast(List<BlockingResultInfo> consumedResults) {
-        return consumedResults.stream().allMatch(BlockingResultInfo::isBroadcast);
+    private static boolean areAllInputsBroadcast(List<BlockingInputInfoView> consumedResults) {
+        return consumedResults.stream().allMatch(BlockingInputInfoView::isBroadcast);
     }
 
     /**
@@ -217,7 +217,7 @@ public class DefaultVertexParallelismAndInputInfosDecider
      */
     private ParallelismAndInputInfos decideParallelismAndEvenlyDistributeSubpartitions(
             JobVertexID jobVertexId,
-            List<BlockingResultInfo> consumedResults,
+            List<BlockingInputInfoView> consumedResults,
             int initialParallelism,
             int minParallelism,
             int maxParallelism) {
@@ -235,14 +235,14 @@ public class DefaultVertexParallelismAndInputInfosDecider
 
     int decideParallelism(
             JobVertexID jobVertexId,
-            List<BlockingResultInfo> consumedResults,
+            List<BlockingInputInfoView> consumedResults,
             int minParallelism,
             int maxParallelism) {
         checkArgument(!consumedResults.isEmpty());
 
         // Considering that the sizes of broadcast results are usually very small, we compute the
         // parallelism only based on sizes of non-broadcast results
-        final List<BlockingResultInfo> nonBroadcastResults =
+        final List<BlockingInputInfoView> nonBroadcastResults =
                 getNonBroadcastResultInfos(consumedResults);
         if (nonBroadcastResults.isEmpty()) {
             return minParallelism;
@@ -250,7 +250,7 @@ public class DefaultVertexParallelismAndInputInfosDecider
 
         long totalBytes =
                 nonBroadcastResults.stream()
-                        .mapToLong(BlockingResultInfo::getNumBytesProduced)
+                        .mapToLong(BlockingInputInfoView::getNumBytesProduced)
                         .sum();
         int parallelism = (int) Math.ceil((double) totalBytes / dataVolumePerTask);
         int minParallelismLimitedByMaxSubpartitions =
@@ -303,7 +303,7 @@ public class DefaultVertexParallelismAndInputInfosDecider
      */
     private ParallelismAndInputInfos decideParallelismAndEvenlyDistributeData(
             JobVertexID jobVertexId,
-            List<BlockingResultInfo> consumedResults,
+            List<BlockingInputInfoView> consumedResults,
             int initialParallelism,
             int minParallelism,
             int maxParallelism) {
@@ -313,15 +313,14 @@ public class DefaultVertexParallelismAndInputInfosDecider
 
         // Considering that the sizes of broadcast results are usually very small, we compute the
         // parallelism and input infos only based on sizes of non-broadcast results
-        final List<BlockingResultInfo> nonBroadcastResults =
+        final List<BlockingInputInfoView> nonBroadcastResults =
                 getNonBroadcastResultInfos(consumedResults);
         int subpartitionNum = checkAndGetSubpartitionNum(nonBroadcastResults);
 
         long[] bytesBySubpartition = new long[subpartitionNum];
         Arrays.fill(bytesBySubpartition, 0L);
-        for (BlockingResultInfo resultInfo : nonBroadcastResults) {
-            List<Long> subpartitionBytes =
-                    ((AllToAllBlockingResultInfo) resultInfo).getAggregatedSubpartitionBytes();
+        for (BlockingInputInfoView resultInfo : nonBroadcastResults) {
+            List<Long> subpartitionBytes = resultInfo.getAggregatedSubpartitionBytes();
             for (int i = 0; i < subpartitionNum; ++i) {
                 bytesBySubpartition[i] += subpartitionBytes.get(i);
             }
@@ -372,7 +371,7 @@ public class DefaultVertexParallelismAndInputInfosDecider
         return parallelism >= minParallelism && parallelism <= maxParallelism;
     }
 
-    private static int checkAndGetSubpartitionNum(List<BlockingResultInfo> consumedResults) {
+    private static int checkAndGetSubpartitionNum(List<BlockingInputInfoView> consumedResults) {
         final Set<Integer> subpartitionNumSet =
                 consumedResults.stream()
                         .flatMap(
@@ -456,7 +455,7 @@ public class DefaultVertexParallelismAndInputInfosDecider
     }
 
     private static ParallelismAndInputInfos createParallelismAndInputInfos(
-            List<BlockingResultInfo> consumedResults, List<IndexRange> subpartitionRanges) {
+            List<BlockingInputInfoView> consumedResults, List<IndexRange> subpartitionRanges) {
 
         final Map<IntermediateDataSetID, JobVertexInputInfo> vertexInputInfos = new HashMap<>();
         consumedResults.forEach(
@@ -522,15 +521,15 @@ public class DefaultVertexParallelismAndInputInfosDecider
         return count;
     }
 
-    private static int getMaxNumPartitions(List<BlockingResultInfo> consumedResults) {
+    private static int getMaxNumPartitions(List<BlockingInputInfoView> consumedResults) {
         checkArgument(!consumedResults.isEmpty());
         return consumedResults.stream()
-                .mapToInt(BlockingResultInfo::getNumPartitions)
+                .mapToInt(BlockingInputInfoView::getNumPartitions)
                 .max()
                 .getAsInt();
     }
 
-    private static int getMaxNumSubpartitions(List<BlockingResultInfo> consumedResults) {
+    private static int getMaxNumSubpartitions(List<BlockingInputInfoView> consumedResults) {
         checkArgument(!consumedResults.isEmpty());
         return consumedResults.stream()
                 .mapToInt(
@@ -543,8 +542,8 @@ public class DefaultVertexParallelismAndInputInfosDecider
                 .getAsInt();
     }
 
-    private static List<BlockingResultInfo> getNonBroadcastResultInfos(
-            List<BlockingResultInfo> consumedResults) {
+    private static List<BlockingInputInfoView> getNonBroadcastResultInfos(
+            List<BlockingInputInfoView> consumedResults) {
         return consumedResults.stream()
                 .filter(resultInfo -> !resultInfo.isBroadcast())
                 .collect(Collectors.toList());
