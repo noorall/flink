@@ -28,9 +28,7 @@ import org.apache.flink.runtime.executiongraph.ParallelismAndInputInfos;
 import org.apache.flink.runtime.executiongraph.ResultPartitionBytes;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
-
 import org.apache.flink.shaded.guava32.com.google.common.collect.Iterables;
-
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -323,7 +321,8 @@ class DefaultVertexParallelismAndInputInfosDeciderTest {
         ParallelismAndInputInfos parallelismAndInputInfos =
                 decider.decideParallelismAndInputInfosForVertex(
                         new JobVertexID(),
-                        Collections.singletonList(allToAllBlockingResultInfo),
+                        Collections.singletonList(
+                                toBlockingInputInfoView(allToAllBlockingResultInfo)),
                         3,
                         MIN_PARALLELISM,
                         MAX_PARALLELISM);
@@ -362,7 +361,8 @@ class DefaultVertexParallelismAndInputInfosDeciderTest {
         ParallelismAndInputInfos parallelismAndInputInfos =
                 decider.decideParallelismAndInputInfosForVertex(
                         new JobVertexID(),
-                        Collections.singletonList(allToAllBlockingResultInfo),
+                        Collections.singletonList(
+                                toBlockingInputInfoView(allToAllBlockingResultInfo)),
                         -1,
                         dynamicSourceParallelism,
                         MAX_PARALLELISM);
@@ -518,7 +518,10 @@ class DefaultVertexParallelismAndInputInfosDeciderTest {
         final DefaultVertexParallelismAndInputInfosDecider decider =
                 createDecider(minParallelism, maxParallelism, dataVolumePerTask);
         return decider.decideParallelism(
-                new JobVertexID(), consumedResults, minParallelism, maxParallelism);
+                new JobVertexID(),
+                toBlockingInputInfoViews(consumedResults),
+                minParallelism,
+                maxParallelism);
     }
 
     private static ParallelismAndInputInfos createDeciderAndDecideParallelismAndInputInfos(
@@ -529,7 +532,11 @@ class DefaultVertexParallelismAndInputInfosDeciderTest {
         final DefaultVertexParallelismAndInputInfosDecider decider =
                 createDecider(minParallelism, maxParallelism, dataVolumePerTask);
         return decider.decideParallelismAndInputInfosForVertex(
-                new JobVertexID(), consumedResults, -1, minParallelism, maxParallelism);
+                new JobVertexID(),
+                toBlockingInputInfoViews(consumedResults),
+                -1,
+                minParallelism,
+                maxParallelism);
     }
 
     private AllToAllBlockingResultInfo createAllToAllBlockingResultInfo(
@@ -671,5 +678,26 @@ class DefaultVertexParallelismAndInputInfosDeciderTest {
 
     private static BlockingResultInfo createFromNonBroadcastResult(long producedBytes) {
         return new TestingBlockingResultInfo(false, false, producedBytes);
+    }
+
+    public static BlockingInputInfo toBlockingInputInfoView(BlockingResultInfo blockingResultInfo) {
+        boolean existIntraInputKeyCorrelation =
+                blockingResultInfo instanceof AllToAllBlockingResultInfo;
+        boolean existInterInputsKeyCorrelation =
+                blockingResultInfo instanceof AllToAllBlockingResultInfo;
+        return new BlockingInputInfo(
+                blockingResultInfo,
+                0,
+                existInterInputsKeyCorrelation,
+                existIntraInputKeyCorrelation);
+    }
+
+    public static List<BlockingInputInfo> toBlockingInputInfoViews(
+            List<BlockingResultInfo> blockingResultInfos) {
+        List<BlockingInputInfo> blockingInputInfos = new ArrayList<>();
+        for (BlockingResultInfo blockingResultInfo : blockingResultInfos) {
+            blockingInputInfos.add(toBlockingInputInfoView(blockingResultInfo));
+        }
+        return blockingInputInfos;
     }
 }
