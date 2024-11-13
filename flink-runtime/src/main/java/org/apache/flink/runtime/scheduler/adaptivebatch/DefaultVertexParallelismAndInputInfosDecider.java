@@ -35,7 +35,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -446,111 +445,21 @@ public class DefaultVertexParallelismAndInputInfosDecider
 
         int subPartitionNum = checkAndGetSubpartitionNum(nonBroadcastInputInfos);
 
-        Map<Integer, Integer> maxPartitionNumByTypeNumber =
-                computeMaxNumPartitionMap(inputsByTypeNumber);
+        Map<Integer, List<SubpartitionGroup>> splitSubpartitionGroups =
+                divideSubpartitionsEvenlyDistributeData(inputsByTypeNumber, subPartitionNum);
 
-        // The key is the type number, and the value is a map which the key is the partition
-        // index and the value contains the size information of the subpartitions.
-        Map<Integer, Map<Integer, long[]>> subpartitionBytesByTypeNumber =
-                computeSubpartitionBytesByTypeNumber(inputsByTypeNumber, subPartitionNum);
-
-        Map<Integer, long[]> aggregatedSubpartitionBytesByTypeNumber =
-                computeAggregatedSubpartitionBytesByTypeNumber(inputsByTypeNumber, subPartitionNum);
-
-        Map<Integer, Boolean> existIntraCorrelationByTypeNumber =
-                computeIsExistIntraCorrelationByTypeNumber(inputsByTypeNumber);
-
-        Map<Integer, Long> skewedThresholdByTypeNumber =
-                computeSkewedThresholdByTypeNumber(
-                        aggregatedSubpartitionBytesByTypeNumber, existIntraCorrelationByTypeNumber);
-
-        Map<Integer, Long> targetSizeByTypeNumber =
-                computeTargetSizeByTypeNumber(
-                        skewedThresholdByTypeNumber, aggregatedSubpartitionBytesByTypeNumber);
-
-        Map<Integer, List<IndexRange>> splitPartitionRangesByTypeNumber = new HashMap<>();
-        // Map between the spilt partition index and the sub partition index.
-        Map<Integer, Integer> mapToSubpartitionIdx = new HashMap<>();
-
-        int subPartitionNumAfterSplit = 0;
-
-        for (int i = 0; i < subPartitionNum; ++i) {
-            // Split the partition range into a list.
-            Map<Integer, List<IndexRange>> partitionRangeByTypeNumber =
-                    computePartitionRangeMap(
-                            subpartitionBytesByTypeNumber,
-                            aggregatedSubpartitionBytesByTypeNumber,
-                            existIntraCorrelationByTypeNumber,
-                            maxPartitionNumByTypeNumber,
-                            skewedThresholdByTypeNumber,
-                            targetSizeByTypeNumber,
-                            i);
-
-            List<Integer> typeNumberList = new ArrayList<>(partitionRangeByTypeNumber.keySet());
-            List<List<IndexRange>> originalRangeLists =
-                    new ArrayList<>(partitionRangeByTypeNumber.values());
-
-            // Perform the Cartesian product for inputs with inter-input key correlation.
-            List<List<IndexRange>> cartesianProductRangeList = cartesianProduct(originalRangeLists);
-
-            for (List<IndexRange> splitPartitionRanges : cartesianProductRangeList) {
-                for (int j = 0; j < splitPartitionRanges.size(); ++j) {
-                    int typeNumber = typeNumberList.get(j);
-                    splitPartitionRangesByTypeNumber
-                            .computeIfAbsent(typeNumber, ignored -> new ArrayList<>())
-                            .add(splitPartitionRanges.get(j));
-                }
-                mapToSubpartitionIdx.put(subPartitionNumAfterSplit, i);
-                ++subPartitionNumAfterSplit;
-            }
-        }
+        int subpartitionGroupSize = checkAdnGetSubpartitionGroupSize(splitSubpartitionGroups);
 
         int maxNumPartitions = getMaxNumPartitions(nonBroadcastInputInfos);
         int maxRangeSize = MAX_NUM_SUBPARTITIONS_PER_TASK_CONSUME / maxNumPartitions;
 
-        long minBytesSize = Long.MAX_VALUE;
-        long sumBytesSize = 0L;
-
-        Map<Integer, long[]> splitSubPartitionsBytesByTypeNumber = new HashMap<>();
-        int finalSubPartitionNumAfterSplit = subPartitionNumAfterSplit;
-
-        for (int i = 0; i < finalSubPartitionNumAfterSplit; ++i) {
-            long total = 0L;
-            for (Map.Entry<Integer, Map<Integer, long[]>> entry :
-                    subpartitionBytesByTypeNumber.entrySet()) {
-                int typeNumber = entry.getKey();
-                Map<Integer, long[]> subpartitionBytesByPartitionIndex = entry.getValue();
-
-                int subPartitionIdx = mapToSubpartitionIdx.get(i);
-                IndexRange partitionRange = splitPartitionRangesByTypeNumber.get(typeNumber).get(i);
-                IndexRange subPartitionRange = new IndexRange(subPartitionIdx, subPartitionIdx);
-
-                long[] bytes =
-                        splitSubPartitionsBytesByTypeNumber.computeIfAbsent(
-                                typeNumber, ignored -> new long[finalSubPartitionNumAfterSplit]);
-
-                bytes[i] =
-                        getNumBytesByIndexRange(
-                                subpartitionBytesByPartitionIndex,
-                                partitionRange,
-                                subPartitionRange);
-
-                total += bytes[i];
-            }
-
-            minBytesSize = Math.min(minBytesSize, total);
-            sumBytesSize += total;
-        }
-
         // compute subpartition ranges
         List<IndexRange> splitSubpartitionRanges =
-                computeSubpartitionRangesForBalancedAllToAll(
+                computeSubpartitionGroupRangeForBalancedAllToAll(
                         dataVolumePerTask,
                         maxRangeSize,
-                        finalSubPartitionNumAfterSplit,
-                        mapToSubpartitionIdx,
-                        splitSubPartitionsBytesByTypeNumber,
-                        splitPartitionRangesByTypeNumber);
+                        subpartitionGroupSize,
+                        splitSubpartitionGroups);
 
         // if the parallelism is not legal, adjust to a legal parallelism
         if (!isLegalParallelism(splitSubpartitionRanges.size(), minParallelism, maxParallelism)) {
@@ -571,7 +480,7 @@ public class DefaultVertexParallelismAndInputInfosDecider
                                             splitSubPartitionsBytesByTypeNumber,
                                             splitPartitionRangesByTypeNumber),
                             limit ->
-                                    computeSubpartitionRangesForBalancedAllToAll(
+                                    computeSubpartitionGroupRangeForBalancedAllToAll(
                                             limit,
                                             maxRangeSize,
                                             finalSubPartitionNumAfterSplit,
@@ -599,6 +508,63 @@ public class DefaultVertexParallelismAndInputInfosDecider
                 broadcastInputInfos,
                 splitSubpartitionRanges,
                 mapToSubpartitionIdx);
+    }
+
+    private Map<Integer, List<SubpartitionGroup>> divideSubpartitionsEvenlyDistributeData(
+            Map<Integer, List<BlockingInputInfoView>> inputsByTypeNumber, int subPartitionNum) {
+        // The key is the type number, and the value is a map which the key is the partition
+        // index and the value contains the size information of the subpartitions.
+        Map<Integer, Map<Integer, long[]>> subpartitionBytesByTypeNumber =
+                computeSubpartitionBytesByTypeNumber(inputsByTypeNumber, subPartitionNum);
+
+        Map<Integer, Integer> maxPartitionNumByTypeNumber =
+                computeMaxNumPartitionMap(inputsByTypeNumber);
+
+        Map<Integer, long[]> aggregatedSubpartitionBytesByTypeNumber =
+                computeAggregatedSubpartitionBytesByTypeNumber(inputsByTypeNumber, subPartitionNum);
+
+        Map<Integer, Boolean> existIntraCorrelationByTypeNumber =
+                computeIsExistIntraCorrelationByTypeNumber(inputsByTypeNumber);
+
+        Map<Integer, Long> skewedThresholdByTypeNumber =
+                computeSkewedThresholdByTypeNumber(
+                        aggregatedSubpartitionBytesByTypeNumber, existIntraCorrelationByTypeNumber);
+
+        Map<Integer, Long> targetSizeByTypeNumber =
+                computeTargetSizeByTypeNumber(
+                        skewedThresholdByTypeNumber, aggregatedSubpartitionBytesByTypeNumber);
+
+        Map<Integer, List<SubpartitionGroup>> splitPartitionGroupByTypeNumber = new HashMap<>();
+
+        for (int subpartitionIndex = 0; subpartitionIndex < subPartitionNum; ++subpartitionIndex) {
+            Map<Integer, List<IndexRange>> partitionRangeByTypeNumber =
+                    computePartitionRangeMap(
+                            subpartitionBytesByTypeNumber,
+                            aggregatedSubpartitionBytesByTypeNumber,
+                            existIntraCorrelationByTypeNumber,
+                            maxPartitionNumByTypeNumber,
+                            skewedThresholdByTypeNumber,
+                            targetSizeByTypeNumber,
+                            subpartitionIndex);
+            List<Integer> typeNumberList = new ArrayList<>(partitionRangeByTypeNumber.keySet());
+            List<List<IndexRange>> originalRangeLists =
+                    new ArrayList<>(partitionRangeByTypeNumber.values());
+            // Perform the Cartesian product for inputs with inter-input key correlation.
+            List<List<IndexRange>> cartesianProductRangeList = cartesianProduct(originalRangeLists);
+            for (List<IndexRange> splitPartitionRanges : cartesianProductRangeList) {
+                for (int j = 0; j < splitPartitionRanges.size(); ++j) {
+                    int typeNumber = typeNumberList.get(j);
+                    splitPartitionGroupByTypeNumber
+                            .computeIfAbsent(typeNumber, ignored -> new ArrayList<>())
+                            .add(
+                                    SubpartitionGroup.createSubpartitionGroup(
+                                            subpartitionIndex,
+                                            splitPartitionRanges.get(j),
+                                            subpartitionBytesByTypeNumber.get(typeNumber)));
+                }
+            }
+        }
+        return splitPartitionGroupByTypeNumber;
     }
 
     private Map<Integer, Integer> computeMaxNumPartitionMap(
@@ -633,6 +599,14 @@ public class DefaultVertexParallelismAndInputInfosDecider
             subpartitionBytesMap.put(typeNumber, subpartitionBytes);
         }
         return subpartitionBytesMap;
+    }
+
+    private int checkAdnGetSubpartitionGroupSize(
+            Map<Integer, List<SubpartitionGroup>> subpartitionGroups) {
+        Set<Integer> subpartitionGroupSizeSet =
+                subpartitionGroups.values().stream().map(List::size).collect(Collectors.toSet());
+        checkArgument(subpartitionGroupSizeSet.size() == 1);
+        return subpartitionGroupSizeSet.iterator().next();
     }
 
     private boolean checkAndGetIntraCorrelation(List<BlockingInputInfoView> inputInfos) {
@@ -851,21 +825,13 @@ public class DefaultVertexParallelismAndInputInfosDecider
     }
 
     private static long getNumBytesByIndexRange(
-            Map<Integer, long[]> subpartitionBytesByPartitionIndex,
+            int subpartitionIndex,
             IndexRange partitionIndexRange,
-            IndexRange subpartitionIndexRange) {
-        long numBytes = 0L;
-        for (int i = partitionIndexRange.getStartIndex();
-                i <= partitionIndexRange.getEndIndex();
-                ++i) {
-            numBytes +=
-                    Arrays.stream(
-                                    subpartitionBytesByPartitionIndex.get(i),
-                                    subpartitionIndexRange.getStartIndex(),
-                                    subpartitionIndexRange.getEndIndex() + 1)
-                            .sum();
-        }
-        return numBytes;
+            Map<Integer, long[]> subpartitionBytesByPartitionIndex) {
+        return IntStream.rangeClosed(
+                        partitionIndexRange.getStartIndex(), partitionIndexRange.getEndIndex())
+                .mapToLong(i -> subpartitionBytesByPartitionIndex.get(i)[subpartitionIndex])
+                .sum();
     }
 
     private static Optional<IndexRange> adjustToLegalIndexRange(
@@ -1318,22 +1284,18 @@ public class DefaultVertexParallelismAndInputInfosDecider
         return count;
     }
 
-    private static List<IndexRange> computeSubpartitionRangesForBalancedAllToAll(
+    private static List<IndexRange> computeSubpartitionGroupRangeForBalancedAllToAll(
             long limit,
             int maxRangeSize,
-            int size,
-            Map<Integer, Integer> mapToSubpartitionIdx,
-            Map<Integer, long[]> splitSubPartitionsBytesByTypeNumber,
-            Map<Integer, List<IndexRange>> splitPartitionRangesByTypeNumber) {
-        List<IndexRange> subpartitionRanges = new ArrayList<>();
+            int subpartitionGroupSize,
+            Map<Integer, List<SubpartitionGroup>> subpartitionGroups) {
+        List<IndexRange> subpartitionGroupRanges = new ArrayList<>();
         long tmpSum = 0;
         int startIndex = 0;
-        int preSubpartitionIndex = mapToSubpartitionIdx.get(0);
+        int preSubpartitionIndex = 0;
         Map<Integer, Map<Integer, Set<IndexRange>>> bucketsByTypeNumber = new HashMap<>();
-
-        for (int i = 0; i < size; ++i) {
-            Integer currentSubpartitionIndex = mapToSubpartitionIdx.get(i);
-
+        for (int i = 0; i < subpartitionGroupSize; ++i) {
+            Integer currentSubpartitionIndex;
             long num = 0L;
             long originNum = 0L;
             for (Map.Entry<Integer, List<IndexRange>> entry :
@@ -1357,7 +1319,7 @@ public class DefaultVertexParallelismAndInputInfosDecider
                                     <= maxRangeSize)) {
                 tmpSum += num;
             } else {
-                subpartitionRanges.add(new IndexRange(startIndex, i - 1));
+                subpartitionGroupRanges.add(new IndexRange(startIndex, i - 1));
                 startIndex = i;
                 tmpSum = originNum;
                 preSubpartitionIndex = currentSubpartitionIndex;
@@ -1376,8 +1338,8 @@ public class DefaultVertexParallelismAndInputInfosDecider
             }
         }
 
-        subpartitionRanges.add(new IndexRange(startIndex, size - 1));
-        return subpartitionRanges;
+        subpartitionGroupRanges.add(new IndexRange(startIndex, subpartitionGroupSize - 1));
+        return subpartitionGroupRanges;
     }
 
     private static int computeParallelismForBalancedAllToAll(
@@ -1490,5 +1452,32 @@ public class DefaultVertexParallelismAndInputInfosDecider
                                 BatchExecutionOptionsInternal
                                         .ADAPTIVE_SKEWED_OPTIMIZATION_SKEWED_THRESHOLD)
                         .getBytes());
+    }
+
+    private static class SubpartitionGroup {
+        long size;
+        int subpartitionIndex;
+        IndexRange partitionRange;
+
+        public SubpartitionGroup(int subpartitionIndex, IndexRange partitionRange, long size) {
+            this.subpartitionIndex = subpartitionIndex;
+            this.partitionRange = partitionRange;
+            this.size = size;
+        }
+
+        public long getSize() {
+            return size;
+        }
+
+        public static SubpartitionGroup createSubpartitionGroup(
+                int subpartitionIndex,
+                IndexRange partitionRange,
+                Map<Integer, long[]> subpartitionBytesByPartitionIndex) {
+            return new SubpartitionGroup(
+                    subpartitionIndex,
+                    partitionRange,
+                    getNumBytesByIndexRange(
+                            subpartitionIndex, partitionRange, subpartitionBytesByPartitionIndex));
+        }
     }
 }
