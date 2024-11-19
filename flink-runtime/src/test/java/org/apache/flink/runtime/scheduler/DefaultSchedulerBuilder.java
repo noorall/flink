@@ -48,7 +48,7 @@ import org.apache.flink.runtime.metrics.groups.UnregisteredMetricGroups;
 import org.apache.flink.runtime.scheduler.adaptivebatch.AdaptiveBatchScheduler;
 import org.apache.flink.runtime.scheduler.adaptivebatch.AdaptiveBatchSchedulerFactory;
 import org.apache.flink.runtime.scheduler.adaptivebatch.BatchJobRecoveryHandler;
-import org.apache.flink.runtime.scheduler.adaptivebatch.BlockingInputInfoView;
+import org.apache.flink.runtime.scheduler.adaptivebatch.BlockingInputInfo;
 import org.apache.flink.runtime.scheduler.adaptivebatch.DummyBatchJobRecoveryHandler;
 import org.apache.flink.runtime.scheduler.adaptivebatch.VertexParallelismAndInputInfosDecider;
 import org.apache.flink.runtime.scheduler.strategy.AllFinishedInputConsumableDecider;
@@ -59,7 +59,6 @@ import org.apache.flink.runtime.shuffle.ShuffleMaster;
 import org.apache.flink.runtime.shuffle.ShuffleTestUtils;
 import org.apache.flink.util.concurrent.ScheduledExecutor;
 import org.apache.flink.util.concurrent.ScheduledExecutorServiceAdapter;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -413,7 +412,7 @@ public class DefaultSchedulerBuilder {
             @Override
             public ParallelismAndInputInfos decideParallelismAndInputInfosForVertex(
                     JobVertexID jobVertexId,
-                    List<BlockingInputInfoView> consumedResults,
+                    List<BlockingInputInfo> consumedResults,
                     int vertexInitialParallelism,
                     int vertexMinParallelism,
                     int vertexMaxParallelism) {

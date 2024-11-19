@@ -28,13 +28,13 @@ import java.util.Map;
 
 import static org.apache.flink.util.Preconditions.checkState;
 
-public class BlockingInputInfoView implements BlockingResultInfo {
+public class BlockingInputInfo implements BlockingResultInfo {
     private final BlockingResultInfo blockingResultInfo;
     private final int inputTypeNumber;
     private final boolean existInterInputsKeyCorrelation;
     private final boolean existIntraInputKeyCorrelation;
 
-    public BlockingInputInfoView(
+    public BlockingInputInfo(
             BlockingResultInfo blockingResultInfo,
             int inputTypeNumber,
             boolean existInterInputsKeyCorrelation,
@@ -100,13 +100,10 @@ public class BlockingInputInfoView implements BlockingResultInfo {
         long inputBytes = 0;
         Map<Integer, long[]> subpartitionBytesByPartitionIndex =
                 blockingResultInfo.getSubpartitionBytesByPartitionIndex();
+        checkState(!subpartitionBytesByPartitionIndex.isEmpty(), "Partition has been aggregated.");
         for (int i = partitionIndexRange.getStartIndex();
                 i <= partitionIndexRange.getEndIndex();
                 ++i) {
-            checkState(
-                    subpartitionBytesByPartitionIndex.get(i) != null,
-                    "Partition index %s is not ready.",
-                    i);
             checkState(
                     subpartitionIndexRange.getEndIndex()
                             < subpartitionBytesByPartitionIndex.get(i).length,

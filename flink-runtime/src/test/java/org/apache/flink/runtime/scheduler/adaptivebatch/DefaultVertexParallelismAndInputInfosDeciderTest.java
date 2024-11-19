@@ -28,9 +28,7 @@ import org.apache.flink.runtime.executiongraph.ParallelismAndInputInfos;
 import org.apache.flink.runtime.executiongraph.ResultPartitionBytes;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
-
 import org.apache.flink.shaded.guava32.com.google.common.collect.Iterables;
-
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -634,26 +632,25 @@ class DefaultVertexParallelismAndInputInfosDeciderTest {
         return new TestingBlockingResultInfo(false, producedBytes);
     }
 
-    public static BlockingInputInfoView toBlockingInputInfoView(
-            BlockingResultInfo blockingResultInfo) {
+    public static BlockingInputInfo toBlockingInputInfoView(BlockingResultInfo blockingResultInfo) {
         boolean existIntraInputKeyCorrelation =
                 blockingResultInfo instanceof AllToAllBlockingResultInfo;
         boolean existInterInputsKeyCorrelation =
                 blockingResultInfo instanceof AllToAllBlockingResultInfo
                         && !blockingResultInfo.isBroadcast();
-        return new BlockingInputInfoView(
+        return new BlockingInputInfo(
                 blockingResultInfo,
                 0,
                 existInterInputsKeyCorrelation,
                 existIntraInputKeyCorrelation);
     }
 
-    public static List<BlockingInputInfoView> toBlockingInputInfoViews(
+    public static List<BlockingInputInfo> toBlockingInputInfoViews(
             List<BlockingResultInfo> blockingResultInfos) {
-        List<BlockingInputInfoView> blockingInputInfoViews = new ArrayList<>();
+        List<BlockingInputInfo> blockingInputInfos = new ArrayList<>();
         for (BlockingResultInfo blockingResultInfo : blockingResultInfos) {
-            blockingInputInfoViews.add(toBlockingInputInfoView(blockingResultInfo));
+            blockingInputInfos.add(toBlockingInputInfoView(blockingResultInfo));
         }
-        return blockingInputInfoViews;
+        return blockingInputInfos;
     }
 }

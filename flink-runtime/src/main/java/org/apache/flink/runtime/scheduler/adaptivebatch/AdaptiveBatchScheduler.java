@@ -79,11 +79,9 @@ import org.apache.flink.runtime.source.coordinator.SourceCoordinator;
 import org.apache.flink.util.FlinkRuntimeException;
 import org.apache.flink.util.concurrent.FutureUtils;
 import org.apache.flink.util.concurrent.ScheduledExecutor;
-
 import org.slf4j.Logger;
 
 import javax.annotation.Nullable;
-
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -533,7 +531,7 @@ public class AdaptiveBatchScheduler extends DefaultScheduler {
 
             // We need to wait for the upstream vertex to complete, otherwise, dynamic filtering
             // information will be inaccessible during source parallelism inference.
-            Optional<List<BlockingInputInfoView>> consumedResultsInfo =
+            Optional<List<BlockingInputInfo>> consumedResultsInfo =
                     tryGetConsumedResultsInfoView(jobVertex);
             if (consumedResultsInfo.isPresent()) {
                 List<CompletableFuture<Integer>> sourceParallelismFutures =
@@ -599,7 +597,7 @@ public class AdaptiveBatchScheduler extends DefaultScheduler {
                             createTimestamp);
                     newlyInitializedJobVertices.add(jobVertex);
                 } else {
-                    Optional<List<BlockingInputInfoView>> consumedResultsInfo =
+                    Optional<List<BlockingInputInfo>> consumedResultsInfo =
                             tryGetConsumedResultsInfoView(jobVertex);
                     if (consumedResultsInfo.isPresent()) {
                         ParallelismAndInputInfos parallelismAndInputInfos =
@@ -625,7 +623,7 @@ public class AdaptiveBatchScheduler extends DefaultScheduler {
     }
 
     private ParallelismAndInputInfos tryDecideParallelismAndInputInfos(
-            final ExecutionJobVertex jobVertex, List<BlockingInputInfoView> inputs) {
+            final ExecutionJobVertex jobVertex, List<BlockingInputInfo> inputs) {
         int vertexInitialParallelism = jobVertex.getParallelism();
         ForwardGroup forwardGroup = forwardGroupsByJobVertexId.get(jobVertex.getJobVertexId());
         if (!jobVertex.isParallelismDecided() && forwardGroup != null) {
@@ -785,10 +783,10 @@ public class AdaptiveBatchScheduler extends DefaultScheduler {
     }
 
     /** Get information of consumable results. */
-    private Optional<List<BlockingInputInfoView>> tryGetConsumedResultsInfoView(
+    private Optional<List<BlockingInputInfo>> tryGetConsumedResultsInfoView(
             final ExecutionJobVertex jobVertex) {
 
-        List<BlockingInputInfoView> consumableResultInfo = new ArrayList<>();
+        List<BlockingInputInfo> consumableResultInfo = new ArrayList<>();
 
         DefaultLogicalVertex logicalVertex = logicalTopology.getVertex(jobVertex.getJobVertexId());
         Iterator<DefaultLogicalResult> consumedResults =
@@ -804,7 +802,7 @@ public class AdaptiveBatchScheduler extends DefaultScheduler {
                 BlockingResultInfo resultInfo =
                         checkNotNull(blockingResultInfos.get(consumedResult.getId()));
                 consumableResultInfo.add(
-                        new BlockingInputInfoView(
+                        new BlockingInputInfo(
                                 resultInfo,
                                 jobEdge.getTypeNumber(),
                                 jobEdge.existInterInputsKeyCorrelation(),
