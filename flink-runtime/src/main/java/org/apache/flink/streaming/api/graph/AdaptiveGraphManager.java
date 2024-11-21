@@ -57,7 +57,7 @@ import static org.apache.flink.streaming.api.graph.StreamingJobGraphGenerator.cr
 import static org.apache.flink.streaming.api.graph.StreamingJobGraphGenerator.createChain;
 import static org.apache.flink.streaming.api.graph.StreamingJobGraphGenerator.createSourceChainInfo;
 import static org.apache.flink.streaming.api.graph.StreamingJobGraphGenerator.isChainable;
-import static org.apache.flink.streaming.api.graph.StreamingJobGraphGenerator.isSourceChainable;
+import static org.apache.flink.streaming.api.graph.StreamingJobGraphGenerator.isChainableSource;
 import static org.apache.flink.streaming.api.graph.StreamingJobGraphGenerator.markSupportingConcurrentExecutionAttempts;
 import static org.apache.flink.streaming.api.graph.StreamingJobGraphGenerator.preValidate;
 import static org.apache.flink.streaming.api.graph.StreamingJobGraphGenerator.serializeOperatorCoordinatorsAndStreamConfig;
@@ -432,9 +432,11 @@ public class AdaptiveGraphManager implements AdaptiveGraphGenerator {
 
     private Map<Integer, OperatorChainInfo> buildAndGetChainEntryPoints(
             List<StreamNode> streamNodes, JobVertexBuildContext jobVertexBuildContext) {
+        Collection<Integer> sourceNodeIds = streamGraph.getSourceIDs();
         for (StreamNode streamNode : streamNodes) {
             int streamNodeId = streamNode.getId();
-            if (isSourceChainable(streamNode, streamGraph)) {
+            if (sourceNodeIds.contains(streamNodeId)
+                    && isChainableSource(streamNode, streamGraph)) {
                 generateHashesByStreamNodeId(streamNodeId);
                 createSourceChainInfo(streamNode, pendingChainEntryPoints, jobVertexBuildContext);
             } else {
@@ -495,7 +497,7 @@ public class AdaptiveGraphManager implements AdaptiveGraphGenerator {
             List<StreamNode> sourceNodes, Map<StreamNode, List<StreamNode>> chainedStreamNodesMap) {
         List<StreamNode> enterPoints = new ArrayList<>();
         for (StreamNode sourceNode : sourceNodes) {
-            if (isSourceChainable(sourceNode, streamGraph)) {
+            if (isChainableSource(sourceNode, streamGraph)) {
                 StreamEdge outEdge = sourceNode.getOutEdges().get(0);
                 StreamNode startNode = streamGraph.getStreamNode(outEdge.getTargetId());
                 chainedStreamNodesMap

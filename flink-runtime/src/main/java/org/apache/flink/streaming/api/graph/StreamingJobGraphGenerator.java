@@ -569,7 +569,7 @@ public class StreamingJobGraphGenerator {
 
         for (Integer sourceNodeId : streamGraph.getSourceIDs()) {
             final StreamNode sourceNode = streamGraph.getStreamNode(sourceNodeId);
-            if (isSourceChainable(sourceNode, streamGraph)) {
+            if (isChainableSource(sourceNode, streamGraph)) {
                 createSourceChainInfo(sourceNode, chainEntryPoints, jobVertexBuildContext);
             } else {
                 chainEntryPoints.put(sourceNodeId, new OperatorChainInfo(sourceNodeId));
@@ -617,15 +617,16 @@ public class StreamingJobGraphGenerator {
             final boolean canCreateNewChain,
             final Executor serializationExecutor,
             final JobVertexBuildContext jobVertexBuildContext,
-            final @Nullable Consumer<Integer> hashGenerator) {
+            final @Nullable Consumer<Integer> visitedStreamNodeConsumer) {
 
         Integer startNodeId = chainInfo.getStartNodeId();
         if (!jobVertexBuildContext.getJobVerticesInOrder().containsKey(startNodeId)) {
             StreamGraph streamGraph = jobVertexBuildContext.getStreamGraph();
 
-            // Progressive hash generation is required in adaptive graph generator.
-            if (hashGenerator != null) {
-                hashGenerator.accept(currentNodeId);
+            // Adaptive graph generator needs to subscribe the visited stream node IDs to
+            // generate hashes for it.
+            if (visitedStreamNodeConsumer != null) {
+                visitedStreamNodeConsumer.accept(currentNodeId);
             }
 
             List<StreamEdge> transitiveOutEdges = new ArrayList<StreamEdge>();
@@ -667,7 +668,7 @@ public class StreamingJobGraphGenerator {
                                 canCreateNewChain,
                                 serializationExecutor,
                                 jobVertexBuildContext,
-                                hashGenerator));
+                                visitedStreamNodeConsumer));
                 // Mark upstream nodes in the same chain as outputBlocking
                 if (targetNodeAttribute != null
                         && targetNodeAttribute.isNoOutputUntilEndOfInput()) {
@@ -677,6 +678,10 @@ public class StreamingJobGraphGenerator {
 
             for (StreamEdge nonChainable : nonChainableOutputs) {
                 transitiveOutEdges.add(nonChainable);
+                // Used to control whether a new chain can be created, this value is true in the
+                // full graph generation algorithm and false in the progressive generation
+                // algorithm. In the future, this variable can be a boolean type function to adapt
+                // to more adaptive scenarios.
                 if (canCreateNewChain) {
                     createChain(
                             nonChainable.getTargetId(),
@@ -689,7 +694,7 @@ public class StreamingJobGraphGenerator {
                             canCreateNewChain,
                             serializationExecutor,
                             jobVertexBuildContext,
-                            hashGenerator);
+                            visitedStreamNodeConsumer);
                 }
             }
 
@@ -735,15 +740,12 @@ public class StreamingJobGraphGenerator {
             StreamConfig config;
             if (currentNodeId.equals(startNodeId)) {
                 JobVertex jobVertex = jobVertexBuildContext.getJobVertex(startNodeId);
-                config =
-                        jobVertex != null
-                                ? new StreamConfig(jobVertex.getConfiguration())
-                                : new StreamConfig(
-                                        createJobVertex(
-                                                        chainInfo,
-                                                        serializationExecutor,
-                                                        jobVertexBuildContext)
-                                                .getConfiguration());
+                if (jobVertex == null) {
+                    jobVertex =
+                            createJobVertex(
+                                    chainInfo, serializationExecutor, jobVertexBuildContext);
+                }
+                config = new StreamConfig(jobVertex.getConfiguration());
             } else {
                 config = new StreamConfig(new Configuration());
             }
@@ -1703,9 +1705,8 @@ public class StreamingJobGraphGenerator {
         return true;
     }
 
-    public static boolean isSourceChainable(StreamNode streamNode, StreamGraph streamGraph) {
-        if (!streamNode.getInEdges().isEmpty()
-                || streamNode.getOperatorFactory() == null
+    public static boolean isChainableSource(StreamNode streamNode, StreamGraph streamGraph) {
+        if (streamNode.getOperatorFactory() == null
                 || !(streamNode.getOperatorFactory() instanceof SourceOperatorFactory)
                 || streamNode.getOutEdges().size() != 1) {
             return false;
@@ -2032,6 +2033,11 @@ public class StreamingJobGraphGenerator {
         final StreamGraph streamGraph = jobVertexBuildContext.getStreamGraph();
         final Map<Integer, Map<Integer, StreamConfig>> vertexChainedConfigs =
                 jobVertexBuildContext.getChainedConfigs();
+        // In the progressive job graph generation algorithm, if the user specified the
+        // SlotSharingGroupResource or the AllVerticesInSameSlotSharingGroupByDefault is set to
+        // true, job vertices generated in different phase may be assigned to the same
+        // slotSharingGroup. Therefore, we need to filter out the job vertices that belong to the
+        // current phase.
         final Set<JobVertexID> jobVertexIds =
                 slotSharingGroup.getJobVertexIds().stream()
                         .filter(vertexOperators::containsKey)
