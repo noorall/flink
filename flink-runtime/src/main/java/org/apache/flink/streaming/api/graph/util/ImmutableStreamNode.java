@@ -21,9 +21,6 @@ package org.apache.flink.streaming.api.graph.util;
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.streaming.api.graph.StreamEdge;
 import org.apache.flink.streaming.api.graph.StreamNode;
-import org.apache.flink.streaming.api.operators.StreamOperatorFactory;
-
-import javax.annotation.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -62,9 +59,5 @@ public class ImmutableStreamNode {
 
     public int getId() {
         return streamNode.getId();
-    }
-
-    public @Nullable StreamOperatorFactory<?> getOperatorFactory() {
-        return streamNode.getOperatorFactory();
     }
 }

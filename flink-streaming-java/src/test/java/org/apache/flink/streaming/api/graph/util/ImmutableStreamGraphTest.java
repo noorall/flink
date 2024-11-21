@@ -46,8 +46,6 @@ class ImmutableStreamGraphTest {
     void isStreamNodeEquals(StreamNode streamNode, ImmutableStreamNode immutableStreamNode) {
         assertThat(immutableStreamNode).isNotNull();
         assertThat(streamNode.getId()).isEqualTo(immutableStreamNode.getId());
-        assertThat(streamNode.getOperatorFactory())
-                .isEqualTo(immutableStreamNode.getOperatorFactory());
         assertThat(streamNode.getInEdges().size())
                 .isEqualTo(immutableStreamNode.getInEdges().size());
         assertThat(streamNode.getOutEdges().size())
