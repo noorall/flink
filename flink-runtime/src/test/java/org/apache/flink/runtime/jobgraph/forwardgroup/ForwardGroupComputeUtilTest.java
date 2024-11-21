@@ -87,7 +87,7 @@ class ForwardGroupComputeUtilTest {
         // Different from the job vertex forward group, the stream node forward group is allowed to
         // contain only one single stream node, as these groups may merge with other groups in the
         // future.
-        checkGroupSize(groups, 3, 1);
+        checkGroupSize(groups, 3, 1, 1, 1);
     }
 
     /**
@@ -135,7 +135,7 @@ class ForwardGroupComputeUtilTest {
     @Test
     void testVariousConnectTypesBetweenChainedStreamNodeGroup() throws Exception {
         testThreeChainedStreamNodeGroupsConnectSequentially(false, true, 2, 1, 2);
-        testThreeChainedStreamNodeGroupsConnectSequentially(false, false, 3, 1);
+        testThreeChainedStreamNodeGroupsConnectSequentially(false, false, 3, 1, 1, 1);
         testThreeChainedStreamNodeGroupsConnectSequentially(true, true, 1, 3);
     }
 
@@ -278,7 +278,6 @@ class ForwardGroupComputeUtilTest {
 
     @Test
     void testOneInputSplitsIntoTwoForStreamNodeForwardGroup() throws Exception {
-
         List<StreamNode> startNodes = new ArrayList<>();
         Map<StreamNode, List<StreamNode>> topologicallySortedChainedStreamNodeByStartNode =
                 new LinkedHashMap<>();

@@ -146,7 +146,7 @@ public class ForwardGroupComputeUtil {
                 }
             }
         }
-        final Map<Integer, StreamNodeForwardGroup> result = new HashMap<>();
+        final Map<Integer, StreamNodeForwardGroup> result = new IdentityHashMap<>();
         for (Set<StreamNode> nodeGroup : VertexGroupComputeUtil.uniqueVertexGroups(nodeToGroup)) {
             Map<StreamNode, List<StreamNode>> chainedStreamNodeGroupsByStartNode = new HashMap<>();
             nodeGroup.forEach(
@@ -167,32 +167,32 @@ public class ForwardGroupComputeUtil {
      * Determines whether the target forward group can be merged into the source forward group.
      *
      * @param sourceForwardGroup The source forward group.
-     * @param targetForwardGroup The forward group needs to be merged.
+     * @param forwardGroupToMerge The forward group needs to be merged.
      * @return whether the merge is valid.
      */
     public static boolean canTargetMergeIntoSourceForwardGroup(
-            ForwardGroup sourceForwardGroup, ForwardGroup targetForwardGroup) {
-        if (sourceForwardGroup == null || targetForwardGroup == null) {
+            ForwardGroup sourceForwardGroup, ForwardGroup forwardGroupToMerge) {
+        if (sourceForwardGroup == null || forwardGroupToMerge == null) {
             return false;
         }
 
-        if (sourceForwardGroup == targetForwardGroup) {
+        if (sourceForwardGroup == forwardGroupToMerge) {
             return true;
         }
 
         if (sourceForwardGroup.isParallelismDecided()
-                && targetForwardGroup.isParallelismDecided()
-                && sourceForwardGroup.getParallelism() != targetForwardGroup.getParallelism()) {
+                && forwardGroupToMerge.isParallelismDecided()
+                && sourceForwardGroup.getParallelism() != forwardGroupToMerge.getParallelism()) {
             return false;
         }
 
         // When the parallelism of source forward groups is determined, the maximum
-        // parallelism of the targetForwardGroup should not be less than the parallelism of the
-        // sourceForwardGroup to ensure the targetForwardGroup can also achieve the same
+        // parallelism of the forwardGroupToMerge should not be less than the parallelism of the
+        // sourceForwardGroup to ensure the forwardGroupToMerge can also achieve the same
         // parallelism.
         if (sourceForwardGroup.isParallelismDecided()
-                && targetForwardGroup.isMaxParallelismDecided()
-                && sourceForwardGroup.getParallelism() > targetForwardGroup.getMaxParallelism()) {
+                && forwardGroupToMerge.isMaxParallelismDecided()
+                && sourceForwardGroup.getParallelism() > forwardGroupToMerge.getMaxParallelism()) {
             return false;
         }
 

@@ -25,7 +25,6 @@ import org.apache.flink.streaming.api.graph.StreamNode;
 
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -121,77 +120,80 @@ public class StreamNodeForwardGroup implements ForwardGroup {
     }
 
     /**
-     * Responds to merge targetForwardGroup into this and update the parallelism information for
+     * Responds to merge forwardGroupToMerge into this and update the parallelism information for
      * stream nodes in merged forward group.
      *
-     * @param targetForwardGroup The forward group to be merged.
+     * @param forwardGroupToMerge The forward group to be merged.
      * @return whether the merge was successful.
      */
-    public boolean mergeForwardGroup(StreamNodeForwardGroup targetForwardGroup) {
-        checkNotNull(targetForwardGroup);
+    public boolean mergeForwardGroup(StreamNodeForwardGroup forwardGroupToMerge) {
+        checkNotNull(forwardGroupToMerge);
 
-        if (targetForwardGroup == this) {
+        if (forwardGroupToMerge == this) {
             return true;
         }
 
         if (!ForwardGroupComputeUtil.canTargetMergeIntoSourceForwardGroup(
-                this, targetForwardGroup)) {
+                this, forwardGroupToMerge)) {
             return false;
         }
 
-        this.chainedStreamNodeGroupsByStartNode.putAll(
-                targetForwardGroup.chainedStreamNodeGroupsByStartNode);
-
-        Set<Integer> configuredParallelisms = new HashSet<>();
-        if (this.isParallelismDecided()) {
-            configuredParallelisms.add(this.getParallelism());
-        }
-        if (targetForwardGroup.isParallelismDecided()) {
-            configuredParallelisms.add(targetForwardGroup.getParallelism());
-        }
-
-        checkState(configuredParallelisms.size() <= 1);
-
-        if (configuredParallelisms.size() == 1) {
-            this.parallelism = configuredParallelisms.iterator().next();
+        if (this.isParallelismDecided() && !forwardGroupToMerge.isParallelismDecided()) {
+            forwardGroupToMerge.parallelism = this.parallelism;
+            forwardGroupToMerge.updateNodeParallelism();
+        } else if (!this.isParallelismDecided() && forwardGroupToMerge.isParallelismDecided()) {
+            this.parallelism = forwardGroupToMerge.parallelism;
+            this.updateNodeParallelism();
+        } else {
+            checkState(this.parallelism == forwardGroupToMerge.parallelism);
         }
 
-        Set<Integer> configuredMaxParallelisms = new HashSet<>();
-        if (this.isMaxParallelismDecided()) {
-            configuredMaxParallelisms.add(this.getMaxParallelism());
-        }
-        if (targetForwardGroup.isMaxParallelismDecided()) {
-            configuredMaxParallelisms.add(targetForwardGroup.getMaxParallelism());
-        }
-
-        if (!configuredMaxParallelisms.isEmpty()) {
-            this.maxParallelism = Collections.min(configuredMaxParallelisms);
+        if (forwardGroupToMerge.isMaxParallelismDecided()
+                && (!this.isMaxParallelismDecided()
+                        || this.maxParallelism > forwardGroupToMerge.maxParallelism)) {
+            this.maxParallelism = forwardGroupToMerge.maxParallelism;
             checkState(
                     parallelism == ExecutionConfig.PARALLELISM_DEFAULT
                             || maxParallelism >= parallelism);
+            this.updateNodeMaxParallelism();
+        } else if (this.isMaxParallelismDecided()
+                && (!forwardGroupToMerge.isMaxParallelismDecided()
+                        || forwardGroupToMerge.maxParallelism > this.maxParallelism)) {
+            forwardGroupToMerge.maxParallelism = this.maxParallelism;
+            checkState(
+                    forwardGroupToMerge.parallelism == ExecutionConfig.PARALLELISM_DEFAULT
+                            || forwardGroupToMerge.maxParallelism
+                                    >= forwardGroupToMerge.parallelism);
+            forwardGroupToMerge.updateNodeMaxParallelism();
+        } else {
+            checkState(this.maxParallelism == forwardGroupToMerge.maxParallelism);
         }
 
-        if (this.isParallelismDecided() || this.isMaxParallelismDecided()) {
-            chainedStreamNodeGroupsByStartNode
-                    .values()
-                    .forEach(
-                            streamNodes ->
-                                    streamNodes.forEach(
-                                            streamNode -> {
-                                                if (this.isParallelismDecided()
-                                                        && streamNode.getParallelism()
-                                                                != this.parallelism) {
-                                                    streamNode.setParallelism(this.parallelism);
-                                                }
-                                                if (this.isMaxParallelismDecided()
-                                                        && streamNode.getMaxParallelism()
-                                                                != this.maxParallelism) {
-                                                    streamNode.setMaxParallelism(
-                                                            this.maxParallelism);
-                                                }
-                                            }));
-        }
+        this.chainedStreamNodeGroupsByStartNode.putAll(
+                forwardGroupToMerge.chainedStreamNodeGroupsByStartNode);
 
         return true;
+    }
+
+    private void updateNodeParallelism() {
+        chainedStreamNodeGroupsByStartNode
+                .values()
+                .forEach(
+                        streamNodes ->
+                                streamNodes.forEach(
+                                        streamNode -> {
+                                            streamNode.setParallelism(this.parallelism);
+                                        }));
+    }
+
+    private void updateNodeMaxParallelism() {
+        chainedStreamNodeGroupsByStartNode
+                .values()
+                .forEach(
+                        streamNodes ->
+                                streamNodes.forEach(
+                                        streamNode -> {
+                                            streamNode.setMaxParallelism(this.maxParallelism);
+                                        }));
     }
 }

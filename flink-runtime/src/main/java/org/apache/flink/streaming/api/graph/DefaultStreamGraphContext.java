@@ -19,7 +19,6 @@
 package org.apache.flink.streaming.api.graph;
 
 import org.apache.flink.annotation.Internal;
-import org.apache.flink.runtime.jobgraph.forwardgroup.ForwardGroupComputeUtil;
 import org.apache.flink.runtime.jobgraph.forwardgroup.StreamNodeForwardGroup;
 import org.apache.flink.streaming.api.graph.util.ImmutableStreamGraph;
 import org.apache.flink.streaming.api.graph.util.StreamEdgeUpdateRequestInfo;
@@ -35,7 +34,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static org.apache.flink.util.Preconditions.checkState;
+import static org.apache.flink.util.Preconditions.checkNotNull;
 
 /** Default implementation for {@link StreamGraphContext}. */
 @Internal
@@ -45,8 +44,22 @@ public class DefaultStreamGraphContext implements StreamGraphContext {
 
     private final StreamGraph streamGraph;
     private final ImmutableStreamGraph immutableStreamGraph;
+
+    // The attributes below are reused from AdaptiveGraphManager as AdaptiveGraphManager also needs
+    // to use the modified information to create the job vertex.
+
+    // A modifiable map which records the ids of the start and end nodes for chained groups in the
+    // StreamNodeForwardGroup. When stream edge's partitioner is modified to forward, we need get
+    // forward groups by source and target node id and merge them.
     private final Map<Integer, StreamNodeForwardGroup> startAndEndNodeIdToForwardGroupMap;
+    // A read only map which records the id of stream node which job vertex is created, used to
+    // ensure that the stream nodes involved in the modification have not yet created job vertices.
     private final Map<Integer, Integer> frozenNodeToStartNodeMap;
+    // A modifiable map which key is the id of stream node which creates the non-chained output, and
+    // value is the stream edge connected to the stream node and the non-chained output subscribed
+    // by the edge. It is used to verify whether the edge being modified is subscribed to a reused
+    // output and ensures that modifications to StreamEdge can be synchronized to NonChainedOutput
+    // as they reuse some attributes.
     private final Map<Integer, Map<StreamEdge, NonChainedOutput>> opIntermediateOutputsCaches;
 
     public DefaultStreamGraphContext(
@@ -54,11 +67,11 @@ public class DefaultStreamGraphContext implements StreamGraphContext {
             Map<Integer, StreamNodeForwardGroup> startAndEndNodeIdToForwardGroupMap,
             Map<Integer, Integer> frozenNodeToStartNodeMap,
             Map<Integer, Map<StreamEdge, NonChainedOutput>> opIntermediateOutputsCaches) {
-        this.streamGraph = streamGraph;
-        this.immutableStreamGraph = new ImmutableStreamGraph(streamGraph);
-        this.startAndEndNodeIdToForwardGroupMap = startAndEndNodeIdToForwardGroupMap;
-        this.frozenNodeToStartNodeMap = frozenNodeToStartNodeMap;
-        this.opIntermediateOutputsCaches = opIntermediateOutputsCaches;
+        this.streamGraph = checkNotNull(streamGraph);
+        this.startAndEndNodeIdToForwardGroupMap = checkNotNull(startAndEndNodeIdToForwardGroupMap);
+        this.frozenNodeToStartNodeMap = checkNotNull(frozenNodeToStartNodeMap);
+        this.opIntermediateOutputsCaches = checkNotNull(opIntermediateOutputsCaches);
+        this.immutableStreamGraph = new ImmutableStreamGraph(this.streamGraph);
     }
 
     @Override
@@ -71,7 +84,7 @@ public class DefaultStreamGraphContext implements StreamGraphContext {
         // We first verify the legality of all requestInfos to ensure that all requests can be
         // modified atomically.
         for (StreamEdgeUpdateRequestInfo requestInfo : requestInfos) {
-            if (!modifyStreamEdgeValidate(requestInfo)) {
+            if (!validateStreamEdgeUpdateRequest(requestInfo)) {
                 return false;
             }
         }
@@ -91,7 +104,7 @@ public class DefaultStreamGraphContext implements StreamGraphContext {
         return true;
     }
 
-    private boolean modifyStreamEdgeValidate(StreamEdgeUpdateRequestInfo requestInfo) {
+    private boolean validateStreamEdgeUpdateRequest(StreamEdgeUpdateRequestInfo requestInfo) {
         Integer sourceNodeId = requestInfo.getSourceId();
         Integer targetNodeId = requestInfo.getTargetId();
 
@@ -114,7 +127,7 @@ public class DefaultStreamGraphContext implements StreamGraphContext {
                             .collect(Collectors.toSet());
             if (consumerStreamEdges.size() != 1) {
                 LOG.info(
-                        "Modification for edge {} is not allowed as the subscribing output is reused.",
+                        "Skip modifying edge {} because the subscribing output is reused.",
                         targetEdge);
                 return false;
             }
@@ -122,7 +135,7 @@ public class DefaultStreamGraphContext implements StreamGraphContext {
 
         if (frozenNodeToStartNodeMap.containsKey(targetNodeId)) {
             LOG.info(
-                    "Modification for edge {} is not allowed as the target node with id {} is in frozen list.",
+                    "Skip modifying edge {} because the target node with id {} is in frozen list.",
                     targetEdge,
                     targetNodeId);
             return false;
@@ -155,21 +168,21 @@ public class DefaultStreamGraphContext implements StreamGraphContext {
         // For non-chainable edges, we change the ForwardPartitioner to RescalePartitioner to avoid
         // limiting the parallelism of the downstream node by the forward edge.
         // 1. If the upstream job vertex is created.
-        if (targetEdge.getPartitioner() instanceof ForwardPartitioner
-                && frozenNodeToStartNodeMap.containsKey(sourceNodeId)) {
-            targetEdge.setPartitioner(new RescalePartitioner<>());
-        }
         // 2. If the source and target are non-chainable.
-        if (targetEdge.getPartitioner() instanceof ForwardPartitioner
-                && !StreamingJobGraphGenerator.isChainable(targetEdge, streamGraph)) {
-            targetEdge.setPartitioner(new RescalePartitioner<>());
-        }
         // 3. If the forward group cannot be merged.
-        if (targetEdge.getPartitioner() instanceof ForwardPartitioner
-                && !mergeForwardGroups(sourceNodeId, targetNodeId)) {
-            targetEdge.setPartitioner(new RescalePartitioner<>());
+        if (targetEdge.getPartitioner() instanceof ForwardPartitioner) {
+            if (frozenNodeToStartNodeMap.containsKey(sourceNodeId)) {
+                targetEdge.setPartitioner(new RescalePartitioner<>());
+            } else if (!StreamingJobGraphGenerator.isChainable(targetEdge, streamGraph)) {
+                targetEdge.setPartitioner(new RescalePartitioner<>());
+            } else if (!mergeForwardGroups(sourceNodeId, targetNodeId)) {
+                targetEdge.setPartitioner(new RescalePartitioner<>());
+            }
         }
 
+        // The partitioner in NonChainedOutput derived from the consumer edge, so we need to ensure
+        // that any modifications to the partitioner of consumer edge are synchronized with
+        // NonChainedOutput.
         Map<StreamEdge, NonChainedOutput> opIntermediateOutputs =
                 opIntermediateOutputsCaches.get(sourceNodeId);
         NonChainedOutput output =
@@ -193,14 +206,9 @@ public class DefaultStreamGraphContext implements StreamGraphContext {
         if (sourceForwardGroup == null || targetForwardGroup == null) {
             return false;
         }
-
-        if (!ForwardGroupComputeUtil.canTargetMergeIntoSourceForwardGroup(
-                sourceForwardGroup, targetForwardGroup)) {
+        if (!sourceForwardGroup.mergeForwardGroup(targetForwardGroup)) {
             return false;
         }
-
-        // sanity check
-        checkState(sourceForwardGroup.mergeForwardGroup(targetForwardGroup));
         // Update forwardGroupsByStartNodeIdCache.
         targetForwardGroup
                 .getStartNodes()

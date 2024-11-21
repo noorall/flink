@@ -74,7 +74,6 @@ class StreamNodeForwardGroupTest {
 
         StreamNodeForwardGroup forwardGroupWithLargerMaxParallelism =
                 createForwardGroupWithSingleNode(createStreamNode(3, 2, 5));
-
         // The target max parallelism is larger than source.
         assertThat(forwardGroup.mergeForwardGroup(forwardGroupWithLargerMaxParallelism)).isTrue();
         assertThat(forwardGroup.getMaxParallelism()).isEqualTo(4);
@@ -82,6 +81,7 @@ class StreamNodeForwardGroupTest {
         StreamNodeForwardGroup forwardGroupWithSmallerMaxParallelism =
                 createForwardGroupWithSingleNode(createStreamNode(4, 2, 3));
         assertThat(forwardGroup.mergeForwardGroup(forwardGroupWithSmallerMaxParallelism)).isTrue();
+        assertThat(forwardGroup.getMaxParallelism()).isEqualTo(3);
 
         StreamNodeForwardGroup forwardGroupWithMaxParallelismSmallerThanSourceParallelism =
                 createForwardGroupWithSingleNode(createStreamNode(5, -1, 1));
@@ -97,7 +97,6 @@ class StreamNodeForwardGroupTest {
         StreamNodeForwardGroup forwardGroupWithUndefinedParallelism =
                 createForwardGroupWithSingleNode(createStreamNode(7, -1, 2));
         assertThat(forwardGroup.mergeForwardGroup(forwardGroupWithUndefinedParallelism)).isTrue();
-
         assertThat(forwardGroup.size()).isEqualTo(6);
         assertThat(forwardGroup.getParallelism()).isEqualTo(2);
         assertThat(forwardGroup.getMaxParallelism()).isEqualTo(2);
