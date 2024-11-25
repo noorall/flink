@@ -29,7 +29,6 @@ import org.apache.flink.streaming.api.graph.StreamNode;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
@@ -62,24 +61,69 @@ public class ForwardGroupComputeUtil {
             final Iterable<JobVertex> topologicallySortedVertices,
             final Function<JobVertex, Set<JobVertex>> forwardProducersRetriever) {
 
-        final Map<JobVertex, Set<JobVertex>> vertexToGroup = new IdentityHashMap<>();
+        final Map<JobVertex, Set<JobVertex>> vertexToGroup =
+                computeVertexToGroup(topologicallySortedVertices, forwardProducersRetriever);
+
+        final Map<JobVertexID, JobVertexForwardGroup> ret = new HashMap<>();
+        for (Set<JobVertex> vertexGroup :
+                VertexGroupComputeUtil.uniqueVertexGroups(vertexToGroup)) {
+            if (vertexGroup.size() > 1) {
+                JobVertexForwardGroup forwardGroup = new JobVertexForwardGroup(vertexGroup);
+                for (JobVertexID jobVertexId : forwardGroup.getVertexIds()) {
+                    ret.put(jobVertexId, forwardGroup);
+                }
+            }
+        }
+        return ret;
+    }
+
+    /**
+     * We calculate forward group by a set of stream nodes.
+     *
+     * @param topologicallySortedStreamNodes topologically sorted chained stream nodes
+     * @param forwardProducersRetriever records all upstream stream nodes which connected to the
+     *     given stream node with forward edge
+     * @return a map of forward groups, with the stream node id as the key
+     */
+    public static Map<Integer, StreamNodeForwardGroup> computeStreamNodeForwardGroup(
+            final Iterable<StreamNode> topologicallySortedStreamNodes,
+            final Function<StreamNode, Set<StreamNode>> forwardProducersRetriever) {
+        // In the forwardProducersRetriever, only the upstream nodes connected to the given start
+        // node by the forward edge are saved. We need to calculate the chain groups that can be
+        // accessed with consecutive forward edges and put them in the same forward group.
+        final Map<StreamNode, Set<StreamNode>> nodeToGroup =
+                computeVertexToGroup(topologicallySortedStreamNodes, forwardProducersRetriever);
+        final Map<Integer, StreamNodeForwardGroup> ret = new HashMap<>();
+        for (Set<StreamNode> nodeGroup : VertexGroupComputeUtil.uniqueVertexGroups(nodeToGroup)) {
+            StreamNodeForwardGroup forwardGroup = new StreamNodeForwardGroup(nodeGroup);
+            for (Integer vertexId : forwardGroup.getVertexIds()) {
+                ret.put(vertexId, forwardGroup);
+            }
+        }
+        return ret;
+    }
+
+    private static <T> Map<T, Set<T>> computeVertexToGroup(
+            final Iterable<T> topologicallySortedVertices,
+            final Function<T, Set<T>> forwardProducersRetriever) {
+        final Map<T, Set<T>> vertexToGroup = new IdentityHashMap<>();
 
         // iterate all the vertices which are topologically sorted
-        for (JobVertex vertex : topologicallySortedVertices) {
-            Set<JobVertex> currentGroup = new HashSet<>();
+        for (T vertex : topologicallySortedVertices) {
+            Set<T> currentGroup = new HashSet<>();
             currentGroup.add(vertex);
             vertexToGroup.put(vertex, currentGroup);
 
-            for (JobVertex producerVertex : forwardProducersRetriever.apply(vertex)) {
-                final Set<JobVertex> producerGroup = vertexToGroup.get(producerVertex);
+            for (T producerVertex : forwardProducersRetriever.apply(vertex)) {
+                final Set<T> producerGroup = vertexToGroup.get(producerVertex);
 
                 if (producerGroup == null) {
                     throw new IllegalStateException(
                             "Producer task "
-                                    + producerVertex.getID()
+                                    + producerVertex
                                     + " forward group is null"
                                     + " while calculating forward group for the consumer task "
-                                    + vertex.getID()
+                                    + vertex
                                     + ". This should be a forward group building bug.");
                 }
 
@@ -90,77 +134,7 @@ public class ForwardGroupComputeUtil {
                 }
             }
         }
-
-        final Map<JobVertexID, JobVertexForwardGroup> ret = new HashMap<>();
-        for (Set<JobVertex> vertexGroup :
-                VertexGroupComputeUtil.uniqueVertexGroups(vertexToGroup)) {
-            if (vertexGroup.size() > 1) {
-                JobVertexForwardGroup forwardGroup = new JobVertexForwardGroup(vertexGroup);
-                for (JobVertexID jobVertexId : forwardGroup.getJobVertexIds()) {
-                    ret.put(jobVertexId, forwardGroup);
-                }
-            }
-        }
-        return ret;
-    }
-
-    /**
-     * We calculate forward group by a set of chained stream nodes, and use the start node to
-     * identify the chain group.
-     *
-     * @param topologicallySortedChainedStreamNodesMap Topologically sorted chained stream nodes.
-     * @param forwardProducersRetriever Records all upstream chain groups which connected to the
-     *     given chain group with forward edge.
-     * @return a map of forward groups, with the start node id as the key.
-     */
-    public static Map<Integer, StreamNodeForwardGroup> computeStreamNodeForwardGroup(
-            final Map<StreamNode, List<StreamNode>> topologicallySortedChainedStreamNodesMap,
-            final Function<StreamNode, Set<StreamNode>> forwardProducersRetriever) {
-        // In the forwardProducersRetriever, only the upstream nodes connected to the given start
-        // node by the forward edge are saved. We need to calculate the chain groups that can be
-        // accessed with consecutive forward edges and put them in the same forward group.
-        final Map<StreamNode, Set<StreamNode>> nodeToGroup = new IdentityHashMap<>();
-        for (StreamNode currentNode : topologicallySortedChainedStreamNodesMap.keySet()) {
-            Set<StreamNode> currentGroup = new HashSet<>();
-            currentGroup.add(currentNode);
-            nodeToGroup.put(currentNode, currentGroup);
-            for (StreamNode producerNode : forwardProducersRetriever.apply(currentNode)) {
-                // Merge nodes from the current group and producer group.
-                final Set<StreamNode> producerGroup = nodeToGroup.get(producerNode);
-                // The producerGroup cannot be null unless the topological order is incorrect.
-                if (producerGroup == null) {
-                    throw new IllegalStateException(
-                            "Producer task "
-                                    + producerNode.getId()
-                                    + " forward group is null"
-                                    + " while calculating forward group for the consumer task "
-                                    + currentNode.getId()
-                                    + ". This should be a forward group building bug.");
-                }
-                // Merge the forward group groups where the upstream and downstream are connected by
-                // forward edge
-                if (currentGroup != producerGroup) {
-                    currentGroup =
-                            VertexGroupComputeUtil.mergeVertexGroups(
-                                    currentGroup, producerGroup, nodeToGroup);
-                }
-            }
-        }
-        final Map<Integer, StreamNodeForwardGroup> result = new IdentityHashMap<>();
-        for (Set<StreamNode> nodeGroup : VertexGroupComputeUtil.uniqueVertexGroups(nodeToGroup)) {
-            Map<StreamNode, List<StreamNode>> chainedStreamNodeGroupsByStartNode = new HashMap<>();
-            nodeGroup.forEach(
-                    startNode -> {
-                        chainedStreamNodeGroupsByStartNode.put(
-                                startNode, topologicallySortedChainedStreamNodesMap.get(startNode));
-                    });
-            StreamNodeForwardGroup streamNodeForwardGroup =
-                    new StreamNodeForwardGroup(chainedStreamNodeGroupsByStartNode);
-            for (StreamNode startNode : streamNodeForwardGroup.getStartNodes()) {
-                result.put(startNode.getId(), streamNodeForwardGroup);
-            }
-        }
-        return result;
+        return vertexToGroup;
     }
 
     /**
@@ -171,7 +145,7 @@ public class ForwardGroupComputeUtil {
      * @return whether the merge is valid.
      */
     public static boolean canTargetMergeIntoSourceForwardGroup(
-            ForwardGroup sourceForwardGroup, ForwardGroup forwardGroupToMerge) {
+            ForwardGroup<?> sourceForwardGroup, ForwardGroup<?> forwardGroupToMerge) {
         if (sourceForwardGroup == null || forwardGroupToMerge == null) {
             return false;
         }

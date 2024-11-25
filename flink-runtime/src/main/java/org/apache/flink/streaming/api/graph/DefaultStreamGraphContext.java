@@ -51,7 +51,7 @@ public class DefaultStreamGraphContext implements StreamGraphContext {
     // A modifiable map which records the ids of the start and end nodes for chained groups in the
     // StreamNodeForwardGroup. When stream edge's partitioner is modified to forward, we need get
     // forward groups by source and target node id and merge them.
-    private final Map<Integer, StreamNodeForwardGroup> startAndEndNodeIdToForwardGroupMap;
+    private final Map<Integer, StreamNodeForwardGroup> steamNodeIdToForwardGroupMap;
     // A read only map which records the id of stream node which job vertex is created, used to
     // ensure that the stream nodes involved in the modification have not yet created job vertices.
     private final Map<Integer, Integer> frozenNodeToStartNodeMap;
@@ -64,11 +64,11 @@ public class DefaultStreamGraphContext implements StreamGraphContext {
 
     public DefaultStreamGraphContext(
             StreamGraph streamGraph,
-            Map<Integer, StreamNodeForwardGroup> startAndEndNodeIdToForwardGroupMap,
+            Map<Integer, StreamNodeForwardGroup> steamNodeIdToForwardGroupMap,
             Map<Integer, Integer> frozenNodeToStartNodeMap,
             Map<Integer, Map<StreamEdge, NonChainedOutput>> opIntermediateOutputsCaches) {
         this.streamGraph = checkNotNull(streamGraph);
-        this.startAndEndNodeIdToForwardGroupMap = checkNotNull(startAndEndNodeIdToForwardGroupMap);
+        this.steamNodeIdToForwardGroupMap = checkNotNull(steamNodeIdToForwardGroupMap);
         this.frozenNodeToStartNodeMap = checkNotNull(frozenNodeToStartNodeMap);
         this.opIntermediateOutputsCaches = checkNotNull(opIntermediateOutputsCaches);
         this.immutableStreamGraph = new ImmutableStreamGraph(this.streamGraph);
@@ -199,23 +199,18 @@ public class DefaultStreamGraphContext implements StreamGraphContext {
     }
 
     private boolean mergeForwardGroups(Integer sourceNodeId, Integer targetNodeId) {
-        StreamNodeForwardGroup sourceForwardGroup =
-                startAndEndNodeIdToForwardGroupMap.get(sourceNodeId);
-        StreamNodeForwardGroup targetForwardGroup =
-                startAndEndNodeIdToForwardGroupMap.get(targetNodeId);
-        if (sourceForwardGroup == null || targetForwardGroup == null) {
+        StreamNodeForwardGroup sourceForwardGroup = steamNodeIdToForwardGroupMap.get(sourceNodeId);
+        StreamNodeForwardGroup forwardGroupToMerge = steamNodeIdToForwardGroupMap.get(targetNodeId);
+        if (sourceForwardGroup == null || forwardGroupToMerge == null) {
             return false;
         }
-        if (!sourceForwardGroup.mergeForwardGroup(targetForwardGroup)) {
+        if (!sourceForwardGroup.mergeForwardGroup(forwardGroupToMerge, streamGraph)) {
             return false;
         }
         // Update forwardGroupsByStartNodeIdCache.
-        targetForwardGroup
-                .getStartNodes()
-                .forEach(
-                        startNode ->
-                                startAndEndNodeIdToForwardGroupMap.put(
-                                        startNode.getId(), sourceForwardGroup));
+        forwardGroupToMerge
+                .getVertexIds()
+                .forEach(nodeId -> steamNodeIdToForwardGroupMap.put(nodeId, sourceForwardGroup));
         return true;
     }
 

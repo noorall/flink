@@ -21,12 +21,11 @@ package org.apache.flink.runtime.jobgraph.forwardgroup;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.ExecutionConfig;
 import org.apache.flink.runtime.jobgraph.JobVertex;
+import org.apache.flink.streaming.api.graph.StreamGraph;
 import org.apache.flink.streaming.api.graph.StreamNode;
 
 import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.HashSet;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -34,35 +33,36 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
 import static org.apache.flink.util.Preconditions.checkState;
 
 /** Stream node level implement for {@link ForwardGroup}. */
-public class StreamNodeForwardGroup implements ForwardGroup {
+public class StreamNodeForwardGroup implements ForwardGroup<Integer> {
 
     private int parallelism = ExecutionConfig.PARALLELISM_DEFAULT;
 
     private int maxParallelism = JobVertex.MAX_PARALLELISM_DEFAULT;
 
-    private final Map<StreamNode, List<StreamNode>> chainedStreamNodeGroupsByStartNode =
-            new HashMap<>();
+    private final Set<Integer> streamNodeIds = new HashSet<>();
 
     // For a group of chained stream nodes, their parallelism is consistent. In order to make
     // calculation and usage easier, we only use the start node to calculate forward group.
-    public StreamNodeForwardGroup(
-            final Map<StreamNode, List<StreamNode>> chainedStreamNodeGroupsByStartNode) {
-        checkNotNull(chainedStreamNodeGroupsByStartNode);
+    public StreamNodeForwardGroup(final Set<StreamNode> streamNodes) {
+        checkNotNull(streamNodes);
 
         Set<Integer> configuredParallelisms =
-                chainedStreamNodeGroupsByStartNode.keySet().stream()
+                streamNodes.stream()
+                        .filter(
+                                streamNode -> {
+                                    streamNodeIds.add(streamNode.getId());
+                                    return streamNode.getParallelism() > 0;
+                                })
                         .map(StreamNode::getParallelism)
-                        .filter(val -> val > 0)
                         .collect(Collectors.toSet());
 
         checkState(configuredParallelisms.size() <= 1);
-
         if (configuredParallelisms.size() == 1) {
             this.parallelism = configuredParallelisms.iterator().next();
         }
 
         Set<Integer> configuredMaxParallelisms =
-                chainedStreamNodeGroupsByStartNode.keySet().stream()
+                streamNodes.stream()
                         .map(StreamNode::getMaxParallelism)
                         .filter(val -> val > 0)
                         .collect(Collectors.toSet());
@@ -74,8 +74,6 @@ public class StreamNodeForwardGroup implements ForwardGroup {
                             || maxParallelism >= parallelism,
                     "There is a start node in the forward group whose maximum parallelism is smaller than the group's parallelism");
         }
-
-        this.chainedStreamNodeGroupsByStartNode.putAll(chainedStreamNodeGroupsByStartNode);
     }
 
     @Override
@@ -96,6 +94,15 @@ public class StreamNodeForwardGroup implements ForwardGroup {
     }
 
     @Override
+    public void setMaxParallelism(int maxParallelism) {
+        checkState(
+                maxParallelism == ExecutionConfig.PARALLELISM_DEFAULT
+                        || maxParallelism >= parallelism,
+                "There is a job vertex in the forward group whose maximum parallelism is smaller than the group's parallelism");
+        this.maxParallelism = maxParallelism;
+    }
+
+    @Override
     public boolean isMaxParallelismDecided() {
         return maxParallelism > 0;
     }
@@ -106,27 +113,20 @@ public class StreamNodeForwardGroup implements ForwardGroup {
         return maxParallelism;
     }
 
-    @VisibleForTesting
-    public int size() {
-        return chainedStreamNodeGroupsByStartNode.values().stream().mapToInt(List::size).sum();
-    }
-
-    public Iterable<StreamNode> getStartNodes() {
-        return chainedStreamNodeGroupsByStartNode.keySet();
-    }
-
-    public Iterable<List<StreamNode>> getChainedStreamNodeGroups() {
-        return chainedStreamNodeGroupsByStartNode.values();
+    @Override
+    public Set<Integer> getVertexIds() {
+        return streamNodeIds;
     }
 
     /**
-     * Responds to merge forwardGroupToMerge into this and update the parallelism information for
-     * stream nodes in merged forward group.
+     * Merges forwardGroupToMerge into this and update the parallelism information for stream nodes
+     * in merged forward group.
      *
      * @param forwardGroupToMerge The forward group to be merged.
      * @return whether the merge was successful.
      */
-    public boolean mergeForwardGroup(StreamNodeForwardGroup forwardGroupToMerge) {
+    public boolean mergeForwardGroup(
+            StreamNodeForwardGroup forwardGroupToMerge, StreamGraph streamGraph) {
         checkNotNull(forwardGroupToMerge);
 
         if (forwardGroupToMerge == this) {
@@ -140,10 +140,10 @@ public class StreamNodeForwardGroup implements ForwardGroup {
 
         if (this.isParallelismDecided() && !forwardGroupToMerge.isParallelismDecided()) {
             forwardGroupToMerge.parallelism = this.parallelism;
-            forwardGroupToMerge.updateNodeParallelism();
+            forwardGroupToMerge.updateNodeParallelism(streamGraph);
         } else if (!this.isParallelismDecided() && forwardGroupToMerge.isParallelismDecided()) {
             this.parallelism = forwardGroupToMerge.parallelism;
-            this.updateNodeParallelism();
+            this.updateNodeParallelism(streamGraph);
         } else {
             checkState(this.parallelism == forwardGroupToMerge.parallelism);
         }
@@ -151,49 +151,38 @@ public class StreamNodeForwardGroup implements ForwardGroup {
         if (forwardGroupToMerge.isMaxParallelismDecided()
                 && (!this.isMaxParallelismDecided()
                         || this.maxParallelism > forwardGroupToMerge.maxParallelism)) {
-            this.maxParallelism = forwardGroupToMerge.maxParallelism;
-            checkState(
-                    parallelism == ExecutionConfig.PARALLELISM_DEFAULT
-                            || maxParallelism >= parallelism);
-            this.updateNodeMaxParallelism();
+            this.setMaxParallelism(forwardGroupToMerge.maxParallelism);
+            this.updateNodeMaxParallelism(streamGraph);
         } else if (this.isMaxParallelismDecided()
                 && (!forwardGroupToMerge.isMaxParallelismDecided()
                         || forwardGroupToMerge.maxParallelism > this.maxParallelism)) {
-            forwardGroupToMerge.maxParallelism = this.maxParallelism;
-            checkState(
-                    forwardGroupToMerge.parallelism == ExecutionConfig.PARALLELISM_DEFAULT
-                            || forwardGroupToMerge.maxParallelism
-                                    >= forwardGroupToMerge.parallelism);
-            forwardGroupToMerge.updateNodeMaxParallelism();
+            forwardGroupToMerge.setMaxParallelism(this.maxParallelism);
+            forwardGroupToMerge.updateNodeMaxParallelism(streamGraph);
         } else {
             checkState(this.maxParallelism == forwardGroupToMerge.maxParallelism);
         }
 
-        this.chainedStreamNodeGroupsByStartNode.putAll(
-                forwardGroupToMerge.chainedStreamNodeGroupsByStartNode);
+        this.streamNodeIds.addAll(forwardGroupToMerge.streamNodeIds);
 
         return true;
     }
 
-    private void updateNodeParallelism() {
-        chainedStreamNodeGroupsByStartNode
-                .values()
-                .forEach(
-                        streamNodes ->
-                                streamNodes.forEach(
-                                        streamNode -> {
-                                            streamNode.setParallelism(this.parallelism);
-                                        }));
+    private void updateNodeParallelism(StreamGraph streamGraph) {
+        streamNodeIds.forEach(
+                streamNodeId -> {
+                    streamGraph.getStreamNode(streamNodeId).setParallelism(parallelism);
+                });
     }
 
-    private void updateNodeMaxParallelism() {
-        chainedStreamNodeGroupsByStartNode
-                .values()
-                .forEach(
-                        streamNodes ->
-                                streamNodes.forEach(
-                                        streamNode -> {
-                                            streamNode.setMaxParallelism(this.maxParallelism);
-                                        }));
+    private void updateNodeMaxParallelism(StreamGraph streamGraph) {
+        streamNodeIds.forEach(
+                streamNodeId -> {
+                    streamGraph.getStreamNode(streamNodeId).setMaxParallelism(maxParallelism);
+                });
+    }
+
+    @VisibleForTesting
+    public int size() {
+        return streamNodeIds.size();
     }
 }

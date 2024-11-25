@@ -33,7 +33,7 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
 import static org.apache.flink.util.Preconditions.checkState;
 
 /** Job vertex level implement for {@link ForwardGroup}. */
-public class JobVertexForwardGroup implements ForwardGroup {
+public class JobVertexForwardGroup implements ForwardGroup<JobVertexID> {
 
     private int parallelism = ExecutionConfig.PARALLELISM_DEFAULT;
 
@@ -91,6 +91,15 @@ public class JobVertexForwardGroup implements ForwardGroup {
     }
 
     @Override
+    public void setMaxParallelism(int maxParallelism) {
+        checkState(
+                maxParallelism == ExecutionConfig.PARALLELISM_DEFAULT
+                        || maxParallelism >= parallelism,
+                "There is a job vertex in the forward group whose maximum parallelism is smaller than the group's parallelism");
+        this.maxParallelism = maxParallelism;
+    }
+
+    @Override
     public boolean isMaxParallelismDecided() {
         return maxParallelism > 0;
     }
@@ -101,12 +110,13 @@ public class JobVertexForwardGroup implements ForwardGroup {
         return maxParallelism;
     }
 
+    @Override
+    public Set<JobVertexID> getVertexIds() {
+        return jobVertexIds;
+    }
+
     @VisibleForTesting
     public int size() {
         return jobVertexIds.size();
-    }
-
-    public Set<JobVertexID> getJobVertexIds() {
-        return jobVertexIds;
     }
 }

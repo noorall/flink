@@ -63,26 +63,18 @@ class ForwardGroupComputeUtilTest {
         JobVertex v2 = new JobVertex("v2");
         JobVertex v3 = new JobVertex("v3");
 
-        Set<ForwardGroup> groups = computeForwardGroups(v1, v2, v3);
+        Set<ForwardGroup<?>> groups = computeForwardGroups(v1, v2, v3);
 
         checkGroupSize(groups, 0);
     }
 
     @Test
     void testIsolatedChainedStreamNodeGroups() throws Exception {
-        Map<StreamNode, List<StreamNode>> topologicallySortedChainedStreamNodeByStartNode =
-                new LinkedHashMap<>();
+        List<StreamNode> topologicallySortedStreamNodes = createStreamNodes(3);
         Map<StreamNode, Set<StreamNode>> forwardProducersByStartNode = Collections.emptyMap();
-        for (int i = 1; i <= 3; ++i) {
-            StreamNode streamNode = createStreamNode(i);
-            topologicallySortedChainedStreamNodeByStartNode.put(
-                    streamNode, Collections.singletonList(streamNode));
-        }
 
-        Set<ForwardGroup> groups =
-                computeForwardGroups(
-                        topologicallySortedChainedStreamNodeByStartNode,
-                        forwardProducersByStartNode);
+        Set<ForwardGroup<?>> groups =
+                computeForwardGroups(topologicallySortedStreamNodes, forwardProducersByStartNode);
 
         // Different from the job vertex forward group, the stream node forward group is allowed to
         // contain only one single stream node, as these groups may merge with other groups in the
@@ -127,7 +119,7 @@ class ForwardGroupComputeUtilTest {
             v2.getProducedDataSets().get(0).getConsumers().get(0).setForward(true);
         }
 
-        Set<ForwardGroup> groups = computeForwardGroups(v1, v2, v3);
+        Set<ForwardGroup<?>> groups = computeForwardGroups(v1, v2, v3);
 
         checkGroupSize(groups, numOfGroups, groupSizes);
     }
@@ -142,17 +134,11 @@ class ForwardGroupComputeUtilTest {
     private void testThreeChainedStreamNodeGroupsConnectSequentially(
             boolean isForward1, boolean isForward2, int numOfGroups, Integer... groupSizes)
             throws Exception {
-        List<StreamNode> startNodes = new ArrayList<>();
-        Map<StreamNode, List<StreamNode>> topologicallySortedChainedStreamNodeByStartNode =
-                new HashMap<>();
-        Map<StreamNode, Set<StreamNode>> forwardProducersByStartNode = new HashMap<>();
+        List<StreamNode> topologicallySortedStreamNodes = new ArrayList<>();
+        Map<StreamNode, Set<StreamNode>> forwardProducersByStartNode = Collections.emptyMap();
 
         for (int i = 1; i <= 3; i++) {
-            StreamNode streamNode = createStreamNode(i);
-            startNodes.add(streamNode);
-            topologicallySortedChainedStreamNodeByStartNode
-                    .computeIfAbsent(streamNode, k -> new ArrayList<>())
-                    .add(streamNode);
+            topologicallySortedStreamNodes.add(createStreamNode(i));
         }
 
         if (isForward1) {
@@ -167,7 +153,7 @@ class ForwardGroupComputeUtilTest {
                     .add(startNodes.get(1));
         }
 
-        Set<ForwardGroup> groups =
+        Set<ForwardGroup<?>> groups =
                 computeForwardGroups(
                         topologicallySortedChainedStreamNodeByStartNode,
                         forwardProducersByStartNode);
@@ -205,7 +191,7 @@ class ForwardGroupComputeUtilTest {
         v4.connectNewDataSetAsInput(
                 v3, DistributionPattern.ALL_TO_ALL, ResultPartitionType.BLOCKING);
 
-        Set<ForwardGroup> groups = computeForwardGroups(v1, v2, v3, v4);
+        Set<ForwardGroup<?>> groups = computeForwardGroups(v1, v2, v3, v4);
 
         checkGroupSize(groups, 1, 3);
     }
@@ -233,7 +219,7 @@ class ForwardGroupComputeUtilTest {
                 .computeIfAbsent(startNodes.get(2), k -> new HashSet<>())
                 .add(startNodes.get(1));
 
-        Set<ForwardGroup> groups =
+        Set<ForwardGroup<?>> groups =
                 computeForwardGroups(
                         topologicallySortedChainedStreamNodeByStartNode,
                         forwardProducersByStartNode);
@@ -271,7 +257,7 @@ class ForwardGroupComputeUtilTest {
         v2.getProducedDataSets().get(0).getConsumers().get(0).setForward(true);
         v2.getProducedDataSets().get(1).getConsumers().get(0).setForward(true);
 
-        Set<ForwardGroup> groups = computeForwardGroups(v1, v2, v3, v4);
+        Set<ForwardGroup<?>> groups = computeForwardGroups(v1, v2, v3, v4);
 
         checkGroupSize(groups, 1, 3);
     }
@@ -299,7 +285,7 @@ class ForwardGroupComputeUtilTest {
                 .computeIfAbsent(startNodes.get(2), k -> new HashSet<>())
                 .add(startNodes.get(1));
 
-        Set<ForwardGroup> groups =
+        Set<ForwardGroup<?>> groups =
                 computeForwardGroups(
                         topologicallySortedChainedStreamNodeByStartNode,
                         forwardProducersByStartNode);
@@ -307,7 +293,7 @@ class ForwardGroupComputeUtilTest {
         checkGroupSize(groups, 2, 3, 1);
     }
 
-    private static Set<ForwardGroup> computeForwardGroups(JobVertex... vertices) {
+    private static Set<ForwardGroup<?>> computeForwardGroups(JobVertex... vertices) {
         Arrays.asList(vertices).forEach(vertex -> vertex.setInvokableClass(NoOpInvokable.class));
         return new HashSet<>(
                 ForwardGroupComputeUtil.computeForwardGroupsAndCheckParallelism(
@@ -316,7 +302,7 @@ class ForwardGroupComputeUtilTest {
     }
 
     private static void checkGroupSize(
-            Set<ForwardGroup> groups, int numOfGroups, Integer... sizes) {
+            Set<ForwardGroup<?>> groups, int numOfGroups, Integer... sizes) {
         assertThat(groups.size()).isEqualTo(numOfGroups);
         assertThat(
                         groups.stream()
@@ -336,38 +322,41 @@ class ForwardGroupComputeUtilTest {
         return new StreamNode(id, null, null, (StreamOperator<?>) null, null, null);
     }
 
-    private static Set<ForwardGroup> computeForwardGroups(
-            Map<StreamNode, List<StreamNode>> topologicallySortedChainedStreamNodeByStartNode,
-            Map<StreamNode, Set<StreamNode>> forwardProducersByStartNode) {
+    private static List<StreamNode> createStreamNodes(int count) {
+        List<StreamNode> streamNodes = new ArrayList<>();
+        for (int i = 1; i <= count; i++) {
+            streamNodes.add(new StreamNode(i, null, null, (StreamOperator<?>) null, null, null));
+        }
+        return streamNodes;
+    }
+
+    private static Set<ForwardGroup<?>> computeForwardGroups(
+            List<StreamNode> topologicallySortedStreamNodes,
+            Map<StreamNode, Set<StreamNode>> forwardProducersByConsumerNodeId) {
         return new HashSet<>(
                 computeStreamNodeForwardGroupAndCheckParallelism(
-                                topologicallySortedChainedStreamNodeByStartNode,
-                                startNodeId ->
-                                        forwardProducersByStartNode.getOrDefault(
-                                                startNodeId, Collections.emptySet()))
+                                topologicallySortedStreamNodes,
+                                id ->
+                                        forwardProducersByConsumerNodeId.getOrDefault(
+                                                id, Collections.emptySet()))
                         .values());
     }
 
     public static Map<Integer, StreamNodeForwardGroup>
             computeStreamNodeForwardGroupAndCheckParallelism(
-                    final Map<StreamNode, List<StreamNode>>
-                            topologicallySortedChainedStreamNodesMap,
+                    final Iterable<StreamNode> topologicallySortedStreamNodes,
                     final Function<StreamNode, Set<StreamNode>> forwardProducersRetriever) {
         final Map<Integer, StreamNodeForwardGroup> forwardGroupsByStartNodeId =
                 computeStreamNodeForwardGroup(
-                        topologicallySortedChainedStreamNodesMap, forwardProducersRetriever);
-        topologicallySortedChainedStreamNodesMap
-                .keySet()
-                .forEach(
-                        startNode -> {
-                            StreamNodeForwardGroup forwardGroup =
-                                    forwardGroupsByStartNodeId.get(startNode.getId());
-                            if (forwardGroup != null && forwardGroup.isParallelismDecided()) {
-                                checkState(
-                                        startNode.getParallelism()
-                                                == forwardGroup.getParallelism());
-                            }
-                        });
+                        topologicallySortedStreamNodes, forwardProducersRetriever);
+        topologicallySortedStreamNodes.forEach(
+                startNode -> {
+                    StreamNodeForwardGroup forwardGroup =
+                            forwardGroupsByStartNodeId.get(startNode.getId());
+                    if (forwardGroup != null && forwardGroup.isParallelismDecided()) {
+                        checkState(startNode.getParallelism() == forwardGroup.getParallelism());
+                    }
+                });
         return forwardGroupsByStartNodeId;
     }
 }

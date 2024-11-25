@@ -19,12 +19,14 @@
 
 package org.apache.flink.runtime.jobgraph.forwardgroup;
 
+import java.util.Set;
+
 /**
  * A forward group is a set of job vertices or stream nodes connected via forward edges.
  * Parallelisms of all job vertices or stream nodes in the same {@link ForwardGroup} must be the
  * same.
  */
-public interface ForwardGroup {
+public interface ForwardGroup<T> {
 
     /**
      * Sets the parallelism for this forward group.
@@ -48,6 +50,13 @@ public interface ForwardGroup {
     int getParallelism();
 
     /**
+     * Sets the max parallelism for this forward group.
+     *
+     * @param maxParallelism the max parallelism to set.
+     */
+    void setMaxParallelism(int maxParallelism);
+
+    /**
      * Returns if max parallelism has been decided for this forward group.
      *
      * @return is max parallelism decided for this forward group.
@@ -60,4 +69,11 @@ public interface ForwardGroup {
      * @return max parallelism for this forward group.
      */
     int getMaxParallelism();
+
+    /**
+     * Returns the vertex ids in this forward group.
+     *
+     * @return vertex ids in this forward group.
+     */
+    Set<T> getVertexIds();
 }
