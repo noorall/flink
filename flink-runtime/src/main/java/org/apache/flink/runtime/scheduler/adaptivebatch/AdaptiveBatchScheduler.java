@@ -682,7 +682,7 @@ public class AdaptiveBatchScheduler extends DefaultScheduler {
             // the ordering of these elements received by the committer cannot be assured, which
             // would break the assumption that CommittableSummary is received before
             // CommittableWithLineage.
-            for (JobVertexID jobVertexId : forwardGroup.getJobVertexIds()) {
+            for (JobVertexID jobVertexId : forwardGroup.getVertexIds()) {
                 ExecutionJobVertex executionJobVertex = getExecutionJobVertex(jobVertexId);
                 if (!executionJobVertex.isParallelismDecided()) {
                     log.info(
