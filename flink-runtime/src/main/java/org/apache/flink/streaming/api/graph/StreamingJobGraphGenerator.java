@@ -623,7 +623,7 @@ public class StreamingJobGraphGenerator {
         if (!jobVertexBuildContext.getJobVerticesInOrder().containsKey(startNodeId)) {
             StreamGraph streamGraph = jobVertexBuildContext.getStreamGraph();
 
-            // Adaptive graph generator needs to subscribe the visited stream node IDs to
+            // Adaptive graph generator needs to subscribe the visited stream node id to
             // generate hashes for it.
             if (visitedStreamNodeConsumer != null) {
                 visitedStreamNodeConsumer.accept(currentNodeId);
