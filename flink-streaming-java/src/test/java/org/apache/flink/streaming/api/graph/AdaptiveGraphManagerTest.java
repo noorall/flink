@@ -27,12 +27,14 @@ import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.jobgraph.JobVertex;
-import org.apache.flink.shaded.guava32.com.google.common.collect.Iterables;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.sink.v2.DiscardingSink;
 import org.apache.flink.streaming.api.operators.ChainingStrategy;
 import org.apache.flink.streaming.api.transformations.MultipleInputTransformation;
+
+import org.apache.flink.shaded.guava32.com.google.common.collect.Iterables;
+
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;

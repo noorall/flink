@@ -20,6 +20,7 @@ package org.apache.flink.streaming.api.graph;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.jobgraph.JobVertex;
+
 import org.apache.flink.shaded.guava32.com.google.common.collect.Iterables;
 
 /** Tests for {@link StreamingJobGraphGenerator}. */
