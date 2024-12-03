@@ -50,7 +50,8 @@ public class StreamNodeForwardGroup implements ForwardGroup<Integer> {
                         .filter(
                                 streamNode -> {
                                     streamNodeIds.add(streamNode.getId());
-                                    return streamNode.getParallelism() > 0;
+                                    return streamNode.isParallelismConfigured()
+                                            && streamNode.getParallelism() > 0;
                                 })
                         .map(StreamNode::getParallelism)
                         .collect(Collectors.toSet());
