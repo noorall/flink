@@ -860,32 +860,32 @@ public class StreamingJobGraphGenerator {
 
         jobVertices.forEach(
                 (startNodeId, jobVertex) -> {
-                    ForwardGroup forwardGroup = forwardGroupsByJobVertexId.get(jobVertex.getID());
                     // set parallelism for vertices in forward group
-                    if (forwardGroup != null && forwardGroup.isParallelismDecided()) {
-                        jobVertex.setParallelism(forwardGroup.getParallelism());
-                        jobVertex.setParallelismConfigured(true);
-                        jobVertexBuildContext
-                                .getChainInfo(startNodeId)
-                                .getAllChainedNodes()
-                                .forEach(
-                                        streamNode ->
-                                                streamNode.setParallelism(
-                                                        forwardGroup.getParallelism(), true));
-                    }
-
-                    // set max parallelism for vertices in forward group
-                    if (forwardGroup != null && forwardGroup.isMaxParallelismDecided()) {
-                        jobVertex.setMaxParallelism(forwardGroup.getMaxParallelism());
-                        jobVertexBuildContext
-                                .getChainInfo(startNodeId)
-                                .getAllChainedNodes()
-                                .forEach(
-                                        streamNode ->
-                                                streamNode.setMaxParallelism(
-                                                        forwardGroup.getMaxParallelism()));
-                    }
+                    setVertexParallelismInfo(
+                            jobVertex,
+                            forwardGroupsByJobVertexId.get(jobVertex.getID()),
+                            jobVertexBuildContext.getChainInfo(startNodeId).getAllChainedNodes());
                 });
+    }
+
+    public static void setVertexParallelismInfo(
+            JobVertex jobVertex,
+            ForwardGroup<?> forwardGroup,
+            List<StreamNode> chainedStreamNodes) {
+        // set parallelism for vertices in forward group
+        if (forwardGroup != null && forwardGroup.isParallelismDecided()) {
+            jobVertex.setParallelism(forwardGroup.getParallelism());
+            jobVertex.setParallelismConfigured(true);
+            chainedStreamNodes.forEach(
+                    streamNode -> streamNode.setParallelism(forwardGroup.getParallelism(), true));
+        }
+
+        // set max parallelism for vertices in forward group
+        if (forwardGroup != null && forwardGroup.isMaxParallelismDecided()) {
+            jobVertex.setMaxParallelism(forwardGroup.getMaxParallelism());
+            chainedStreamNodes.forEach(
+                    streamNode -> streamNode.setMaxParallelism(forwardGroup.getMaxParallelism()));
+        }
     }
 
     public static JobGraph createAndInitializeJobGraph(
