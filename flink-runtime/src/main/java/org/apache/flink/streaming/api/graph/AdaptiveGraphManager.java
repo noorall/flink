@@ -252,14 +252,10 @@ public class AdaptiveGraphManager implements AdaptiveGraphGenerator {
 
     public int getStreamNodeParallelism(int streamNodeId) {
         ForwardGroup<?> forwardGroup = steamNodeIdToForwardGroupMap.get(streamNodeId);
-        StreamNode streamNode = streamGraph.getStreamNode(streamNodeId);
         if (forwardGroup != null && forwardGroup.isParallelismDecided()) {
             return forwardGroup.getParallelism();
-        } else if (!streamNode.isParallelismConfigured()
-                && streamGraph.isAutoParallelismEnabled()) {
-            return ExecutionConfig.PARALLELISM_DEFAULT;
         } else {
-            return streamNode.getParallelism();
+            return streamGraph.getStreamNode(streamNodeId).getParallelism();
         }
     }
 
