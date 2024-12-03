@@ -24,7 +24,6 @@ import org.apache.flink.runtime.jobgraph.JobVertex;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.streaming.api.graph.AdaptiveGraphManager;
 import org.apache.flink.streaming.api.graph.StreamEdge;
-import org.apache.flink.streaming.api.graph.util.ImmutableStreamNode;
 
 import java.util.List;
 import java.util.Set;
@@ -115,25 +114,17 @@ public class AdaptiveExecutionPlanSchedulingContext implements ExecutionPlanSche
     }
 
     private int getParallelism(int streamNodeId) {
-        return adaptiveGraphManager
-                .getStreamGraphContext()
-                .getStreamGraph()
-                .getStreamNode(streamNodeId)
-                .getParallelism();
+        return adaptiveGraphManager.getStreamNodeParallelism(streamNodeId);
     }
 
     private int getMaxParallelismOrDefault(int streamNodeId) {
-        ImmutableStreamNode streamNode =
-                adaptiveGraphManager
-                        .getStreamGraphContext()
-                        .getStreamGraph()
-                        .getStreamNode(streamNodeId);
-
-        if (streamNode.getMaxParallelism() == JobVertex.MAX_PARALLELISM_DEFAULT) {
+        int maxParallelism = adaptiveGraphManager.getStreamNodeMaxParallelism(streamNodeId);
+        if (maxParallelism == JobVertex.MAX_PARALLELISM_DEFAULT) {
             return AdaptiveBatchScheduler.computeMaxParallelism(
-                    streamNode.getParallelism(), defaultMaxParallelism);
+                    adaptiveGraphManager.getStreamNodeParallelism(streamNodeId),
+                    defaultMaxParallelism);
         } else {
-            return streamNode.getMaxParallelism();
+            return maxParallelism;
         }
     }
 }
