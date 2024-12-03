@@ -26,7 +26,6 @@ import org.apache.flink.streaming.api.graph.StreamNode;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
@@ -125,9 +124,7 @@ public class StreamNodeForwardGroup implements ForwardGroup<Integer> {
      * @param forwardGroupToMerge The forward group to be merged.
      * @return whether the merge was successful.
      */
-    public boolean mergeForwardGroup(
-            final StreamNodeForwardGroup forwardGroupToMerge,
-            final Function<Integer, StreamNode> streamNodeRetriever) {
+    public boolean mergeForwardGroup(final StreamNodeForwardGroup forwardGroupToMerge) {
         checkNotNull(forwardGroupToMerge);
 
         if (forwardGroupToMerge == this) {
@@ -141,10 +138,8 @@ public class StreamNodeForwardGroup implements ForwardGroup<Integer> {
 
         if (this.isParallelismDecided() && !forwardGroupToMerge.isParallelismDecided()) {
             forwardGroupToMerge.parallelism = this.parallelism;
-            forwardGroupToMerge.updateNodeParallelism(streamNodeRetriever);
         } else if (!this.isParallelismDecided() && forwardGroupToMerge.isParallelismDecided()) {
             this.parallelism = forwardGroupToMerge.parallelism;
-            this.updateNodeParallelism(streamNodeRetriever);
         } else {
             checkState(this.parallelism == forwardGroupToMerge.parallelism);
         }
@@ -153,12 +148,10 @@ public class StreamNodeForwardGroup implements ForwardGroup<Integer> {
                 && (!this.isMaxParallelismDecided()
                         || this.maxParallelism > forwardGroupToMerge.maxParallelism)) {
             this.setMaxParallelism(forwardGroupToMerge.maxParallelism);
-            this.updateNodeMaxParallelism(streamNodeRetriever);
         } else if (this.isMaxParallelismDecided()
                 && (!forwardGroupToMerge.isMaxParallelismDecided()
                         || forwardGroupToMerge.maxParallelism > this.maxParallelism)) {
             forwardGroupToMerge.setMaxParallelism(this.maxParallelism);
-            forwardGroupToMerge.updateNodeMaxParallelism(streamNodeRetriever);
         } else {
             checkState(this.maxParallelism == forwardGroupToMerge.maxParallelism);
         }
@@ -166,20 +159,6 @@ public class StreamNodeForwardGroup implements ForwardGroup<Integer> {
         this.streamNodeIds.addAll(forwardGroupToMerge.streamNodeIds);
 
         return true;
-    }
-
-    private void updateNodeParallelism(final Function<Integer, StreamNode> streamNodeRetriever) {
-        streamNodeIds.forEach(
-                streamNodeId -> {
-                    streamNodeRetriever.apply(streamNodeId).setParallelism(parallelism);
-                });
-    }
-
-    private void updateNodeMaxParallelism(Function<Integer, StreamNode> streamNodeRetriever) {
-        streamNodeIds.forEach(
-                streamNodeId -> {
-                    streamNodeRetriever.apply(streamNodeId).setMaxParallelism(maxParallelism);
-                });
     }
 
     @VisibleForTesting

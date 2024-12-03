@@ -212,8 +212,7 @@ public class DefaultStreamGraphContext implements StreamGraphContext {
         if (sourceForwardGroup == null || forwardGroupToMerge == null) {
             return false;
         }
-        if (!sourceForwardGroup.mergeForwardGroup(
-                forwardGroupToMerge, streamGraph::getStreamNode)) {
+        if (!sourceForwardGroup.mergeForwardGroup(forwardGroupToMerge)) {
             return false;
         }
         // Update steamNodeIdToForwardGroupMap.

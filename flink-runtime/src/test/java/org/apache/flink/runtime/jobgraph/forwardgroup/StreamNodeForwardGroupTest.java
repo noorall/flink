@@ -62,16 +62,14 @@ class StreamNodeForwardGroupTest {
                 createForwardGroupAndUpdateStreamNodeRetriever(
                         createStreamNode(1, -1, -1), streamNodeRetriever);
 
-        forwardGroup.mergeForwardGroup(
-                forwardGroupWithUnDecidedParallelism, streamNodeRetriever::get);
+        forwardGroup.mergeForwardGroup(forwardGroupWithUnDecidedParallelism);
         assertThat(forwardGroup.isParallelismDecided()).isFalse();
         assertThat(forwardGroup.isMaxParallelismDecided()).isFalse();
 
         StreamNodeForwardGroup forwardGroupWithDecidedParallelism =
                 createForwardGroupAndUpdateStreamNodeRetriever(
                         createStreamNode(2, 2, 4), streamNodeRetriever);
-        forwardGroup.mergeForwardGroup(
-                forwardGroupWithDecidedParallelism, streamNodeRetriever::get);
+        forwardGroup.mergeForwardGroup(forwardGroupWithDecidedParallelism);
         assertThat(forwardGroup.getParallelism()).isEqualTo(2);
         assertThat(forwardGroup.getMaxParallelism()).isEqualTo(4);
 
@@ -79,19 +77,13 @@ class StreamNodeForwardGroupTest {
                 createForwardGroupAndUpdateStreamNodeRetriever(
                         createStreamNode(3, 2, 5), streamNodeRetriever);
         // The target max parallelism is larger than source.
-        assertThat(
-                        forwardGroup.mergeForwardGroup(
-                                forwardGroupWithLargerMaxParallelism, streamNodeRetriever::get))
-                .isTrue();
+        assertThat(forwardGroup.mergeForwardGroup(forwardGroupWithLargerMaxParallelism)).isTrue();
         assertThat(forwardGroup.getMaxParallelism()).isEqualTo(4);
 
         StreamNodeForwardGroup forwardGroupWithSmallerMaxParallelism =
                 createForwardGroupAndUpdateStreamNodeRetriever(
                         createStreamNode(4, 2, 3), streamNodeRetriever);
-        assertThat(
-                        forwardGroup.mergeForwardGroup(
-                                forwardGroupWithSmallerMaxParallelism, streamNodeRetriever::get))
-                .isTrue();
+        assertThat(forwardGroup.mergeForwardGroup(forwardGroupWithSmallerMaxParallelism)).isTrue();
         assertThat(forwardGroup.getMaxParallelism()).isEqualTo(3);
 
         StreamNodeForwardGroup forwardGroupWithMaxParallelismSmallerThanSourceParallelism =
@@ -99,34 +91,21 @@ class StreamNodeForwardGroupTest {
                         createStreamNode(5, -1, 1), streamNodeRetriever);
         assertThat(
                         forwardGroup.mergeForwardGroup(
-                                forwardGroupWithMaxParallelismSmallerThanSourceParallelism,
-                                streamNodeRetriever::get))
+                                forwardGroupWithMaxParallelismSmallerThanSourceParallelism))
                 .isFalse();
 
         StreamNodeForwardGroup forwardGroupWithDifferentParallelism =
                 createForwardGroupAndUpdateStreamNodeRetriever(
                         createStreamNode(6, 1, 3), streamNodeRetriever);
-        assertThat(
-                        forwardGroup.mergeForwardGroup(
-                                forwardGroupWithDifferentParallelism, streamNodeRetriever::get))
-                .isFalse();
+        assertThat(forwardGroup.mergeForwardGroup(forwardGroupWithDifferentParallelism)).isFalse();
 
         StreamNodeForwardGroup forwardGroupWithUndefinedParallelism =
                 createForwardGroupAndUpdateStreamNodeRetriever(
                         createStreamNode(7, -1, 2), streamNodeRetriever);
-        assertThat(
-                        forwardGroup.mergeForwardGroup(
-                                forwardGroupWithUndefinedParallelism, streamNodeRetriever::get))
-                .isTrue();
+        assertThat(forwardGroup.mergeForwardGroup(forwardGroupWithUndefinedParallelism)).isTrue();
         assertThat(forwardGroup.size()).isEqualTo(6);
         assertThat(forwardGroup.getParallelism()).isEqualTo(2);
         assertThat(forwardGroup.getMaxParallelism()).isEqualTo(2);
-
-        for (Integer nodeId : forwardGroup.getVertexIds()) {
-            StreamNode node = streamNodeRetriever.get(nodeId);
-            assertThat(node.getParallelism()).isEqualTo(forwardGroup.getParallelism());
-            assertThat(node.getMaxParallelism()).isEqualTo(forwardGroup.getMaxParallelism());
-        }
     }
 
     private static StreamNode createStreamNode(int id, int parallelism, int maxParallelism) {

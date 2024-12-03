@@ -419,7 +419,7 @@ public class StreamNode implements Serializable {
         }
     }
 
-    boolean isParallelismConfigured() {
+    public boolean isParallelismConfigured() {
         return parallelismConfigured;
     }
 
