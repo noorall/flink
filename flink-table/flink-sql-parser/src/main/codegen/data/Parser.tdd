@@ -135,6 +135,7 @@
     "org.apache.flink.sql.parser.dql.SqlShowCreateView"
     "org.apache.flink.sql.parser.dql.SqlShowCreateCatalog"
     "org.apache.flink.sql.parser.dql.SqlShowViews"
+    "org.apache.flink.sql.parser.dql.SqlRichDescribeFunction"
     "org.apache.flink.sql.parser.dql.SqlRichDescribeModel"
     "org.apache.flink.sql.parser.dql.SqlRichDescribeTable"
     "org.apache.flink.sql.parser.dql.SqlUnloadModule"
@@ -286,6 +287,8 @@
     "CURSOR_NAME"
     "DATA"
     "DATABASE"
+    "DATE_DIFF"
+    "DATETIME_DIFF"
     "DATETIME_INTERVAL_CODE"
     "DATETIME_INTERVAL_PRECISION"
     "DAYS"
@@ -635,6 +638,7 @@
     "SqlShowJobs()"
     "SqlTruncateTable()"
     "SqlDescribeJob()"
+    "SqlRichDescribeFunction()"
     "SqlRichDescribeModel()"
     "SqlRichDescribeTable()"
   ]
@@ -706,4 +710,5 @@
   includeCompoundIdentifier: true
   includeBraces: true
   includeAdditionalDeclarations: false
+  includeParsingStringLiteralAsArrayLiteral: false
 }

@@ -24,6 +24,7 @@ import org.apache.flink.table.expressions.CallExpression;
 import org.apache.flink.table.expressions.ResolvedExpression;
 import org.apache.flink.table.expressions.TimeIntervalUnit;
 import org.apache.flink.table.expressions.ValueLiteralExpression;
+import org.apache.flink.table.types.logical.LogicalTypeFamily;
 import org.apache.flink.table.utils.EncodingUtils;
 
 import java.util.List;
@@ -70,6 +71,12 @@ public interface SqlCallSyntax {
             };
 
     /**
+     * Function syntax for functions without parenthesis (e.g., CURRENT_DATE, LOCALTIMESTAMP,
+     * LOCALTIME, CURRENT_TIMESTAMP, CURRENT_TIME).
+     */
+    SqlCallSyntax NO_PARENTHESIS = (sqlName, operands) -> sqlName;
+
+    /**
      * Function syntax for handling DISTINCT aggregates. Special case. It does not have a syntax
      * itself, but modifies the syntax of the nested call.
      */
@@ -100,7 +107,7 @@ public interface SqlCallSyntax {
                                     .map(ResolvedExpression::asSerializableString)
                                     .collect(Collectors.joining(", ")));
 
-    /** Binary operator syntax, as in "x + y". */
+    /** Binary operator syntax, as in "x - y". */
     SqlCallSyntax BINARY_OP =
             (sqlName, operands) ->
                     String.format(
@@ -108,6 +115,24 @@ public interface SqlCallSyntax {
                             CallSyntaxUtils.asSerializableOperand(operands.get(0)),
                             sqlName,
                             CallSyntaxUtils.asSerializableOperand(operands.get(1)));
+
+    /** Syntax for unparsing '+', Special handling for a plus on string arguments. */
+    SqlCallSyntax PLUS_OP =
+            (sqlName, operands) -> {
+                boolean isString =
+                        operands.stream()
+                                .anyMatch(
+                                        op ->
+                                                op.getOutputDataType()
+                                                        .getLogicalType()
+                                                        .is(LogicalTypeFamily.CHARACTER_STRING));
+                if (isString) {
+                    return FUNCTION.unparse(
+                            BuiltInFunctionDefinitions.CONCAT.getSqlName(), operands);
+                } else {
+                    return BINARY_OP.unparse(sqlName, operands);
+                }
+            };
 
     /**
      * Binary operator syntax that in Table API can accept multiple operands, as in "x AND y AND t
@@ -297,4 +322,23 @@ public interface SqlCallSyntax {
                             CallSyntaxUtils.asSerializableOperand(operands.get(2)));
                 }
             };
+
+    SqlCallSyntax OVER =
+            ((sqlName, operands) -> {
+                String projection = operands.get(0).asSerializableString();
+                String order = operands.get(1).asSerializableString();
+                String rangeBounds =
+                        CallSyntaxUtils.overRangeToSerializableString(
+                                operands.get(2), operands.get(3));
+                if (operands.size() == 4) {
+                    return String.format("%s OVER(ORDER BY %s%s)", projection, order, rangeBounds);
+                } else {
+                    return String.format(
+                            "%s OVER(PARTITION BY %s ORDER BY %s%s)",
+                            projection,
+                            CallSyntaxUtils.asSerializableOperand(operands.get(4)),
+                            order,
+                            rangeBounds);
+                }
+            });
 }
