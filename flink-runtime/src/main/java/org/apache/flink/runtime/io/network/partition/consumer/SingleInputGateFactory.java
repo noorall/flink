@@ -164,7 +164,7 @@ public class SingleInputGateFactory {
                         configuredNetworkBuffersPerChannel,
                         floatingNetworkBuffersPerGate,
                         igdd.getConsumedPartitionType(),
-                        igdd.getShuffleDescriptors().length,
+                        calculateNumInputChannels(igdd.getConsumedSubpartitionGroups()),
                         tieredStorageConfiguration != null);
         SupplierWithException<BufferPool, IOException> bufferPoolFactory =
                 createBufferPoolFactory(
@@ -187,7 +187,7 @@ public class SingleInputGateFactory {
                         gateIndex,
                         igdd.getConsumedResultId(),
                         igdd.getConsumedPartitionType(),
-                        igdd.getShuffleDescriptors().length,
+                        calculateNumInputChannels(igdd.getConsumedSubpartitionGroups()),
                         partitionProducerStateProvider,
                         bufferPoolFactory,
                         bufferDecompressor,
@@ -238,7 +238,7 @@ public class SingleInputGateFactory {
                 inputGateDeploymentDescriptor.getConsumedSubpartitionGroups();
 
         // Create the input channels. There is one input channel for each consumed subpartition.
-        int inputChannelSize = calculateInputChannelSize(consumedSubpartitionGroups);
+        int inputChannelSize = calculateNumInputChannels(consumedSubpartitionGroups);
         InputChannel[] inputChannels = new InputChannel[inputChannelSize];
 
         ChannelStatistics channelStatistics = new ChannelStatistics();
@@ -422,12 +422,12 @@ public class SingleInputGateFactory {
         }
     }
 
-    public static int calculateInputChannelSize(
+    public static int calculateNumInputChannels(
             Map<IndexRange, IndexRange> consumedSubpartitionGroups) {
-        List<IndexRange> partitionRanges = mergeIndexRanges(consumedSubpartitionGroups.keySet());
+        List<IndexRange> ranges = mergeIndexRanges(consumedSubpartitionGroups.keySet());
         int size = 0;
-        for (IndexRange partitionRange : partitionRanges) {
-            size += partitionRange.size();
+        for (IndexRange range : ranges) {
+            size += range.size();
         }
         return size;
     }
@@ -436,8 +436,8 @@ public class SingleInputGateFactory {
             Map<IndexRange, IndexRange> consumedSubpartitionGroups, int index) {
         List<IndexRange> consumedSubpartitionRanges = new ArrayList<>();
         for (Map.Entry<IndexRange, IndexRange> entry : consumedSubpartitionGroups.entrySet()) {
-            IndexRange partitionRange = entry.getKey();
-            if (index >= partitionRange.getStartIndex() && index <= partitionRange.getEndIndex()) {
+            IndexRange range = entry.getKey();
+            if (index >= range.getStartIndex() && index <= range.getEndIndex()) {
                 consumedSubpartitionRanges.add(entry.getValue());
             }
         }

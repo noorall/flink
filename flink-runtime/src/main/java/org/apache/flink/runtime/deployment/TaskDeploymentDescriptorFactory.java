@@ -30,6 +30,7 @@ import org.apache.flink.runtime.deployment.TaskDeploymentDescriptor.MaybeOffload
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.executiongraph.Execution;
 import org.apache.flink.runtime.executiongraph.ExecutionVertex;
+import org.apache.flink.runtime.executiongraph.IndexRange;
 import org.apache.flink.runtime.executiongraph.IntermediateResult;
 import org.apache.flink.runtime.executiongraph.IntermediateResultPartition;
 import org.apache.flink.runtime.executiongraph.InternalExecutionGraphAccessor;
@@ -55,6 +56,7 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -155,9 +157,12 @@ public class TaskDeploymentDescriptorFactory {
                     new InputGateDeploymentDescriptor(
                             resultId,
                             partitionType,
-                            executionVertex
-                                    .getExecutionVertexInputInfo(resultId)
-                                    .getConsumedSubpartitionGroups(),
+                            constructConsumedSubpartitionGroupByChannelRange(
+                                    executionVertex
+                                            .getExecutionVertexInputInfo(resultId)
+                                            .getConsumedSubpartitionGroups(),
+                                    consumedPartitionGroup.iterator(),
+                                    consumedIntermediateResult),
                             consumedPartitionGroup.size(),
                             getConsumedPartitionShuffleDescriptors(
                                     consumedIntermediateResult,
@@ -393,6 +398,35 @@ public class TaskDeploymentDescriptorFactory {
         return producerState == ExecutionState.CANCELING
                 || producerState == ExecutionState.CANCELED
                 || producerState == ExecutionState.FAILED;
+    }
+
+    private Map<IndexRange, IndexRange> constructConsumedSubpartitionGroupByChannelRange(
+            Map<IndexRange, IndexRange> consumedSubpartitionGroups,
+            Iterator<IntermediateResultPartitionID> consumedResultPartitions,
+            IntermediateResult consumedIntermediateResult) {
+        Map<IntermediateResultPartitionID, Integer> channelIndexByPartitionId = new HashMap<>();
+        while (consumedResultPartitions.hasNext()) {
+            IntermediateResultPartitionID partitionId = consumedResultPartitions.next();
+            channelIndexByPartitionId.put(partitionId, channelIndexByPartitionId.size());
+        }
+        Map<IndexRange, IndexRange> subPartitionGroupByChannelRange = new HashMap<>();
+        for (Map.Entry<IndexRange, IndexRange> entry : consumedSubpartitionGroups.entrySet()) {
+            IndexRange partitionIndexRange = entry.getKey();
+            IndexRange subPartitionIndexRange = entry.getValue();
+            int channelStartIndex =
+                    channelIndexByPartitionId.get(
+                            consumedIntermediateResult
+                                    .getPartitions()[partitionIndexRange.getStartIndex()]
+                                    .getPartitionId());
+            int channelEndIndex =
+                    channelIndexByPartitionId.get(
+                            consumedIntermediateResult
+                                    .getPartitions()[partitionIndexRange.getEndIndex()]
+                                    .getPartitionId());
+            subPartitionGroupByChannelRange.put(
+                    new IndexRange(channelStartIndex, channelEndIndex), subPartitionIndexRange);
+        }
+        return subPartitionGroupByChannelRange;
     }
 
     /**

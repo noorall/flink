@@ -72,8 +72,8 @@ public class InputGateDeploymentDescriptor implements Serializable {
     private final ResultPartitionType consumedPartitionType;
 
     /**
-     * Range of the index of the consumed subpartition of each consumed partition ranges. This index
-     * depends on the {@link DistributionPattern} and the subtask indices of the producing and
+     * Range of the index of the consumed subpartition of each input channel index ranges. This
+     * index depends on the {@link DistributionPattern} and the subtask indices of the producing and
      * consuming task. The range is inclusive.
      */
     private final Map<IndexRange, IndexRange> consumedSubpartitionGroups;

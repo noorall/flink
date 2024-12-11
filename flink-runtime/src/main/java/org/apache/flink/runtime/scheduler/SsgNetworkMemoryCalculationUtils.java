@@ -198,7 +198,7 @@ public class SsgNetworkMemoryCalculationUtils {
                                 .getConsumedSubpartitionGroups();
 
                 int inputChannelNums =
-                        SingleInputGateFactory.calculateInputChannelSize(
+                        SingleInputGateFactory.calculateNumInputChannels(
                                 consumedSubpartitionGroups);
 
                 maxInputChannelNums.merge(
