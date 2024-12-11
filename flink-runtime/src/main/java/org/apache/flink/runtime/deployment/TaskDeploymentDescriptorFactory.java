@@ -30,7 +30,6 @@ import org.apache.flink.runtime.deployment.TaskDeploymentDescriptor.MaybeOffload
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.executiongraph.Execution;
 import org.apache.flink.runtime.executiongraph.ExecutionVertex;
-import org.apache.flink.runtime.executiongraph.IndexRange;
 import org.apache.flink.runtime.executiongraph.IntermediateResult;
 import org.apache.flink.runtime.executiongraph.IntermediateResultPartition;
 import org.apache.flink.runtime.executiongraph.InternalExecutionGraphAccessor;
@@ -152,18 +151,13 @@ public class TaskDeploymentDescriptorFactory {
             IntermediateDataSetID resultId = consumedIntermediateResult.getId();
             ResultPartitionType partitionType = consumedIntermediateResult.getResultType();
 
-            Map<IndexRange, IndexRange> consumedSubpartitionGroupByChannelRange =
-                    constructConsumedSubpartitionGroupByChannelRange(
-                            executionVertex
-                                    .getExecutionVertexInputInfo(resultId)
-                                    .getConsumedSubpartitionGroupsInOrder(),
-                            consumedPartitionGroup.size());
-
             inputGates.add(
                     new InputGateDeploymentDescriptor(
                             resultId,
                             partitionType,
-                            consumedSubpartitionGroupByChannelRange,
+                            executionVertex
+                                    .getExecutionVertexInputInfo(resultId)
+                                    .getConsumedSubpartitionGroups(),
                             consumedPartitionGroup.size(),
                             getConsumedPartitionShuffleDescriptors(
                                     consumedIntermediateResult,
@@ -199,24 +193,6 @@ public class TaskDeploymentDescriptorFactory {
         }
 
         return inputGates;
-    }
-
-    private Map<IndexRange, IndexRange> constructConsumedSubpartitionGroupByChannelRange(
-            Map<IndexRange, IndexRange> consumedSubpartitionGroupsInOrder,
-            int numberOfInputChannels) {
-        Map<IndexRange, IndexRange> subPartitionRangeByChannel = new HashMap<>();
-        int counter = 0;
-        for (Map.Entry<IndexRange, IndexRange> entry :
-                consumedSubpartitionGroupsInOrder.entrySet()) {
-            IndexRange partitionIndexRange = entry.getKey();
-            IndexRange subPartitionIndexRange = entry.getValue();
-            subPartitionRangeByChannel.put(
-                    new IndexRange(counter, counter + partitionIndexRange.size() - 1),
-                    subPartitionIndexRange);
-            counter = counter + partitionIndexRange.size();
-        }
-        checkState(counter == numberOfInputChannels);
-        return subPartitionRangeByChannel;
     }
 
     private List<MaybeOffloaded<ShuffleDescriptorGroup>> getConsumedPartitionShuffleDescriptors(

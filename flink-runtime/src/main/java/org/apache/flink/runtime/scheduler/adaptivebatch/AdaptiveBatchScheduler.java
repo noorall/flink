@@ -752,7 +752,7 @@ public class AdaptiveBatchScheduler extends DefaultScheduler {
                 BlockingResultInfo blockingResultInfo =
                         checkNotNull(getBlockingResultInfo(intermediateResult.getId()));
                 Map<IndexRange, IndexRange> consumedSubpartitionGroups =
-                        inputInfo.getConsumedSubpartitionGroupsInOrder();
+                        inputInfo.getConsumedSubpartitionGroups();
                 for (Map.Entry<IndexRange, IndexRange> entry :
                         consumedSubpartitionGroups.entrySet()) {
                     IndexRange partitionIndexRange = entry.getKey();

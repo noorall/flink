@@ -34,8 +34,8 @@ public class ExecutionVertexInputInfo implements Serializable {
 
     private final int subtaskIndex;
 
-    // The keys of this Map are ordered, and there is no overlap between the IndexRange of the keys.
-    private final Map<IndexRange, IndexRange> consumedSubpartitionGroupsInOrder;
+    // The key is the partition index range, and the value is the subpartition index range.
+    private final Map<IndexRange, IndexRange> consumedSubpartitionGroups;
 
     public ExecutionVertexInputInfo(
             final int subtaskIndex,
@@ -48,15 +48,14 @@ public class ExecutionVertexInputInfo implements Serializable {
     }
 
     public ExecutionVertexInputInfo(
-            final int subtaskIndex,
-            final Map<IndexRange, IndexRange> consumedSubpartitionGroupsInOrder) {
+            final int subtaskIndex, final Map<IndexRange, IndexRange> consumedSubpartitionGroups) {
         this.subtaskIndex = subtaskIndex;
-        this.consumedSubpartitionGroupsInOrder = checkNotNull(consumedSubpartitionGroupsInOrder);
+        this.consumedSubpartitionGroups = checkNotNull(consumedSubpartitionGroups);
     }
 
     /** Get the subpartition groups this subtask should consume. */
-    public Map<IndexRange, IndexRange> getConsumedSubpartitionGroupsInOrder() {
-        return consumedSubpartitionGroupsInOrder;
+    public Map<IndexRange, IndexRange> getConsumedSubpartitionGroups() {
+        return consumedSubpartitionGroups;
     }
 
     /** Get the index of this subtask. */
@@ -71,8 +70,7 @@ public class ExecutionVertexInputInfo implements Serializable {
         } else if (obj != null && obj.getClass() == getClass()) {
             ExecutionVertexInputInfo that = (ExecutionVertexInputInfo) obj;
             return that.subtaskIndex == this.subtaskIndex
-                    && that.consumedSubpartitionGroupsInOrder.equals(
-                            this.consumedSubpartitionGroupsInOrder);
+                    && that.consumedSubpartitionGroups.equals(this.consumedSubpartitionGroups);
         } else {
             return false;
         }

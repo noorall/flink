@@ -66,13 +66,17 @@ import javax.annotation.Nullable;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import static org.apache.flink.runtime.io.network.partition.consumer.InputGateSpecUtils.createGateBuffersSpec;
 import static org.apache.flink.runtime.shuffle.ShuffleUtils.applyWithShuffleTypeCheck;
 import static org.apache.flink.util.Preconditions.checkNotNull;
+import static org.apache.flink.util.Preconditions.checkState;
 
 /** Factory for {@link SingleInputGate} to use in {@link NettyShuffleEnvironment}. */
 public class SingleInputGateFactory {
@@ -234,7 +238,8 @@ public class SingleInputGateFactory {
                 inputGateDeploymentDescriptor.getConsumedSubpartitionGroups();
 
         // Create the input channels. There is one input channel for each consumed subpartition.
-        InputChannel[] inputChannels = new InputChannel[shuffleDescriptors.length];
+        int inputChannelSize = calculateInputChannelSize(consumedSubpartitionGroups);
+        InputChannel[] inputChannels = new InputChannel[inputChannelSize];
 
         ChannelStatistics channelStatistics = new ChannelStatistics();
 
@@ -242,9 +247,12 @@ public class SingleInputGateFactory {
         final List<TieredStorageConsumerSpec> tieredStorageConsumerSpecs = new ArrayList<>();
         List<List<TierShuffleDescriptor>> tierShuffleDescriptors = new ArrayList<>();
         for (int i = 0; i < shuffleDescriptors.length; i++) {
-            ShuffleDescriptor descriptor = shuffleDescriptors[i];
-            ResultSubpartitionIndexSet subpartitionIndexSet =
+            Optional<ResultSubpartitionIndexSet> subpartitionIndexSet =
                     getResultSubpartitionIndexSet(consumedSubpartitionGroups, i);
+            if (subpartitionIndexSet.isEmpty()) {
+                continue;
+            }
+            ShuffleDescriptor descriptor = shuffleDescriptors[i];
             TieredStoragePartitionId partitionId =
                     TieredStorageIdMappingUtils.convertId(descriptor.getResultPartitionID());
             inputChannels[channelIdx] =
@@ -253,7 +261,7 @@ public class SingleInputGateFactory {
                             channelIdx,
                             gateBuffersSpec.getEffectiveExclusiveBuffersPerChannel(),
                             descriptor,
-                            subpartitionIndexSet,
+                            subpartitionIndexSet.get(),
                             channelStatistics,
                             metrics);
             if (tieredStorageConfiguration != null) {
@@ -264,10 +272,12 @@ public class SingleInputGateFactory {
                                 inputGate.getInputGateIndex(),
                                 partitionId,
                                 new TieredStorageInputChannelId(channelIdx),
-                                subpartitionIndexSet));
+                                subpartitionIndexSet.get()));
             }
             channelIdx++;
         }
+
+        checkState(channelIdx == inputChannelSize);
 
         inputGate.setInputChannels(inputChannels);
 
@@ -327,18 +337,6 @@ public class SingleInputGateFactory {
                                 subpartitionIndexSet,
                                 channelStatistics,
                                 metrics));
-    }
-
-    private ResultSubpartitionIndexSet getResultSubpartitionIndexSet(
-            Map<IndexRange, IndexRange> consumedSubpartitionGroups, int index) {
-        for (Map.Entry<IndexRange, IndexRange> entry : consumedSubpartitionGroups.entrySet()) {
-            IndexRange partitionRange = entry.getKey();
-            if (index >= partitionRange.getStartIndex() && index <= partitionRange.getEndIndex()) {
-                return new ResultSubpartitionIndexSet(entry.getValue());
-            }
-        }
-        throw new IllegalStateException(
-                "SubpartitionIndexSet for channel " + index + " does not exist.");
     }
 
     @VisibleForTesting
@@ -422,5 +420,63 @@ public class SingleInputGateFactory {
                     "local: %s, remote: %s, unknown: %s",
                     numLocalChannels, numRemoteChannels, numUnknownChannels);
         }
+    }
+
+    public static int calculateInputChannelSize(
+            Map<IndexRange, IndexRange> consumedSubpartitionGroups) {
+        List<IndexRange> partitionRanges = mergeIndexRanges(consumedSubpartitionGroups.keySet());
+        int size = 0;
+        for (IndexRange partitionRange : partitionRanges) {
+            size += partitionRange.size();
+        }
+        return size;
+    }
+
+    private static Optional<ResultSubpartitionIndexSet> getResultSubpartitionIndexSet(
+            Map<IndexRange, IndexRange> consumedSubpartitionGroups, int index) {
+        List<IndexRange> consumedSubpartitionRanges = new ArrayList<>();
+        for (Map.Entry<IndexRange, IndexRange> entry : consumedSubpartitionGroups.entrySet()) {
+            IndexRange partitionRange = entry.getKey();
+            if (index >= partitionRange.getStartIndex() && index <= partitionRange.getEndIndex()) {
+                consumedSubpartitionRanges.add(entry.getValue());
+            }
+        }
+        if (consumedSubpartitionRanges.isEmpty()) {
+            return Optional.empty();
+        }
+        List<IndexRange> subpartitionRanges = mergeIndexRanges(consumedSubpartitionRanges);
+        checkState(subpartitionRanges.size() == 1);
+        return Optional.of(new ResultSubpartitionIndexSet(subpartitionRanges.get(0)));
+    }
+
+    private static List<IndexRange> mergeIndexRanges(Collection<IndexRange> ranges) {
+        if (ranges == null || ranges.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        List<IndexRange> sortedRanges =
+                ranges.stream()
+                        .sorted(Comparator.comparingInt(IndexRange::getStartIndex))
+                        .collect(Collectors.toList());
+
+        List<IndexRange> merged = new ArrayList<>();
+        IndexRange current = sortedRanges.get(0);
+
+        for (int i = 1; i < ranges.size(); i++) {
+            IndexRange next = sortedRanges.get(i);
+            // <1,4>,<5,6>; <1,4>,<3,6>
+            if (next.getStartIndex() <= current.getEndIndex() + 1) {
+                current =
+                        new IndexRange(
+                                current.getStartIndex(),
+                                Math.max(current.getEndIndex(), next.getEndIndex()));
+            } else {
+                merged.add(current);
+                current = next;
+            }
+        }
+        merged.add(current);
+
+        return merged;
     }
 }

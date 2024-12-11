@@ -26,13 +26,12 @@ import org.apache.flink.runtime.scheduler.strategy.ConsumerVertexGroup;
 import org.apache.flink.runtime.scheduler.strategy.ExecutionVertexID;
 
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 import static org.apache.flink.util.Preconditions.checkState;
@@ -57,8 +56,10 @@ public class EdgeManagerBuildUtil {
 
         switch (distributionPattern) {
             case POINTWISE:
+                connectPointwise(vertex, intermediateResult, jobVertexInputInfo);
+                break;
             case ALL_TO_ALL:
-                connect(vertex, intermediateResult, jobVertexInputInfo);
+                connectAllToAll(vertex, intermediateResult);
                 break;
             default:
                 throw new IllegalArgumentException("Unrecognized distribution pattern.");
@@ -87,50 +88,49 @@ public class EdgeManagerBuildUtil {
         }
     }
 
-    private static void connect(
+    private static void connectAllToAll(ExecutionJobVertex jobVertex, IntermediateResult result) {
+        connectInternal(
+                Arrays.asList(jobVertex.getTaskVertices()),
+                Arrays.asList(result.getPartitions()),
+                result.getResultType(),
+                jobVertex.getGraph().getEdgeManager());
+    }
+
+    private static void connectPointwise(
             ExecutionJobVertex jobVertex,
             IntermediateResult result,
             JobVertexInputInfo jobVertexInputInfo) {
-        // Partition's IndexRange may be multiple, for example:
-        // [<PartitionIndexRange=[8,9],SubpartitionIndexRange=[1,1]>,<PartitionIndexRange=[1,2],SubpartitionIndexRange=[2,2]>].
-        Map<Set<IndexRange>, List<Integer>> consumersByPartitionRanges = new LinkedHashMap<>();
+
+        Map<IndexRange, List<Integer>> consumersByPartition = new LinkedHashMap<>();
 
         for (ExecutionVertexInputInfo executionVertexInputInfo :
                 jobVertexInputInfo.getExecutionVertexInputInfos()) {
             int consumerIndex = executionVertexInputInfo.getSubtaskIndex();
-            Map<IndexRange, IndexRange> consumedSubpartitionGroups =
-                    executionVertexInputInfo.getConsumedSubpartitionGroupsInOrder();
-            Optional<IndexRange> mergedPartitionRange =
-                    mergePartitionIndexRanges(consumedSubpartitionGroups);
-            if (mergedPartitionRange.isPresent()) {
-                consumersByPartitionRanges
-                        .computeIfAbsent(
-                                Collections.singleton(mergedPartitionRange.get()),
-                                ignored -> new ArrayList<>())
-                        .add(consumerIndex);
-            } else {
-                consumersByPartitionRanges
-                        .computeIfAbsent(
-                                consumedSubpartitionGroups.keySet(), ignored -> new ArrayList<>())
-                        .add(consumerIndex);
-            }
+            Optional<IndexRange> range =
+                    mergePartitionIndexRanges(
+                            executionVertexInputInfo.getConsumedSubpartitionGroups());
+            checkState(range.isPresent());
+            consumersByPartition.compute(
+                    range.get(),
+                    (ignore, consumers) -> {
+                        if (consumers == null) {
+                            consumers = new ArrayList<>();
+                        }
+                        consumers.add(consumerIndex);
+                        return consumers;
+                    });
         }
 
-        consumersByPartitionRanges.forEach(
-                (partitionRanges, subtasks) -> {
+        consumersByPartition.forEach(
+                (range, subtasks) -> {
                     List<ExecutionVertex> taskVertices = new ArrayList<>();
                     List<IntermediateResultPartition> partitions = new ArrayList<>();
                     for (int index : subtasks) {
                         taskVertices.add(jobVertex.getTaskVertices()[index]);
                     }
-                    partitionRanges.forEach(
-                            partitionRange -> {
-                                for (int i = partitionRange.getStartIndex();
-                                        i <= partitionRange.getEndIndex();
-                                        ++i) {
-                                    partitions.add(result.getPartitions()[i]);
-                                }
-                            });
+                    for (int i = range.getStartIndex(); i <= range.getEndIndex(); ++i) {
+                        partitions.add(result.getPartitions()[i]);
+                    }
                     connectInternal(
                             taskVertices,
                             partitions,
