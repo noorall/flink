@@ -26,6 +26,18 @@ import java.util.stream.Collectors;
 
 /** Utils for {@link IndexRange}. */
 public class IndexRangeUtil {
+
+    /**
+     * Merges overlapping or consecutive {@link IndexRange} instances from the given collection.
+     *
+     * <p>The method sorts the provided ranges by their start index, then iteratively merges ranges
+     * that either overlap or are directly adjacent. The result is a list of non-overlapping and
+     * consolidated {@link IndexRange} instances.
+     *
+     * @param ranges the collection of {@link IndexRange} instances to merge.
+     * @return a list of merged {@link IndexRange} instances. If the input is null or empty, an
+     *     empty list is returned.
+     */
     public static List<IndexRange> mergeIndexRanges(Collection<IndexRange> ranges) {
         if (ranges == null || ranges.isEmpty()) {
             return new ArrayList<>();
@@ -41,7 +53,6 @@ public class IndexRangeUtil {
 
         for (int i = 1; i < ranges.size(); i++) {
             IndexRange next = sortedRanges.get(i);
-            // <1,4>,<5,6>; <1,4>,<3,6>
             if (next.getStartIndex() <= current.getEndIndex() + 1) {
                 current =
                         new IndexRange(

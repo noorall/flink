@@ -157,12 +157,12 @@ public class TaskDeploymentDescriptorFactory {
                     new InputGateDeploymentDescriptor(
                             resultId,
                             partitionType,
-                            constructConsumedSubpartitionGroupByChannelRange(
+                            ConsumedSubpartitionContext.buildConsumedSubpartitionContext(
                                     executionVertex
                                             .getExecutionVertexInputInfo(resultId)
                                             .getConsumedSubpartitionGroups(),
                                     consumedPartitionGroup.iterator(),
-                                    consumedIntermediateResult),
+                                    consumedIntermediateResult.getPartitions()),
                             consumedPartitionGroup.size(),
                             getConsumedPartitionShuffleDescriptors(
                                     consumedIntermediateResult,

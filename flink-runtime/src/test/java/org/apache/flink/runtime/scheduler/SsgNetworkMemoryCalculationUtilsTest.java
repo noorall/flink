@@ -168,8 +168,9 @@ class SsgNetworkMemoryCalculationUtilsTest {
                 slotSharingGroups,
                 Arrays.asList(
                         new MemorySize(TestShuffleMaster.computeRequiredShuffleMemoryBytes(0, 5)),
-                        new MemorySize(TestShuffleMaster.computeRequiredShuffleMemoryBytes(1, 20)),
-                        new MemorySize(TestShuffleMaster.computeRequiredShuffleMemoryBytes(5, 0))));
+                        new MemorySize(TestShuffleMaster.computeRequiredShuffleMemoryBytes(5, 20)),
+                        new MemorySize(
+                                TestShuffleMaster.computeRequiredShuffleMemoryBytes(15, 0))));
     }
 
     private void triggerComputeNumOfSubpartitions(IntermediateResult result) {
@@ -192,14 +193,14 @@ class SsgNetworkMemoryCalculationUtilsTest {
 
     @Test
     void testGetMaxInputChannelNumForResultForAllToAll() throws Exception {
-        testGetMaxInputChannelNumForResult(DistributionPattern.ALL_TO_ALL, 5, 20, 7, 5);
+        testGetMaxInputChannelNumForResult(DistributionPattern.ALL_TO_ALL, 5, 20, 7, 15);
     }
 
     @Test
     void testGetMaxInputChannelNumForResultForPointWise() throws Exception {
-        testGetMaxInputChannelNumForResult(DistributionPattern.POINTWISE, 5, 20, 3, 2);
-        testGetMaxInputChannelNumForResult(DistributionPattern.POINTWISE, 5, 20, 5, 1);
-        testGetMaxInputChannelNumForResult(DistributionPattern.POINTWISE, 5, 20, 7, 1);
+        testGetMaxInputChannelNumForResult(DistributionPattern.POINTWISE, 5, 20, 3, 8);
+        testGetMaxInputChannelNumForResult(DistributionPattern.POINTWISE, 5, 20, 5, 4);
+        testGetMaxInputChannelNumForResult(DistributionPattern.POINTWISE, 5, 20, 7, 4);
     }
 
     private void testGetMaxInputChannelNumForResult(
