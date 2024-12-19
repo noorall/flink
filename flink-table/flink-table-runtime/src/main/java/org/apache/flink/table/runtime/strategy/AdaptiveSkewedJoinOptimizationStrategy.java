@@ -25,7 +25,7 @@ import org.apache.flink.streaming.api.graph.util.ImmutableStreamEdge;
 import org.apache.flink.streaming.api.graph.util.ImmutableStreamNode;
 import org.apache.flink.table.api.config.OptimizerConfigOptions;
 import org.apache.flink.table.api.config.OptimizerConfigOptions.AdaptiveSkewedJoinStrategy;
-import org.apache.flink.table.runtime.operators.join.AdaptiveJoin;
+import org.apache.flink.table.runtime.operators.join.adaptive.AdaptiveJoin;
 
 import java.util.HashMap;
 import java.util.List;
@@ -43,19 +43,6 @@ public class AdaptiveSkewedJoinOptimizationStrategy
     private Map<Integer, Map<Integer, long[]>> aggregatedProducedBytesByTypeNumberAndNodeId;
 
     @Override
-    public void tryOptimizeAdaptiveJoin(
-            OperatorsFinished operatorsFinished,
-            StreamGraphContext context,
-            ImmutableStreamNode adaptiveJoinNode,
-            ImmutableStreamEdge upstreamStreamEdge,
-            AdaptiveJoin adaptiveJoin) {
-        if (upstreamStreamEdge.isBroadcast() || upstreamStreamEdge.isPointwise()) {
-            return;
-        }
-        operatorsFinished.getResultInfoMap().get(upstreamStreamEdge.getSourceId()).get(1);
-    }
-
-    @Override
     public boolean maybeOptimizeStreamGraph(
             OperatorsFinished operatorsFinished, StreamGraphContext context) throws Exception {
         initialize(context.getStreamGraph().getConfiguration());
@@ -63,6 +50,14 @@ public class AdaptiveSkewedJoinOptimizationStrategy
 
         return true;
     }
+
+    @Override
+    void tryOptimizeAdaptiveJoin(
+            OperatorsFinished operatorsFinished,
+            StreamGraphContext context,
+            ImmutableStreamNode adaptiveJoinNode,
+            List<ImmutableStreamEdge> upstreamStreamEdges,
+            AdaptiveJoin adaptiveJoin) {}
 
     private void initialize(ReadableConfig config) {
         if (!initialized) {
