@@ -45,4 +45,12 @@ public class ImmutableStreamEdge {
     public String getEdgeId() {
         return streamEdge.getEdgeId();
     }
+
+    public boolean isBroadcast() {
+        return streamEdge.getPartitioner().isBroadcast();
+    }
+
+    public boolean isPointwise() {
+        return streamEdge.getPartitioner().isPointwise();
+    }
 }

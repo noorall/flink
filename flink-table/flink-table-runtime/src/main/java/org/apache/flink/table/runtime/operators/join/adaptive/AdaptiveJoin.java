@@ -59,6 +59,12 @@ public interface AdaptiveJoin extends Serializable {
             Long threshold,
             Function<Boolean, Boolean> tryTransformEdges);
 
+    boolean trySkewedOptimization(
+            Long leftInputBytes,
+            Long rightInputBytes,
+            Long threshold,
+            Function<Boolean, Boolean> tryTransformEdges);
+
     /**
      * Return whether the left input side is the build side in a join operation. It is specifically
      * relevant for join types that are hash join. If the join type is sort merge join, this method
