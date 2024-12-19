@@ -20,6 +20,7 @@ package org.apache.flink.streaming.api.graph.util;
 
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.streaming.api.graph.StreamEdge;
+import org.apache.flink.streaming.runtime.partitioner.ForwardPartitioner;
 
 /** Helper class that provides read-only StreamEdge. */
 @Internal
@@ -46,11 +47,11 @@ public class ImmutableStreamEdge {
         return streamEdge.getEdgeId();
     }
 
-    public boolean isBroadcast() {
-        return streamEdge.getPartitioner().isBroadcast();
+    public boolean isForwardEdge() {
+        return streamEdge.getPartitioner() instanceof ForwardPartitioner;
     }
 
-    public boolean isPointwise() {
-        return streamEdge.getPartitioner().isPointwise();
+    public boolean isForcedForwardEdge() {
+        return streamEdge.getPartitioner().getClass().equals(ForwardPartitioner.class);
     }
 }

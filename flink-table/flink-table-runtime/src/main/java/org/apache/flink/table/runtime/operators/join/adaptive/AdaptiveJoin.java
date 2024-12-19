@@ -59,11 +59,22 @@ public interface AdaptiveJoin extends Serializable {
             Long threshold,
             Function<Boolean, Boolean> tryTransformEdges);
 
-    boolean trySkewedOptimization(
-            Long leftInputBytes,
-            Long rightInputBytes,
-            Long threshold,
-            Function<Boolean, Boolean> tryTransformEdges);
+    /**
+     * Trys to perform skew optimization.
+     *
+     * @param leftInputBytes bytes counts for the left input data.
+     * @param rightInputBytes bytes counts for the right input data.
+     * @param leftSkewedThreshold The skew threshold for the left input data.
+     * @param rightSkewedThreshold The skew threshold for the right input data.
+     * @param tryModifyEdges A function to modifying the edges, returns whether the modification was
+     *     successful.
+     */
+    void trySkewedOptimization(
+            long[] leftInputBytes,
+            long[] rightInputBytes,
+            long leftSkewedThreshold,
+            long rightSkewedThreshold,
+            Function<Integer, Boolean> tryModifyEdges);
 
     /**
      * Return whether the left input side is the build side in a join operation. It is specifically

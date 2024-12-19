@@ -19,22 +19,41 @@
 package org.apache.flink.table.runtime.strategy;
 
 import org.apache.flink.configuration.ReadableConfig;
+import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
+import org.apache.flink.runtime.scheduler.adaptivebatch.AllToAllBlockingResultInfo;
+import org.apache.flink.runtime.scheduler.adaptivebatch.BlockingResultInfo;
 import org.apache.flink.runtime.scheduler.adaptivebatch.OperatorsFinished;
 import org.apache.flink.streaming.api.graph.StreamGraphContext;
 import org.apache.flink.streaming.api.graph.util.ImmutableStreamEdge;
 import org.apache.flink.streaming.api.graph.util.ImmutableStreamNode;
+import org.apache.flink.streaming.api.graph.util.StreamEdgeUpdateRequestInfo;
+import org.apache.flink.streaming.runtime.partitioner.ForwardForConsecutiveHashPartitioner;
+import org.apache.flink.streaming.runtime.partitioner.RescalePartitioner;
+import org.apache.flink.streaming.runtime.partitioner.StreamPartitioner;
 import org.apache.flink.table.api.config.OptimizerConfigOptions;
 import org.apache.flink.table.api.config.OptimizerConfigOptions.AdaptiveSkewedJoinStrategy;
 import org.apache.flink.table.runtime.operators.join.adaptive.AdaptiveJoin;
 
+import org.apache.flink.shaded.guava32.com.google.common.base.Preconditions;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
-import static org.apache.flink.util.Preconditions.checkArgument;
+import static org.apache.flink.table.runtime.strategy.AdaptiveJoinOptimizationUtil.computeSkewThreshold;
+import static org.apache.flink.table.runtime.strategy.AdaptiveJoinOptimizationUtil.filterEdges;
+import static org.apache.flink.table.runtime.strategy.AdaptiveJoinOptimizationUtil.median;
+import static org.apache.flink.util.Preconditions.checkState;
 
 public class AdaptiveSkewedJoinOptimizationStrategy
         extends BaseAdaptiveJoinOperatorOptimizationStrategy {
+    private static final Logger LOG =
+            LoggerFactory.getLogger(AdaptiveSkewedJoinOptimizationStrategy.class);
     private boolean initialized = false;
     private AdaptiveSkewedJoinStrategy adaptiveSkewedJoinStrategy;
     private long skewedThresholdInBytes;
@@ -57,7 +76,62 @@ public class AdaptiveSkewedJoinOptimizationStrategy
             StreamGraphContext context,
             ImmutableStreamNode adaptiveJoinNode,
             List<ImmutableStreamEdge> upstreamStreamEdges,
-            AdaptiveJoin adaptiveJoin) {}
+            AdaptiveJoin adaptiveJoin) {
+        if (!canPerformOptimization(adaptiveJoinNode)) {
+            return;
+        }
+        for (ImmutableStreamEdge edge : upstreamStreamEdges) {
+            BlockingResultInfo resultInfo = getBlockingResultInfo(operatorsFinished, context, edge);
+            checkState(resultInfo instanceof AllToAllBlockingResultInfo);
+            aggregatedProducedBytesByTypeNumber(
+                    adaptiveJoinNode,
+                    edge.getTypeNumber(),
+                    ((AllToAllBlockingResultInfo) resultInfo).getAggregatedSubpartitionBytes());
+        }
+        if (context.areAllUpstreamNodesFinished(adaptiveJoinNode)) {
+            long[] leftInputSize =
+                    aggregatedProducedBytesByTypeNumberAndNodeId
+                            .get(adaptiveJoinNode.getId())
+                            .get(1);
+            long[] rightInputSize =
+                    aggregatedProducedBytesByTypeNumberAndNodeId
+                            .get(adaptiveJoinNode.getId())
+                            .get(2);
+            Preconditions.checkArgument(
+                    leftInputSize != null && rightInputSize != null,
+                    "Adaptive join node currently supports only two inputs, "
+                            + "but received input bytes with left [%s] and right [%s] for stream "
+                            + "node id [%s].",
+                    leftInputSize,
+                    rightInputSize,
+                    adaptiveJoinNode.getId());
+            long leftSkewedThreshold =
+                    computeSkewThreshold(
+                            median(leftInputSize), skewedFactor, skewedThresholdInBytes);
+            long rightSkewedThreshold =
+                    computeSkewThreshold(
+                            median(rightInputSize), skewedFactor, skewedThresholdInBytes);
+            adaptiveJoin.trySkewedOptimization(
+                    leftInputSize,
+                    rightInputSize,
+                    leftSkewedThreshold,
+                    rightSkewedThreshold,
+                    typeNumber -> {
+                        List<StreamEdgeUpdateRequestInfo> modifiedRequests = new ArrayList<>();
+                        modifiedRequests.addAll(
+                                generateModifiedCorrelationRequestInfos(
+                                        filterEdges(adaptiveJoinNode.getInEdges(), typeNumber)));
+                        modifiedRequests.addAll(
+                                generateForwardPartitionerModificationRequestInfos(
+                                        adaptiveJoinNode.getOutEdges(), context));
+                        return context.modifyStreamEdge(modifiedRequests);
+                    });
+            freeNodeStatistic(adaptiveJoinNode.getId());
+            LOG.info(
+                    "Ended adaptive skewed join optimization for node {}.",
+                    adaptiveJoinNode.getId());
+        }
+    }
 
     private void initialize(ReadableConfig config) {
         if (!initialized) {
@@ -84,7 +158,7 @@ public class AdaptiveSkewedJoinOptimizationStrategy
                         .computeIfAbsent(streamNodeId, k -> new HashMap<>())
                         .computeIfAbsent(
                                 typeNumber, (ignore) -> new long[subpartitionBytes.size()]);
-        checkArgument(subpartitionBytes.size() == aggregatedSubpartitionBytes.length);
+        checkState(subpartitionBytes.size() == aggregatedSubpartitionBytes.length);
         for (int i = 0; i < subpartitionBytes.size(); i++) {
             aggregatedSubpartitionBytes[i] += subpartitionBytes.get(i);
         }
@@ -92,5 +166,80 @@ public class AdaptiveSkewedJoinOptimizationStrategy
 
     private void freeNodeStatistic(Integer nodeId) {
         aggregatedProducedBytesByTypeNumberAndNodeId.remove(nodeId);
+    }
+
+    private boolean canPerformOptimization(ImmutableStreamNode adaptiveJoinNode) {
+        if (adaptiveSkewedJoinStrategy == AdaptiveSkewedJoinStrategy.AUTO) {
+            return existForwardOutEdge(adaptiveJoinNode.getOutEdges());
+        } else if (adaptiveSkewedJoinStrategy == AdaptiveSkewedJoinStrategy.FORCED) {
+            return existForcedForwardOutEdge(adaptiveJoinNode.getOutEdges());
+        } else {
+            return false;
+        }
+    }
+
+    private static boolean existForcedForwardOutEdge(List<ImmutableStreamEdge> edges) {
+        return edges.stream().anyMatch(ImmutableStreamEdge::isForcedForwardEdge);
+    }
+
+    private static boolean existForwardOutEdge(List<ImmutableStreamEdge> edges) {
+        return edges.stream().anyMatch(ImmutableStreamEdge::isForwardEdge);
+    }
+
+    private static BlockingResultInfo getBlockingResultInfo(
+            OperatorsFinished operatorsFinished,
+            StreamGraphContext context,
+            ImmutableStreamEdge edge) {
+        List<BlockingResultInfo> resultInfos =
+                operatorsFinished.getResultInfoMap().get(edge.getSourceId());
+        IntermediateDataSetID intermediateDataSetId =
+                context.getConsumedIntermediateDataSetId(edge.getEdgeId());
+        for (BlockingResultInfo result : resultInfos) {
+            if (result.getResultId() == intermediateDataSetId) {
+                return result;
+            }
+        }
+        throw new IllegalArgumentException(
+                "No matching BlockingResultInfo found for edge ID: " + edge.getEdgeId());
+    }
+
+    private static List<StreamEdgeUpdateRequestInfo> generateModifiedCorrelationRequestInfos(
+            List<ImmutableStreamEdge> streamEdges) {
+        List<StreamEdgeUpdateRequestInfo> streamEdgeUpdateRequestInfos = new ArrayList<>();
+        for (ImmutableStreamEdge edge : streamEdges) {
+            streamEdgeUpdateRequestInfos.add(
+                    new StreamEdgeUpdateRequestInfo(
+                                    edge.getEdgeId(), edge.getSourceId(), edge.getTargetId())
+                            .existIntraInputKeyCorrelation(false));
+        }
+        return streamEdgeUpdateRequestInfos;
+    }
+
+    private static List<StreamEdgeUpdateRequestInfo>
+            generateForwardPartitionerModificationRequestInfos(
+                    List<ImmutableStreamEdge> streamEdges, StreamGraphContext context) {
+        List<ImmutableStreamEdge> forwardEdges =
+                streamEdges.stream()
+                        .filter(ImmutableStreamEdge::isForwardEdge)
+                        .collect(Collectors.toList());
+        List<StreamEdgeUpdateRequestInfo> streamEdgeUpdateRequestInfos = new ArrayList<>();
+        for (ImmutableStreamEdge edge : forwardEdges) {
+            StreamPartitioner<?> newPartitioner;
+            StreamPartitioner<?> partitioner =
+                    context.getOutputPartitioner(
+                            edge.getSourceId(), edge.getTargetId(), edge.getEdgeId());
+            if (partitioner instanceof ForwardForConsecutiveHashPartitioner) {
+                newPartitioner =
+                        ((ForwardForConsecutiveHashPartitioner<?>) partitioner)
+                                .getHashPartitioner();
+            } else {
+                newPartitioner = new RescalePartitioner<>();
+            }
+            streamEdgeUpdateRequestInfos.add(
+                    new StreamEdgeUpdateRequestInfo(
+                                    edge.getEdgeId(), edge.getSourceId(), edge.getTargetId())
+                            .outputPartitioner(newPartitioner));
+        }
+        return streamEdgeUpdateRequestInfos;
     }
 }

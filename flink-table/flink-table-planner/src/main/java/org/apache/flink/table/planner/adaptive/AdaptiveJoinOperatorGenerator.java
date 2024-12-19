@@ -69,6 +69,8 @@ public class AdaptiveJoinOperatorGenerator implements AdaptiveJoin {
 
     private boolean isBroadcastJoin;
 
+    private boolean existOptimizableDataSkewed;
+
     public AdaptiveJoinOperatorGenerator(
             int[] leftKeys,
             int[] rightKeys,
@@ -195,6 +197,46 @@ public class AdaptiveJoinOperatorGenerator implements AdaptiveJoin {
     }
 
     @Override
+    public void trySkewedOptimization(
+            long[] leftInputBytes,
+            long[] rightInputBytes,
+            long leftSkewedThreshold,
+            long rightSkewedThreshold,
+            Function<Integer, Boolean> tryModifyEdges) {
+        boolean isLeftOptimizable = false;
+        boolean isRightOptimizable = false;
+        switch (joinType) {
+            case RIGHT:
+                isRightOptimizable = true;
+                break;
+            case INNER:
+                isLeftOptimizable = true;
+                isRightOptimizable = true;
+                break;
+            case LEFT:
+            case SEMI:
+            case ANTI:
+                isLeftOptimizable = true;
+                break;
+            case FULL:
+            default:
+                throw new RuntimeException(String.format("Unexpected join type %s.", joinType));
+        }
+        isLeftOptimizable =
+                isLeftOptimizable
+                        & existBytesLargerThanThreshold(leftInputBytes, leftSkewedThreshold);
+        isRightOptimizable =
+                isRightOptimizable
+                        & existBytesLargerThanThreshold(rightInputBytes, rightSkewedThreshold);
+        if (isLeftOptimizable) {
+            tryModifyEdges.apply(1);
+        }
+        if (isRightOptimizable) {
+            tryModifyEdges.apply(2);
+        }
+    }
+
+    @Override
     public boolean isLeftBuild() {
         // Sort merge join requires the left side to be read first if the broadcast threshold is not
         // met.
@@ -203,5 +245,14 @@ public class AdaptiveJoinOperatorGenerator implements AdaptiveJoin {
         }
 
         return leftIsBuild;
+    }
+
+    private static boolean existBytesLargerThanThreshold(long[] inputBytes, long threshold) {
+        for (long byteSize : inputBytes) {
+            if (byteSize > threshold) {
+                return true;
+            }
+        }
+        return false;
     }
 }

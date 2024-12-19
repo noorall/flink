@@ -26,12 +26,13 @@ import org.apache.flink.streaming.api.operators.StreamOperatorFactory;
 import org.apache.flink.streaming.api.operators.StreamOperatorParameters;
 import org.apache.flink.table.planner.loader.PlannerModule;
 import org.apache.flink.util.InstantiationUtil;
-import org.apache.flink.util.Preconditions;
 
 import javax.annotation.Nullable;
 
 import java.io.IOException;
 import java.util.function.Function;
+
+import static org.apache.flink.util.Preconditions.checkNotNull;
 
 /**
  * Adaptive join factory.
@@ -55,7 +56,7 @@ public class AdaptiveJoinOperatorFactory<OUT> extends AbstractStreamOperatorFact
     @Nullable private StreamOperatorFactory<OUT> finalFactory;
 
     public AdaptiveJoinOperatorFactory(byte[] adaptiveJoinSerialized) {
-        Preconditions.checkNotNull(adaptiveJoinSerialized);
+        checkNotNull(adaptiveJoinSerialized);
         this.adaptiveJoinSerialized = adaptiveJoinSerialized;
     }
 
@@ -80,6 +81,23 @@ public class AdaptiveJoinOperatorFactory<OUT> extends AbstractStreamOperatorFact
     }
 
     @Override
+    public void trySkewedOptimization(
+            long[] leftInputBytes,
+            long[] rightInputBytes,
+            long leftSkewedThreshold,
+            long rightSkewedThreshold,
+            Function<Integer, Boolean> tryModifyEdges) {
+        checkAndLazyInitialize();
+        checkNotNull(adaptiveJoin)
+                .trySkewedOptimization(
+                        leftInputBytes,
+                        rightInputBytes,
+                        leftSkewedThreshold,
+                        rightSkewedThreshold,
+                        tryModifyEdges);
+    }
+
+    @Override
     public boolean isLeftBuild() {
         checkAndLazyInitialize();
         return adaptiveJoin.isLeftBuild();
@@ -94,7 +112,7 @@ public class AdaptiveJoinOperatorFactory<OUT> extends AbstractStreamOperatorFact
     @Override
     public <T extends StreamOperator<OUT>> T createStreamOperator(
             StreamOperatorParameters<OUT> parameters) {
-        Preconditions.checkNotNull(
+        checkNotNull(
                 finalFactory,
                 String.format(
                         "The OperatorFactory of task [%s] have not been initialized.",
