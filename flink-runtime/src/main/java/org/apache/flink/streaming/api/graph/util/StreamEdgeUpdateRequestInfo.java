@@ -34,6 +34,7 @@ public class StreamEdgeUpdateRequestInfo {
     // For two or more inputs, typeNumber must be >= 1, and 0 means the request will not change the
     // typeNumber.
     private int typeNumber;
+    private Boolean intraInputKeyCorrelated;
 
     public StreamEdgeUpdateRequestInfo(String edgeId, Integer sourceId, Integer targetId) {
         this.edgeId = edgeId;
@@ -49,6 +50,12 @@ public class StreamEdgeUpdateRequestInfo {
 
     public StreamEdgeUpdateRequestInfo withTypeNumber(int typeNumber) {
         this.typeNumber = typeNumber;
+        return this;
+    }
+
+    public StreamEdgeUpdateRequestInfo withIntraInputKeyCorrelated(
+            boolean intraInputKeyCorrelated) {
+        this.intraInputKeyCorrelated = intraInputKeyCorrelated;
         return this;
     }
 
@@ -70,5 +77,9 @@ public class StreamEdgeUpdateRequestInfo {
 
     public int getTypeNumber() {
         return typeNumber;
+    }
+
+    public Boolean getIntraInputKeyCorrelated() {
+        return intraInputKeyCorrelated;
     }
 }
