@@ -31,18 +31,41 @@ import static org.apache.flink.runtime.scheduler.adaptivebatch.util.VertexParall
 import static org.apache.flink.runtime.scheduler.adaptivebatch.util.VertexParallelismAndInputInfosDeciderUtils.getMaxNumPartitions;
 import static org.apache.flink.runtime.scheduler.adaptivebatch.util.VertexParallelismAndInputInfosDeciderUtils.hasSameNumPartitions;
 import static org.apache.flink.runtime.scheduler.adaptivebatch.util.VertexParallelismAndInputInfosDeciderUtils.median;
+import static org.apache.flink.util.Preconditions.checkNotNull;
 
-/** Helper class that provides information of aggregated input infos. */
+/**
+ * Helper class that aggregates input information with the same typeNumber so that they can be
+ * processed as a single unit.
+ */
 public class AggregatedBlockingInputInfo {
+    /** The maximum number of partitions among all aggregated inputs. */
     private final int maxPartitionNum;
 
+    /** The threshold used to determine if a specific aggregated subpartition is skewed. */
     private final long skewedThreshold;
+
+    /** The target size for splitting skewed aggregated subpartitions. */
     private final long targetSize;
 
+    /** Indicates whether all aggregated inputs have the same number of partitions. */
     private final boolean hasSamePartitionNums;
-    private final boolean existIntraInputCorrelation;
 
+    /**
+     * Indicates whether the data corresponding to a specific join key must be sent to the same
+     * downstream subtask.
+     */
+    private final boolean intraInputKeyCorrelation;
+
+    /**
+     * A map where the key is the partition index and the value is an array representing the size of
+     * each subpartition for that partition.
+     */
     private final Map<Integer, long[]> subpartitionBytesByPartition;
+
+    /**
+     * An array representing the aggregated size of each subpartition across all partitions. Each
+     * element in the array corresponds to a subpartition.
+     */
     private final long[] aggregatedSubpartitionBytes;
 
     public AggregatedBlockingInputInfo(
@@ -50,16 +73,16 @@ public class AggregatedBlockingInputInfo {
             long skewedThreshold,
             int maxPartitionNum,
             boolean hasSamePartitionNums,
-            boolean existIntraInputCorrelation,
+            boolean intraInputKeyCorrelation,
             Map<Integer, long[]> subpartitionBytesByPartition,
             long[] aggregatedSubpartitionBytes) {
         this.maxPartitionNum = maxPartitionNum;
         this.skewedThreshold = skewedThreshold;
         this.targetSize = targetSize;
         this.hasSamePartitionNums = hasSamePartitionNums;
-        this.existIntraInputCorrelation = existIntraInputCorrelation;
-        this.subpartitionBytesByPartition = subpartitionBytesByPartition;
-        this.aggregatedSubpartitionBytes = aggregatedSubpartitionBytes;
+        this.intraInputKeyCorrelation = intraInputKeyCorrelation;
+        this.subpartitionBytesByPartition = checkNotNull(subpartitionBytesByPartition);
+        this.aggregatedSubpartitionBytes = checkNotNull(aggregatedSubpartitionBytes);
     }
 
     public int getMaxPartitionNum() {
@@ -79,7 +102,7 @@ public class AggregatedBlockingInputInfo {
     }
 
     public boolean isSplittable() {
-        return !existIntraInputCorrelation
+        return !intraInputKeyCorrelation
                 && !subpartitionBytesByPartition.isEmpty()
                 && hasSamePartitionNums;
     }

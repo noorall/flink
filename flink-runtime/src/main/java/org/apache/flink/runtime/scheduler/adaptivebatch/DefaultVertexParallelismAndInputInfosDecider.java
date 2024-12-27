@@ -20,7 +20,6 @@ package org.apache.flink.runtime.scheduler.adaptivebatch;
 
 import org.apache.flink.api.common.ExecutionConfig;
 import org.apache.flink.configuration.BatchExecutionOptions;
-import org.apache.flink.configuration.BatchExecutionOptionsInternal;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.runtime.executiongraph.JobVertexInputInfo;
@@ -35,7 +34,6 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -181,7 +179,7 @@ public class DefaultVertexParallelismAndInputInfosDecider
         // we need to derive parallelism separately for each input.
         //
         // In the following cases, we need to reset min parallelism and max parallelism to ensure
-        // that the decide parallelism for all inputs is consistent :
+        // that the decided parallelism for all inputs is consistent :
         // 1.  Vertex has a specified parallelism
         // 2.  There are edges that don't need to follow intergroup constraint
         if (vertexInitialParallelism > 0 || inputsGroupByInterCorrelation.containsKey(false)) {
@@ -189,10 +187,10 @@ public class DefaultVertexParallelismAndInputInfosDecider
             maxParallelism = parallelism;
         }
 
-        Map<IntermediateDataSetID, JobVertexInputInfo> vertexInputInfoMap = new HashMap<>();
+        Map<IntermediateDataSetID, JobVertexInputInfo> vertexInputInfos = new HashMap<>();
 
         if (inputsGroupByInterCorrelation.containsKey(true)) {
-            vertexInputInfoMap.putAll(
+            vertexInputInfos.putAll(
                     allToAllVertexInputInfoComputer.compute(
                             jobVertexId,
                             inputsGroupByInterCorrelation.get(true),
@@ -202,35 +200,15 @@ public class DefaultVertexParallelismAndInputInfosDecider
         }
 
         if (inputsGroupByInterCorrelation.containsKey(false)) {
-            List<BlockingInputInfo> inputsWithoutInterCorrelation =
-                    inputsGroupByInterCorrelation.get(false);
-            for (BlockingInputInfo input : inputsWithoutInterCorrelation) {
-                if (input.existIntraInputKeyCorrelation()) {
-                    vertexInputInfoMap.putAll(
-                            allToAllVertexInputInfoComputer.compute(
-                                    jobVertexId,
-                                    Collections.singletonList(input),
-                                    parallelism,
-                                    minParallelism,
-                                    maxParallelism));
-                } else {
-                    vertexInputInfoMap.put(
-                            input.getResultId(),
-                            pointwiseVertexInputInfoComputer.compute(input, parallelism));
-                }
+            for (BlockingInputInfo input : inputsGroupByInterCorrelation.get(false)) {
+                vertexInputInfos.put(
+                        input.getResultId(),
+                        pointwiseVertexInputInfoComputer.compute(input, parallelism));
             }
         }
-        int finalParallelism = checkAndGetParallelism(vertexInputInfoMap.values());
 
-        Map<IntermediateDataSetID, JobVertexInputInfo> vertexInputInfoMapInOrder =
-                new LinkedHashMap<>();
-
-        for (BlockingInputInfo inputInfo : consumedResults) {
-            vertexInputInfoMapInOrder.put(
-                    inputInfo.getResultId(), vertexInputInfoMap.get(inputInfo.getResultId()));
-        }
-
-        return new ParallelismAndInputInfos(finalParallelism, vertexInputInfoMapInOrder);
+        return new ParallelismAndInputInfos(
+                checkAndGetParallelism(vertexInputInfos.values()), vertexInputInfos);
     }
 
     @Override

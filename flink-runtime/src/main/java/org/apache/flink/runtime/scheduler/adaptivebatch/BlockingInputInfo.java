@@ -45,6 +45,10 @@ public class BlockingInputInfo implements BlockingResultInfo {
         this.existIntraInputKeyCorrelation = existIntraInputKeyCorrelation;
     }
 
+    public BlockingResultInfo getConsumedResultInfo() {
+        return blockingResultInfo;
+    }
+
     public int getInputTypeNumber() {
         return inputTypeNumber;
     }

@@ -25,6 +25,7 @@ import org.apache.flink.runtime.executiongraph.VertexInputInfoComputationUtils;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.scheduler.adaptivebatch.BlockingInputInfo;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -71,6 +72,30 @@ public class AllToAllVertexInputInfoComputer {
      * Decide parallelism and input infos, which will make the data be evenly distributed to
      * downstream subtasks for ALL_TO_ALL, such that different downstream subtasks consume roughly
      * the same amount of data.
+     *
+     * <p>Assume there are two input infos upstream, each with three partitions and two
+     * subpartitions: <br>
+     * input 1: 0->[1,1] 1->[2,2] 2->[3,3]<br>
+     * input 2: 0->[1,1] 1->[1,1] 2->[1,1]<br>
+     * This method processes the data as follows: <br>
+     * 1. Reorganize the data by subpartition index: <br>
+     * input 1: {0->[1,2,3],1->[1,2,3]}, <br>
+     * input 2: {0->[1,1,1],1->[1,1,1]}<br>
+     * 2. Split subpartitions with the same index into relatively balanced n parts (if possible) and
+     * perform a Cartesian product operation to ensure data correctness: {0->[1,2][3],1->[1,2][3]},
+     * {0->[1,1,1],1->[1,1,1]} --Cartesian product--> <br>
+     * input 1: {0->[1,2],0->[3],1->[1,2],1->[3]}<br>
+     * input 2: {0->[1,1,1],0->[1,1,1],1->[1,1,1],1->[1,1,1]}, i.e., each input has four balanced
+     * subpartition slices.<br>
+     * 3. Based on the above subpartition slices, calculate the subpartition slice range each task
+     * needs to subscribe to, considering data volume and parallelism constraints:
+     * [0,0],[1,1],[2,2],[3,3]<br>
+     * 4. Convert the calculated subpartition slice range to the form of partition index range ->
+     * subpartition index range:<br>
+     * task0: input1: {[0,1]->[0]} input2:{[0,2]->[0]}<br>
+     * task1: input1: {[2,2]->[0]} input2:{[0,2]->[0]}<br>
+     * task2: input1: {[0,1]->[1]} input2:{[0,2]->[1]}<br>
+     * task3: input1: {[2,2]->[1]} input2:{[0,2]->[1]}
      *
      * @param jobVertexId The job vertex id
      * @param inputInfos The information of consumed blocking results
@@ -119,7 +144,7 @@ public class AllToAllVertexInputInfoComputer {
                 long currentBytesSize = 0;
                 for (List<SubpartitionSlice> subpartitionSlice :
                         subpartitionSlicesByTypeNumber.values()) {
-                    currentBytesSize += subpartitionSlice.get(i).getSize();
+                    currentBytesSize += subpartitionSlice.get(i).getDataBytes();
                 }
                 minBytesSize = Math.min(minBytesSize, currentBytesSize);
                 sumBytesSize += currentBytesSize;
@@ -270,11 +295,9 @@ public class AllToAllVertexInputInfoComputer {
 
     /**
      * Reassembling subpartition slices into balanced n parts and returning the range of index
-     * corresponding to each piece of data. Reassembling need to meet the following conditions:
-     *
-     * <p>1. The data size of each piece does not exceed the limit.
-     *
-     * <p>2. The SubpartitionSlice numbers in each piece does not larger than maxRangeSize.
+     * corresponding to each piece of data. Reassembling need to meet the following conditions:<br>
+     * 1. The data size of each piece does not exceed the limit.<br>
+     * 2. The SubpartitionSlice numbers in each piece does not larger than maxRangeSize.
      *
      * @param limit the limit of data size
      * @param maxRangeSize the max number of SubpartitionSlice in each range
@@ -303,9 +326,9 @@ public class AllToAllVertexInputInfoComputer {
                 // When the bucket already contains duplicate subpartitionSlices, its size should be
                 // ignored.
                 if (!bucket.contains(subpartitionSlice)) {
-                    distinctSize += subpartitionSlice.getSize();
+                    distinctSize += subpartitionSlice.getDataBytes();
                 }
-                currentSize += subpartitionSlice.getSize();
+                currentSize += subpartitionSlice.getDataBytes();
             }
             if (i == startIndex
                     || (totalSize + distinctSize <= limit
@@ -358,9 +381,9 @@ public class AllToAllVertexInputInfoComputer {
                 Set<SubpartitionSlice> bucket =
                         bucketsByTypeNumber.computeIfAbsent(typeNumber, ignored -> new HashSet<>());
                 if (!bucket.contains(subpartitionSlice)) {
-                    distinctSize += subpartitionSlice.getSize();
+                    distinctSize += subpartitionSlice.getDataBytes();
                 }
-                currentSize += subpartitionSlice.getSize();
+                currentSize += subpartitionSlice.getDataBytes();
             }
             if (i == startIndex
                     || (totalSize + distinctSize <= limit
@@ -384,6 +407,16 @@ public class AllToAllVertexInputInfoComputer {
         return count;
     }
 
+    /**
+     * Splits a group of subpartitions with the same subpartition index into balanced slices based
+     * on the target size and returns the corresponding partition ranges.
+     *
+     * @param subPartitionIndex The index of the subpartition to be split.
+     * @param targetSize The target size for each slice.
+     * @param subPartitionBytesByPartitionIndex The byte size information of subpartitions in each
+     *     partition, with the partition index as the key and the byte array as the value.
+     * @return A list of {@link IndexRange} objects representing the partition ranges of each slice.
+     */
     private static List<IndexRange> computePartitionRangesEvenlyData(
             int subPartitionIndex,
             long targetSize,

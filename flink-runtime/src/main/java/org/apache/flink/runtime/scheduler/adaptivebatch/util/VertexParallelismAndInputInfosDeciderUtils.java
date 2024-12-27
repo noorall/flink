@@ -164,10 +164,10 @@ public class VertexParallelismAndInputInfosDeciderUtils {
      *
      * <p>The skew threshold is calculated as the product of the media size and the skewed factor.
      * To ensure that the computed threshold does not fall below a specified default value, the
-     * method uses {@link Math#max} to return the larger of the calculated threshold and the default
-     * threshold.
+     * method uses {@link Math#max} to return the largest of the calculated threshold and the
+     * default threshold.
      *
-     * @param mediaSize the size of the media
+     * @param medianSize the size of the median
      * @param skewedFactor a factor indicating the degree of skewness
      * @param defaultSkewedThreshold the default threshold to be used if the calculated threshold is
      *     less than this value
@@ -175,8 +175,8 @@ public class VertexParallelismAndInputInfosDeciderUtils {
      *     threshold.
      */
     public static long computeSkewThreshold(
-            long mediaSize, double skewedFactor, long defaultSkewedThreshold) {
-        return (long) Math.max(mediaSize * skewedFactor, defaultSkewedThreshold);
+            long medianSize, double skewedFactor, long defaultSkewedThreshold) {
+        return (long) Math.max(medianSize * skewedFactor, defaultSkewedThreshold);
     }
 
     /**

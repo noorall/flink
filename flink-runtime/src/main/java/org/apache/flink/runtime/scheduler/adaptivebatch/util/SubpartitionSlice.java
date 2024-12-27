@@ -26,22 +26,32 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.IntStream;
 
-/** Helper class that provides information for subpartition slice. */
+import static org.apache.flink.util.Preconditions.checkNotNull;
+
+/**
+ * Helper class that describes the statistics of all subpartitions with a specific index within the
+ * given partition range. It may represent a complete subpartition group or a part of the
+ * subpartition group, depending on the partition range.
+ */
 public class SubpartitionSlice {
 
+    /** The index of the subpartition of the subpartition slice. */
     int subpartitionIndex;
+
+    /** The range of partitions that the subpartition slice covers. */
     IndexRange partitionRange;
 
-    long size;
+    /** The size of the subpartition slice in bytes. */
+    long dataBytes;
 
-    public SubpartitionSlice(int subpartitionIndex, IndexRange partitionRange, long size) {
+    public SubpartitionSlice(int subpartitionIndex, IndexRange partitionRange, long dataBytes) {
         this.subpartitionIndex = subpartitionIndex;
-        this.partitionRange = partitionRange;
-        this.size = size;
+        this.partitionRange = checkNotNull(partitionRange);
+        this.dataBytes = dataBytes;
     }
 
-    public long getSize() {
-        return size;
+    public long getDataBytes() {
+        return dataBytes;
     }
 
     public int getSubpartitionIndex() {
@@ -52,6 +62,15 @@ public class SubpartitionSlice {
      * SubpartitionSlice is used to describe a group of inputs with the same type number which may
      * have different numbers of partitions, so we need to use the specific partitions number to get
      * the correct partition range.
+     *
+     * <p>Example, given a specific typeNumber with 2 inputs, and partition counts of 3 and 2
+     * respectively, if the current SubpartitionSlice's PartitionRange is [1,2], it may need
+     * adjustment for the second input. the adjustment ensures that the PartitionRange aligns with
+     * the expected partition count. <br>
+     * -input 0: partition count = 3, valid PartitionRange = [0, 2] <br>
+     * -input 1: partition count = 2, valid PartitionRange = [0, 1] <br>
+     * If the SubpartitionSlice's PartitionRange is [1, 2], it should be corrected to [1, 1] for
+     * typeNumber 1 to match its partition count.
      *
      * @param numPartitions the number of partitions
      * @return the partition range if the partition range is valid, empty otherwise
@@ -73,17 +92,6 @@ public class SubpartitionSlice {
                 subpartitionIndex, partitionRange, aggregatedSubpartitionBytes);
     }
 
-    public static SubpartitionSlice createSubpartitionSlice(
-            int subpartitionIndex,
-            IndexRange partitionRange,
-            Map<Integer, long[]> subpartitionBytesByPartitionIndex) {
-        return new SubpartitionSlice(
-                subpartitionIndex,
-                partitionRange,
-                getNumBytesByIndexRange(
-                        subpartitionIndex, partitionRange, subpartitionBytesByPartitionIndex));
-    }
-
     public static List<SubpartitionSlice> createSubpartitionSlices(
             int subpartitionIndex,
             List<IndexRange> partitionRanges,
@@ -95,6 +103,17 @@ public class SubpartitionSlice {
                             subpartitionIndex, partitionRange, subpartitionBytesByPartitionIndex));
         }
         return subpartitionSlices;
+    }
+
+    private static SubpartitionSlice createSubpartitionSlice(
+            int subpartitionIndex,
+            IndexRange partitionRange,
+            Map<Integer, long[]> subpartitionBytesByPartitionIndex) {
+        return new SubpartitionSlice(
+                subpartitionIndex,
+                partitionRange,
+                getNumBytesByIndexRange(
+                        subpartitionIndex, partitionRange, subpartitionBytesByPartitionIndex));
     }
 
     private static long getNumBytesByIndexRange(
