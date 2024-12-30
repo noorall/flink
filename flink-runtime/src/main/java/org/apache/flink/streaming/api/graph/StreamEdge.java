@@ -77,9 +77,19 @@ public class StreamEdge implements Serializable {
 
     private final IntermediateDataSetID intermediateDatasetIdToProduce;
 
-    private boolean existInterInputsKeyCorrelation;
+    /**
+     * There are relationships between multiple inputs, if the data corresponding to a specific join
+     * key from one input is split, the corresponding join key data from the other inputs must be
+     * duplicated (meaning that it must be sent to the downstream nodes where the split data is
+     * sent).
+     */
+    private boolean interInputsKeyCorrelation;
 
-    private boolean existIntraInputKeyCorrelation;
+    /**
+     * For this edge the data corresponding to a specific join key must be sent to the same
+     * downstream subtask.
+     */
+    private boolean intraInputKeyCorrelation;
 
     public StreamEdge(
             StreamNode sourceVertex,
@@ -155,9 +165,7 @@ public class StreamEdge implements Serializable {
                         + "_"
                         + uniqueId;
         if (outputPartitioner != null) {
-            this.existIntraInputKeyCorrelation = !outputPartitioner.isPointwise();
-            this.existInterInputsKeyCorrelation =
-                    !outputPartitioner.isPointwise() && !outputPartitioner.isBroadcast();
+            configureKeyCorrelation(outputPartitioner);
         }
     }
 
@@ -186,10 +194,8 @@ public class StreamEdge implements Serializable {
     }
 
     public void setPartitioner(StreamPartitioner<?> partitioner) {
+        configureKeyCorrelation(partitioner);
         this.outputPartitioner = partitioner;
-        this.existIntraInputKeyCorrelation = !partitioner.isPointwise();
-        this.existInterInputsKeyCorrelation =
-                !partitioner.isPointwise() && !partitioner.isBroadcast();
     }
 
     public void setBufferTimeout(long bufferTimeout) {
@@ -256,19 +262,24 @@ public class StreamEdge implements Serializable {
         return edgeId;
     }
 
+    private void configureKeyCorrelation(StreamPartitioner<?> partitioner) {
+        this.intraInputKeyCorrelation = !partitioner.isPointwise();
+        this.interInputsKeyCorrelation = !partitioner.isPointwise() && !partitioner.isBroadcast();
+    }
+
     public boolean existInterInputsKeyCorrelation() {
-        return existInterInputsKeyCorrelation;
+        return interInputsKeyCorrelation;
     }
 
     public boolean existIntraInputKeyCorrelation() {
-        return existIntraInputKeyCorrelation;
+        return intraInputKeyCorrelation;
     }
 
-    public void setExistInterInputsKeyCorrelation(boolean existInterInputsKeyCorrelation) {
-        this.existInterInputsKeyCorrelation = existInterInputsKeyCorrelation;
+    public void setInterInputsKeyCorrelation(boolean interInputsKeyCorrelation) {
+        this.interInputsKeyCorrelation = interInputsKeyCorrelation;
     }
 
-    public void setExistIntraInputKeyCorrelation(boolean existIntraInputKeyCorrelation) {
-        this.existIntraInputKeyCorrelation = existIntraInputKeyCorrelation;
+    public void setIntraInputKeyCorrelation(boolean intraInputKeyCorrelation) {
+        this.intraInputKeyCorrelation = intraInputKeyCorrelation;
     }
 }
