@@ -16,9 +16,11 @@
  * limitations under the License.
  */
 
-package org.apache.flink.configuration;
+package org.apache.flink.runtime.scheduler.adaptivebatch;
 
 import org.apache.flink.annotation.Internal;
+import org.apache.flink.configuration.ConfigOption;
+import org.apache.flink.configuration.MemorySize;
 
 import static org.apache.flink.configuration.ConfigOptions.key;
 

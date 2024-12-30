@@ -26,17 +26,24 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.IntStream;
 
-/** Helper class that provides information for subpartition slice. */
+import static org.apache.flink.util.Preconditions.checkNotNull;
+
+/**
+ * Helper class that describes the statistics of all subpartitions with a specific index within the
+ * given partition range. It may represent a complete subpartition group or a part of the
+ * subpartition group, depending on the partition range.
+ */
 public class SubpartitionSlice {
 
     int subpartitionIndex;
     IndexRange partitionRange;
 
+    /** The size of the subpartition slice in bytes. */
     long size;
 
     public SubpartitionSlice(int subpartitionIndex, IndexRange partitionRange, long size) {
         this.subpartitionIndex = subpartitionIndex;
-        this.partitionRange = partitionRange;
+        this.partitionRange = checkNotNull(partitionRange);
         this.size = size;
     }
 
