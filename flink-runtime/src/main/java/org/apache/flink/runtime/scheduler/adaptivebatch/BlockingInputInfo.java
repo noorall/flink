@@ -22,31 +22,46 @@ import org.apache.flink.runtime.executiongraph.IndexRange;
 import org.apache.flink.runtime.executiongraph.ResultPartitionBytes;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
+import static org.apache.flink.util.Preconditions.checkNotNull;
 import static org.apache.flink.util.Preconditions.checkState;
 
+/**
+ * Helper class that provides read-only information of input for {@link
+ * VertexParallelismAndInputInfosDecider}.
+ */
 public class BlockingInputInfo implements BlockingResultInfo {
+    /** The original blocking result information. */
     private final BlockingResultInfo blockingResultInfo;
+
+    /** The type number of the input for co-tasks. */
     private final int inputTypeNumber;
-    private final boolean existInterInputsKeyCorrelation;
-    private final boolean existIntraInputKeyCorrelation;
+
+    /**
+     * If true, means that there are relationships between multiple inputs, if the data
+     * corresponding to a specific join key from one input is split, the corresponding join key data
+     * from the other inputs must be duplicated (meaning that it must be sent to the downstream
+     * nodes where the split data is sent).
+     */
+    private final boolean interInputsKeyCorrelation;
+
+    /**
+     * If true, means that the data corresponding to a specific join key must be sent to the same
+     * downstream subtask.
+     */
+    private final boolean intraInputKeyCorrelation;
 
     public BlockingInputInfo(
             BlockingResultInfo blockingResultInfo,
             int inputTypeNumber,
-            boolean existInterInputsKeyCorrelation,
-            boolean existIntraInputKeyCorrelation) {
-        this.blockingResultInfo = blockingResultInfo;
+            boolean interInputsKeyCorrelation,
+            boolean intraInputKeyCorrelation) {
+        this.blockingResultInfo = checkNotNull(blockingResultInfo);
         this.inputTypeNumber = inputTypeNumber;
-        this.existInterInputsKeyCorrelation = existInterInputsKeyCorrelation;
-        this.existIntraInputKeyCorrelation = existIntraInputKeyCorrelation;
-    }
-
-    public BlockingResultInfo getConsumedResultInfo() {
-        return blockingResultInfo;
+        this.interInputsKeyCorrelation = interInputsKeyCorrelation;
+        this.intraInputKeyCorrelation = intraInputKeyCorrelation;
     }
 
     public int getInputTypeNumber() {
@@ -54,19 +69,16 @@ public class BlockingInputInfo implements BlockingResultInfo {
     }
 
     public boolean existIntraInputKeyCorrelation() {
-        return existIntraInputKeyCorrelation;
+        return intraInputKeyCorrelation;
     }
 
     public boolean existInterInputsKeyCorrelation() {
-        return existInterInputsKeyCorrelation;
+        return interInputsKeyCorrelation;
     }
 
     public List<Long> getAggregatedSubpartitionBytes() {
-        if (blockingResultInfo instanceof AllToAllBlockingResultInfo) {
-            return ((AllToAllBlockingResultInfo) blockingResultInfo)
-                    .getAggregatedSubpartitionBytes();
-        }
-        return Collections.emptyList();
+        checkState(blockingResultInfo instanceof AllToAllBlockingResultInfo);
+        return ((AllToAllBlockingResultInfo) blockingResultInfo).getAggregatedSubpartitionBytes();
     }
 
     @Override
