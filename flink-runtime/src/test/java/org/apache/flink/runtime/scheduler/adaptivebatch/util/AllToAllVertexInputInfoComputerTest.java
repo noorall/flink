@@ -144,6 +144,92 @@ class AllToAllVertexInputInfoComputerTest {
                 2, rightInputInfos, rightTargetConsumedSubpartitionGroups, vertexInputs);
     }
 
+    @Test
+    void testComputeAggAllToAllWithDifferentNumPartitions() {
+        AllToAllVertexInputInfoComputer computer = createAllToAllVertexInputInfoComputer();
+        List<BlockingInputInfo> inputInfos = new ArrayList<>();
+        List<BlockingInputInfo> leftInputInfos1 =
+                createBlockingInputInfos(1, 1, 2, true, List.of());
+        List<BlockingInputInfo> leftInputInfos2 =
+                createBlockingInputInfos(1, 1, 3, true, List.of());
+        List<BlockingInputInfo> rightInputInfos =
+                createBlockingInputInfos(2, 1, 2, true, List.of());
+        inputInfos.addAll(leftInputInfos1);
+        inputInfos.addAll(leftInputInfos2);
+        inputInfos.addAll(rightInputInfos);
+        Map<IntermediateDataSetID, JobVertexInputInfo> vertexInputs =
+                computer.compute(new JobVertexID(), inputInfos, 2, 1, 2);
+
+        List<Map<IndexRange, IndexRange>> left1TargetConsumedSubpartitionGroups =
+                List.of(
+                        Map.of(new IndexRange(0, 1), new IndexRange(0, 1)),
+                        Map.of(new IndexRange(0, 1), new IndexRange(2, 2)));
+
+        List<Map<IndexRange, IndexRange>> left2TargetConsumedSubpartitionGroups =
+                List.of(
+                        Map.of(new IndexRange(0, 2), new IndexRange(0, 1)),
+                        Map.of(new IndexRange(0, 2), new IndexRange(2, 2)));
+
+        List<Map<IndexRange, IndexRange>> rightTargetConsumedSubpartitionGroups =
+                List.of(
+                        Map.of(new IndexRange(0, 1), new IndexRange(0, 1)),
+                        Map.of(new IndexRange(0, 1), new IndexRange(2, 2)));
+
+        checkJobVertexInputInfo(
+                2, leftInputInfos1, left1TargetConsumedSubpartitionGroups, vertexInputs);
+        checkJobVertexInputInfo(
+                2, leftInputInfos2, left2TargetConsumedSubpartitionGroups, vertexInputs);
+        checkJobVertexInputInfo(
+                2, rightInputInfos, rightTargetConsumedSubpartitionGroups, vertexInputs);
+    }
+
+    @Test
+    void testComputeAggAllToAllWithDifferentNumPartitionsAndDataSkewed() {
+        AllToAllVertexInputInfoComputer computer = createAllToAllVertexInputInfoComputer();
+        List<BlockingInputInfo> inputInfos = new ArrayList<>();
+        List<BlockingInputInfo> leftInputInfos1 =
+                createBlockingInputInfos(1, 1, 2, false, List.of(1));
+        List<BlockingInputInfo> leftInputInfos2 =
+                createBlockingInputInfos(1, 1, 3, false, List.of(1));
+        List<BlockingInputInfo> rightInputInfos =
+                createBlockingInputInfos(2, 1, 2, false, List.of(1));
+        inputInfos.addAll(leftInputInfos1);
+        inputInfos.addAll(leftInputInfos2);
+        inputInfos.addAll(rightInputInfos);
+        Map<IntermediateDataSetID, JobVertexInputInfo> vertexInputs =
+                computer.compute(new JobVertexID(), inputInfos, 2, 1, 2);
+
+        List<Map<IndexRange, IndexRange>> left1TargetConsumedSubpartitionGroups =
+                List.of(
+                        Map.of(new IndexRange(0, 1), new IndexRange(0, 1)),
+                        Map.of(new IndexRange(0, 1), new IndexRange(1, 2)));
+
+        List<Map<IndexRange, IndexRange>> left2TargetConsumedSubpartitionGroups =
+                List.of(
+                        Map.of(new IndexRange(0, 2), new IndexRange(0, 1)),
+                        Map.of(new IndexRange(0, 2), new IndexRange(1, 2)));
+
+        List<Map<IndexRange, IndexRange>> rightTargetConsumedSubpartitionGroups =
+                List.of(
+                        Map.of(
+                                new IndexRange(0, 0),
+                                new IndexRange(1, 1),
+                                new IndexRange(0, 1),
+                                new IndexRange(0, 0)),
+                        Map.of(
+                                new IndexRange(1, 1),
+                                new IndexRange(1, 1),
+                                new IndexRange(0, 1),
+                                new IndexRange(2, 2)));
+
+        checkJobVertexInputInfo(
+                2, leftInputInfos1, left1TargetConsumedSubpartitionGroups, vertexInputs);
+        checkJobVertexInputInfo(
+                2, leftInputInfos2, left2TargetConsumedSubpartitionGroups, vertexInputs);
+        checkJobVertexInputInfo(
+                2, rightInputInfos, rightTargetConsumedSubpartitionGroups, vertexInputs);
+    }
+
     private static List<BlockingInputInfo> createBlockingInputInfos(
             int typeNumber,
             int numInputInfos,
