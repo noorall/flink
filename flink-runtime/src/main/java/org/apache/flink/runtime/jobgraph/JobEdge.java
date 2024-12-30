@@ -67,9 +67,19 @@ public class JobEdge implements java.io.Serializable {
 
     private final int typeNumber;
 
-    private final boolean existInterInputsKeyCorrelation;
+    /**
+     * There are relationships between multiple inputs, if the data corresponding to a specific join
+     * key from one input is split, the corresponding join key data from the other inputs must be
+     * duplicated (meaning that it must be sent to the downstream nodes where the split data is
+     * sent).
+     */
+    private final boolean interInputsKeyCorrelation;
 
-    private final boolean existIntraInputKeyCorrelation;
+    /**
+     * For this edge the data corresponding to a specific join key must be sent to the same
+     * downstream subtask.
+     */
+    private final boolean intraInputKeyCorrelation;
 
     /**
      * Constructs a new job edge, that connects an intermediate result to a consumer task.
@@ -86,8 +96,8 @@ public class JobEdge implements java.io.Serializable {
             boolean isBroadcast,
             boolean isForward,
             int typeNumber,
-            boolean existInterInputsKeyCorrelation,
-            boolean existIntraInputKeyCorrelation) {
+            boolean interInputsKeyCorrelation,
+            boolean intraInputKeyCorrelation) {
         if (source == null || target == null || distributionPattern == null) {
             throw new NullPointerException();
         }
@@ -97,8 +107,8 @@ public class JobEdge implements java.io.Serializable {
         this.isBroadcast = isBroadcast;
         this.isForward = isForward;
         this.typeNumber = typeNumber;
-        this.existInterInputsKeyCorrelation = existInterInputsKeyCorrelation;
-        this.existIntraInputKeyCorrelation = existIntraInputKeyCorrelation;
+        this.interInputsKeyCorrelation = interInputsKeyCorrelation;
+        this.intraInputKeyCorrelation = intraInputKeyCorrelation;
     }
 
     /**
@@ -252,12 +262,12 @@ public class JobEdge implements java.io.Serializable {
 
     /** Gets whether the edge exist InterInputsKeyCorrelation. */
     public boolean existInterInputsKeyCorrelation() {
-        return existInterInputsKeyCorrelation;
+        return interInputsKeyCorrelation;
     }
 
     /** Gets whether the edge exist IntraInputKeyCorrelation. */
     public boolean existIntraInputKeyCorrelation() {
-        return existIntraInputKeyCorrelation;
+        return intraInputKeyCorrelation;
     }
 
     // --------------------------------------------------------------------------------------------

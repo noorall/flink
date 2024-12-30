@@ -18,6 +18,7 @@
 
 package org.apache.flink.runtime.jobgraph;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.ExecutionConfig;
 import org.apache.flink.api.common.operators.ResourceSpec;
 import org.apache.flink.configuration.Configuration;
@@ -515,6 +516,7 @@ public class JobVertex implements java.io.Serializable {
                 id, key -> new IntermediateDataSet(id, partitionType, this));
     }
 
+    @VisibleForTesting
     public JobEdge connectNewDataSetAsInput(
             JobVertex input,
             DistributionPattern distPattern,
@@ -542,8 +544,8 @@ public class JobVertex implements java.io.Serializable {
             boolean isBroadcast,
             boolean isForward,
             int typeNumber,
-            boolean existInterInputsCorrelation,
-            boolean existIntraInputCorrelation) {
+            boolean interInputsKeyCorrelation,
+            boolean intraInputKeyCorrelation) {
 
         IntermediateDataSet dataSet =
                 input.getOrCreateResultDataSet(intermediateDataSetId, partitionType);
@@ -556,8 +558,8 @@ public class JobVertex implements java.io.Serializable {
                         isBroadcast,
                         isForward,
                         typeNumber,
-                        existInterInputsCorrelation,
-                        existIntraInputCorrelation);
+                        interInputsKeyCorrelation,
+                        intraInputKeyCorrelation);
         this.inputs.add(edge);
         dataSet.addConsumer(edge);
         return edge;
