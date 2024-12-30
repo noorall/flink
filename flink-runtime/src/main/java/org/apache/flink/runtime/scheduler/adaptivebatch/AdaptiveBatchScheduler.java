@@ -842,12 +842,10 @@ public class AdaptiveBatchScheduler extends DefaultScheduler implements JobGraph
         List<BlockingInputInfo> consumableResultInfo = new ArrayList<>();
 
         DefaultLogicalVertex logicalVertex = logicalTopology.getVertex(jobVertex.getJobVertexId());
-        Iterator<DefaultLogicalResult> consumedResults =
-                logicalVertex.getConsumedResults().iterator();
         Iterator<JobEdge> jobEdges = jobVertex.getJobVertex().getInputs().iterator();
 
-        while (consumedResults.hasNext() && jobEdges.hasNext()) {
-            DefaultLogicalResult consumedResult = consumedResults.next();
+        for (DefaultLogicalResult consumedResult : logicalVertex.getConsumedResults()) {
+            checkState(jobEdges.hasNext());
             JobEdge jobEdge = jobEdges.next();
             final ExecutionJobVertex producerVertex =
                     getExecutionJobVertex(consumedResult.getProducer().getId());
