@@ -32,11 +32,11 @@ import org.apache.flink.runtime.scheduler.adaptivebatch.util.PointwiseVertexInpu
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 import static org.apache.flink.runtime.scheduler.adaptivebatch.util.VertexParallelismAndInputInfosDeciderUtils.checkAndGetParallelism;
 import static org.apache.flink.runtime.scheduler.adaptivebatch.util.VertexParallelismAndInputInfosDeciderUtils.getMaxNumSubpartitions;
@@ -163,52 +163,12 @@ public class DefaultVertexParallelismAndInputInfosDecider
         }
         checkState(maxParallelism >= minParallelism);
 
-        int parallelism =
-                vertexInitialParallelism > 0
-                        ? vertexInitialParallelism
-                        : decideParallelism(
-                                jobVertexId, consumedResults, minParallelism, maxParallelism);
-
-        Map<Boolean, List<BlockingInputInfo>> inputsGroupByInterCorrelation =
-                consumedResults.stream()
-                        .collect(
-                                Collectors.groupingBy(
-                                        BlockingInputInfo::existInterInputsKeyCorrelation));
-
-        // For AllToAll like inputs, we derive parallelism as a whole, while for Pointwise inputs,
-        // we need to derive parallelism separately for each input.
-        //
-        // In the following cases, we need to reset min parallelism and max parallelism to ensure
-        // that the decided parallelism for all inputs is consistent :
-        // 1.  Vertex has a specified parallelism
-        // 2.  There are edges that don't need to follow intergroup constraint
-        if (vertexInitialParallelism > 0 || inputsGroupByInterCorrelation.containsKey(false)) {
-            minParallelism = parallelism;
-            maxParallelism = parallelism;
-        }
-
-        Map<IntermediateDataSetID, JobVertexInputInfo> vertexInputInfos = new HashMap<>();
-
-        if (inputsGroupByInterCorrelation.containsKey(true)) {
-            vertexInputInfos.putAll(
-                    allToAllVertexInputInfoComputer.compute(
-                            jobVertexId,
-                            inputsGroupByInterCorrelation.get(true),
-                            parallelism,
-                            minParallelism,
-                            maxParallelism));
-        }
-
-        if (inputsGroupByInterCorrelation.containsKey(false)) {
-            for (BlockingInputInfo input : inputsGroupByInterCorrelation.get(false)) {
-                vertexInputInfos.put(
-                        input.getResultId(),
-                        pointwiseVertexInputInfoComputer.compute(input, parallelism));
-            }
-        }
-
-        return new ParallelismAndInputInfos(
-                checkAndGetParallelism(vertexInputInfos.values()), vertexInputInfos);
+        return decideParallelismAndInputInfosForNonSource(
+                jobVertexId,
+                consumedResults,
+                vertexInitialParallelism,
+                minParallelism,
+                maxParallelism);
     }
 
     @Override
@@ -230,6 +190,64 @@ public class DefaultVertexParallelismAndInputInfosDecider
     @Override
     public long getDataVolumePerTask() {
         return dataVolumePerTask;
+    }
+
+    private ParallelismAndInputInfos decideParallelismAndInputInfosForNonSource(
+            JobVertexID jobVertexId,
+            List<BlockingInputInfo> consumedResults,
+            int vertexInitialParallelism,
+            int minParallelism,
+            int maxParallelism) {
+        int parallelism =
+                vertexInitialParallelism > 0
+                        ? vertexInitialParallelism
+                        : decideParallelism(
+                                jobVertexId, consumedResults, minParallelism, maxParallelism);
+
+        List<BlockingInputInfo> pointwiseInputs = new ArrayList<>();
+
+        List<BlockingInputInfo> allToAllInputs = new ArrayList<>();
+
+        consumedResults.forEach(
+                inputInfo -> {
+                    if (inputInfo.isPointwise()) {
+                        pointwiseInputs.add(inputInfo);
+                    } else {
+                        allToAllInputs.add(inputInfo);
+                    }
+                });
+
+        // For AllToAll like inputs, we derive parallelism as a whole, while for Pointwise inputs,
+        // we need to derive parallelism separately for each input.
+        //
+        // In the following cases, we need to reset min parallelism and max parallelism to ensure
+        // that the decided parallelism for all inputs is consistent :
+        // 1.  Vertex has a specified parallelism
+        // 2.  There are pointwise inputs
+        if (vertexInitialParallelism > 0 || !pointwiseInputs.isEmpty()) {
+            minParallelism = parallelism;
+            maxParallelism = parallelism;
+        }
+
+        Map<IntermediateDataSetID, JobVertexInputInfo> vertexInputInfos = new HashMap<>();
+
+        if (!allToAllInputs.isEmpty()) {
+            vertexInputInfos.putAll(
+                    allToAllVertexInputInfoComputer.compute(
+                            jobVertexId,
+                            allToAllInputs,
+                            parallelism,
+                            minParallelism,
+                            maxParallelism));
+        }
+
+        if (!pointwiseInputs.isEmpty()) {
+            vertexInputInfos.putAll(
+                    pointwiseVertexInputInfoComputer.compute(pointwiseInputs, parallelism));
+        }
+
+        return new ParallelismAndInputInfos(
+                checkAndGetParallelism(vertexInputInfos.values()), vertexInputInfos);
     }
 
     int decideParallelism(

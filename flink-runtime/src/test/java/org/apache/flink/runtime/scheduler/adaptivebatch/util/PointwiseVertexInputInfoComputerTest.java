@@ -20,6 +20,7 @@ package org.apache.flink.runtime.scheduler.adaptivebatch.util;
 
 import org.apache.flink.runtime.executiongraph.IndexRange;
 import org.apache.flink.runtime.executiongraph.JobVertexInputInfo;
+import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 import org.apache.flink.runtime.scheduler.adaptivebatch.BlockingInputInfo;
 import org.apache.flink.runtime.scheduler.adaptivebatch.VertexInputInfoComputerTestUtil;
 
@@ -36,19 +37,17 @@ class PointwiseVertexInputInfoComputerTest {
     @Test
     void testComputePointwiseInputWithoutSkewed() {
         PointwiseVertexInputInfoComputer computer = createPointwiseVertexInputInfoComputer();
-        BlockingInputInfo inputInfo = createBlockingInputInfos(2, List.of());
-        JobVertexInputInfo vertexInputs = computer.compute(inputInfo, 2);
+        List<BlockingInputInfo> inputInfos = createBlockingInputInfos(2, List.of());
+        Map<IntermediateDataSetID, JobVertexInputInfo> vertexInputs =
+                computer.compute(inputInfos, 2);
         List<Map<IndexRange, IndexRange>> targetConsumedSubpartitionGroups =
                 List.of(
                         Map.of(new IndexRange(0, 0), new IndexRange(0, 2)),
                         Map.of(new IndexRange(1, 1), new IndexRange(0, 2)));
-        checkJobVertexInputInfo(
-                2,
-                List.of(inputInfo),
-                targetConsumedSubpartitionGroups,
-                Map.of(inputInfo.getResultId(), vertexInputs));
+        checkJobVertexInputInfo(2, inputInfos, targetConsumedSubpartitionGroups, vertexInputs);
 
-        JobVertexInputInfo vertexInputs2 = computer.compute(inputInfo, 3);
+        Map<IntermediateDataSetID, JobVertexInputInfo> vertexInputs2 =
+                computer.compute(inputInfos, 3);
         List<Map<IndexRange, IndexRange>> targetConsumedSubpartitionGroups2 =
                 List.of(
                         Map.of(new IndexRange(0, 0), new IndexRange(0, 1)),
@@ -58,18 +57,15 @@ class PointwiseVertexInputInfoComputerTest {
                                 new IndexRange(1, 1),
                                 new IndexRange(0, 0)),
                         Map.of(new IndexRange(1, 1), new IndexRange(1, 2)));
-        checkJobVertexInputInfo(
-                3,
-                List.of(inputInfo),
-                targetConsumedSubpartitionGroups2,
-                Map.of(inputInfo.getResultId(), vertexInputs2));
+        checkJobVertexInputInfo(3, inputInfos, targetConsumedSubpartitionGroups2, vertexInputs2);
     }
 
     @Test
-    void testComputePointwiseInputWithSkewed() {
+    void testComputeVertexInputInfoPointwiseInputWithSkewed() {
         PointwiseVertexInputInfoComputer computer = createPointwiseVertexInputInfoComputer();
-        BlockingInputInfo inputInfo = createBlockingInputInfos(3, List.of(0));
-        JobVertexInputInfo vertexInputs = computer.compute(inputInfo, 3);
+        List<BlockingInputInfo> inputInfos = createBlockingInputInfos(3, List.of(0));
+        Map<IntermediateDataSetID, JobVertexInputInfo> vertexInputs =
+                computer.compute(inputInfos, 3);
         List<Map<IndexRange, IndexRange>> targetConsumedSubpartitionGroups =
                 List.of(
                         Map.of(new IndexRange(0, 0), new IndexRange(0, 0)),
@@ -79,14 +75,11 @@ class PointwiseVertexInputInfoComputerTest {
                                 new IndexRange(2, 2),
                                 new IndexRange(1, 2),
                                 new IndexRange(0, 2)));
-        checkJobVertexInputInfo(
-                3,
-                List.of(inputInfo),
-                targetConsumedSubpartitionGroups,
-                Map.of(inputInfo.getResultId(), vertexInputs));
+        checkJobVertexInputInfo(3, inputInfos, targetConsumedSubpartitionGroups, vertexInputs);
 
-        BlockingInputInfo inputInfo2 = createBlockingInputInfos(3, List.of(1));
-        JobVertexInputInfo vertexInputs2 = computer.compute(inputInfo2, 3);
+        List<BlockingInputInfo> inputInfos2 = createBlockingInputInfos(3, List.of(1));
+        Map<IntermediateDataSetID, JobVertexInputInfo> vertexInputs2 =
+                computer.compute(inputInfos2, 3);
         List<Map<IndexRange, IndexRange>> targetConsumedSubpartitionGroups2 =
                 List.of(
                         Map.of(
@@ -100,14 +93,15 @@ class PointwiseVertexInputInfoComputerTest {
                                 new IndexRange(2, 2),
                                 new IndexRange(2, 2),
                                 new IndexRange(0, 2)));
-        checkJobVertexInputInfo(
-                3,
-                List.of(inputInfo2),
-                targetConsumedSubpartitionGroups2,
-                Map.of(inputInfo2.getResultId(), vertexInputs2));
+        checkJobVertexInputInfo(3, inputInfos2, targetConsumedSubpartitionGroups2, vertexInputs2);
     }
 
-    private static BlockingInputInfo createBlockingInputInfos(
+    private static List<BlockingInputInfo> createBlockingInputInfos(
+            int numPartitions, List<Integer> skewedPartitionIndex) {
+        return List.of(createBlockingInputInfo(numPartitions, skewedPartitionIndex));
+    }
+
+    private static BlockingInputInfo createBlockingInputInfo(
             int numPartitions, List<Integer> skewedPartitionIndex) {
         return VertexInputInfoComputerTestUtil.createBlockingInputInfos(
                         1,

@@ -109,26 +109,7 @@ public class BlockingInputInfo implements BlockingResultInfo {
     @Override
     public long getNumBytesProduced(
             IndexRange partitionIndexRange, IndexRange subpartitionIndexRange) {
-        long inputBytes = 0;
-        Map<Integer, long[]> subpartitionBytesByPartitionIndex =
-                blockingResultInfo.getSubpartitionBytesByPartitionIndex();
-        checkState(!subpartitionBytesByPartitionIndex.isEmpty(), "Partition has been aggregated.");
-        for (int i = partitionIndexRange.getStartIndex();
-                i <= partitionIndexRange.getEndIndex();
-                ++i) {
-            checkState(
-                    subpartitionIndexRange.getEndIndex()
-                            < subpartitionBytesByPartitionIndex.get(i).length,
-                    "Subpartition end index %s is out of range of partition %s.",
-                    subpartitionIndexRange.getEndIndex(),
-                    i);
-            for (int j = subpartitionIndexRange.getStartIndex();
-                    j <= subpartitionIndexRange.getEndIndex();
-                    ++j) {
-                inputBytes += subpartitionBytesByPartitionIndex.get(i)[j];
-            }
-        }
-        return inputBytes;
+        return blockingResultInfo.getNumBytesProduced(partitionIndexRange, subpartitionIndexRange);
     }
 
     @Override

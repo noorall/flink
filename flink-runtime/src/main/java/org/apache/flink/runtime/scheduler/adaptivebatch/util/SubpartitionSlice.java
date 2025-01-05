@@ -22,10 +22,8 @@ import org.apache.flink.runtime.executiongraph.IndexRange;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.stream.IntStream;
 
+import static org.apache.flink.util.Preconditions.checkArgument;
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
 /**
@@ -35,18 +33,18 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
  */
 public class SubpartitionSlice {
 
-    /** The index of the subpartition of the subpartition slice. */
-    int subpartitionIndex;
-
     /** The range of partitions that the subpartition slice covers. */
-    IndexRange partitionRange;
+    private final IndexRange partitionRange;
+
+    /** The range of subpartitions that the subpartition slice covers. */
+    private final IndexRange subpartitionRange;
 
     /** The size of the subpartition slice in bytes. */
-    long dataBytes;
+    private final long dataBytes;
 
-    public SubpartitionSlice(int subpartitionIndex, IndexRange partitionRange, long dataBytes) {
-        this.subpartitionIndex = subpartitionIndex;
+    SubpartitionSlice(IndexRange partitionRange, IndexRange subpartitionRange, long dataBytes) {
         this.partitionRange = checkNotNull(partitionRange);
+        this.subpartitionRange = checkNotNull(subpartitionRange);
         this.dataBytes = dataBytes;
     }
 
@@ -54,8 +52,8 @@ public class SubpartitionSlice {
         return dataBytes;
     }
 
-    public int getSubpartitionIndex() {
-        return subpartitionIndex;
+    public IndexRange getSubpartitionRange() {
+        return subpartitionRange;
     }
 
     /**
@@ -75,54 +73,33 @@ public class SubpartitionSlice {
      * @param numPartitions the number of partitions
      * @return the partition range if the partition range is valid, empty otherwise
      */
-    public Optional<IndexRange> getPartitionRange(int numPartitions) {
+    public IndexRange getPartitionRange(int numPartitions) {
         if (partitionRange.getEndIndex() < numPartitions) {
-            return Optional.of(partitionRange);
+            return partitionRange;
         } else if (partitionRange.getStartIndex() < numPartitions
                 && partitionRange.getEndIndex() >= numPartitions) {
-            return Optional.of(new IndexRange(partitionRange.getStartIndex(), numPartitions - 1));
+            return new IndexRange(partitionRange.getStartIndex(), numPartitions - 1);
         } else {
-            return Optional.empty();
+            throw new IllegalStateException("Invalid partition range.");
         }
     }
 
     public static SubpartitionSlice createSubpartitionSlice(
-            int subpartitionIndex, IndexRange partitionRange, long aggregatedSubpartitionBytes) {
-        return new SubpartitionSlice(
-                subpartitionIndex, partitionRange, aggregatedSubpartitionBytes);
+            IndexRange partitionRange, IndexRange subpartitionRange, long dataBytes) {
+        return new SubpartitionSlice(partitionRange, subpartitionRange, dataBytes);
     }
 
-    public static List<SubpartitionSlice> createSubpartitionSlices(
-            int subpartitionIndex,
+    public static List<SubpartitionSlice> createSubpartitionSlicesByMultiPartitionRanges(
             List<IndexRange> partitionRanges,
-            Map<Integer, long[]> subpartitionBytesByPartitionIndex) {
+            IndexRange subpartitionRange,
+            long[] dataBytesPerSlice) {
+        checkArgument(dataBytesPerSlice.length == partitionRanges.size());
         List<SubpartitionSlice> subpartitionSlices = new ArrayList<>();
-        for (IndexRange partitionRange : partitionRanges) {
+        for (int i = 0; i < partitionRanges.size(); i++) {
             subpartitionSlices.add(
                     createSubpartitionSlice(
-                            subpartitionIndex, partitionRange, subpartitionBytesByPartitionIndex));
+                            partitionRanges.get(i), subpartitionRange, dataBytesPerSlice[i]));
         }
         return subpartitionSlices;
-    }
-
-    private static SubpartitionSlice createSubpartitionSlice(
-            int subpartitionIndex,
-            IndexRange partitionRange,
-            Map<Integer, long[]> subpartitionBytesByPartitionIndex) {
-        return new SubpartitionSlice(
-                subpartitionIndex,
-                partitionRange,
-                getNumBytesByIndexRange(
-                        subpartitionIndex, partitionRange, subpartitionBytesByPartitionIndex));
-    }
-
-    private static long getNumBytesByIndexRange(
-            int subpartitionIndex,
-            IndexRange partitionIndexRange,
-            Map<Integer, long[]> subpartitionBytesByPartitionIndex) {
-        return IntStream.rangeClosed(
-                        partitionIndexRange.getStartIndex(), partitionIndexRange.getEndIndex())
-                .mapToLong(i -> subpartitionBytesByPartitionIndex.get(i)[subpartitionIndex])
-                .sum();
     }
 }

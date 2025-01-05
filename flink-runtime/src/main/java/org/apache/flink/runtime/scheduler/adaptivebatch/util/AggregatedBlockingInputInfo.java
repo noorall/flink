@@ -47,9 +47,6 @@ public class AggregatedBlockingInputInfo {
     /** The target size for splitting skewed aggregated subpartitions. */
     private final long targetSize;
 
-    /** Indicates whether all aggregated inputs have the same number of partitions. */
-    private final boolean hasSamePartitionNums;
-
     /**
      * Indicates whether the data corresponding to a specific join key must be sent to the same
      * downstream subtask.
@@ -72,14 +69,12 @@ public class AggregatedBlockingInputInfo {
             long targetSize,
             long skewedThreshold,
             int maxPartitionNum,
-            boolean hasSamePartitionNums,
             boolean intraInputKeyCorrelation,
             Map<Integer, long[]> subpartitionBytesByPartition,
             long[] aggregatedSubpartitionBytes) {
         this.maxPartitionNum = maxPartitionNum;
         this.skewedThreshold = skewedThreshold;
         this.targetSize = targetSize;
-        this.hasSamePartitionNums = hasSamePartitionNums;
         this.intraInputKeyCorrelation = intraInputKeyCorrelation;
         this.subpartitionBytesByPartition = checkNotNull(subpartitionBytesByPartition);
         this.aggregatedSubpartitionBytes = checkNotNull(aggregatedSubpartitionBytes);
@@ -102,9 +97,7 @@ public class AggregatedBlockingInputInfo {
     }
 
     public boolean isSplittable() {
-        return !intraInputKeyCorrelation
-                && !subpartitionBytesByPartition.isEmpty()
-                && hasSamePartitionNums;
+        return !intraInputKeyCorrelation && !subpartitionBytesByPartition.isEmpty();
     }
 
     public boolean isSkewedSubpartition(int subpartitionIndex) {
@@ -125,6 +118,9 @@ public class AggregatedBlockingInputInfo {
 
     private static Map<Integer, long[]> computeSubpartitionBytesByPartitionIndex(
             List<BlockingInputInfo> inputInfos, int subpartitionNum) {
+        if (!hasSameNumPartitions(inputInfos)) {
+            return Collections.emptyMap();
+        }
         Map<Integer, long[]> subpartitionBytesByPartitionIndex = new HashMap<>();
         for (BlockingInputInfo inputInfo : inputInfos) {
             inputInfo
@@ -159,7 +155,6 @@ public class AggregatedBlockingInputInfo {
                 targetSize,
                 skewedThreshold,
                 getMaxNumPartitions(inputInfos),
-                hasSameNumPartitions(inputInfos),
                 checkAndGetIntraCorrelation(inputInfos),
                 computeSubpartitionBytesByPartitionIndex(inputInfos, subPartitionNum),
                 aggregatedSubpartitionBytes);
