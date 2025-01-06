@@ -68,18 +68,18 @@ public class JobEdge implements java.io.Serializable {
     private final int typeNumber;
 
     /**
-     * There are relationships between multiple inputs, if the data corresponding to a specific join
-     * key from one input is split, the corresponding join key data from the other inputs must be
+     * There are relationships between multiple inputs, if the records corresponding to the same key
+     * from one input is split, the corresponding key records from the other inputs must be
      * duplicated (meaning that it must be sent to the downstream nodes where the split data is
      * sent).
      */
-    private final boolean interInputsKeyCorrelation;
+    private final boolean interInputsKeysCorrelated;
 
     /**
-     * For this edge the data corresponding to a specific join key must be sent to the same
-     * downstream subtask.
+     * Whether records with the same key are correlated and must be sent to the same downstream task
+     * to be processed together.
      */
-    private final boolean intraInputKeyCorrelation;
+    private final boolean intraInputKeyCorrelated;
 
     /**
      * Constructs a new job edge, that connects an intermediate result to a consumer task.
@@ -96,8 +96,8 @@ public class JobEdge implements java.io.Serializable {
             boolean isBroadcast,
             boolean isForward,
             int typeNumber,
-            boolean interInputsKeyCorrelation,
-            boolean intraInputKeyCorrelation) {
+            boolean interInputsKeysCorrelated,
+            boolean intraInputKeyCorrelated) {
         if (source == null || target == null || distributionPattern == null) {
             throw new NullPointerException();
         }
@@ -107,8 +107,8 @@ public class JobEdge implements java.io.Serializable {
         this.isBroadcast = isBroadcast;
         this.isForward = isForward;
         this.typeNumber = typeNumber;
-        this.interInputsKeyCorrelation = interInputsKeyCorrelation;
-        this.intraInputKeyCorrelation = intraInputKeyCorrelation;
+        this.interInputsKeysCorrelated = interInputsKeysCorrelated;
+        this.intraInputKeyCorrelated = intraInputKeyCorrelated;
     }
 
     /**
@@ -260,14 +260,14 @@ public class JobEdge implements java.io.Serializable {
         return typeNumber;
     }
 
-    /** Gets whether the edge exist InterInputsKeyCorrelation. */
-    public boolean existInterInputsKeyCorrelation() {
-        return interInputsKeyCorrelation;
+    /** Gets whether the edge exist interInputsKeysCorrelated. */
+    public boolean areInterInputsKeysCorrelated() {
+        return interInputsKeysCorrelated;
     }
 
-    /** Gets whether the edge exist IntraInputKeyCorrelation. */
-    public boolean existIntraInputKeyCorrelation() {
-        return intraInputKeyCorrelation;
+    /** Gets whether the edge exist intraInputKeyCorrelated. */
+    public boolean isIntraInputKeyCorrelated() {
+        return intraInputKeyCorrelated;
     }
 
     // --------------------------------------------------------------------------------------------

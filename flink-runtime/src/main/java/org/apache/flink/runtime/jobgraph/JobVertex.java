@@ -544,8 +544,8 @@ public class JobVertex implements java.io.Serializable {
             boolean isBroadcast,
             boolean isForward,
             int typeNumber,
-            boolean interInputsKeyCorrelation,
-            boolean intraInputKeyCorrelation) {
+            boolean interInputsKeysCorrelated,
+            boolean intraInputKeyCorrelated) {
 
         IntermediateDataSet dataSet =
                 input.getOrCreateResultDataSet(intermediateDataSetId, partitionType);
@@ -558,8 +558,8 @@ public class JobVertex implements java.io.Serializable {
                         isBroadcast,
                         isForward,
                         typeNumber,
-                        interInputsKeyCorrelation,
-                        intraInputKeyCorrelation);
+                        interInputsKeysCorrelated,
+                        intraInputKeyCorrelated);
         this.inputs.add(edge);
         dataSet.addConsumer(edge);
         return edge;

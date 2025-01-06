@@ -21,6 +21,7 @@ import org.apache.flink.annotation.Internal;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 import org.apache.flink.streaming.api.transformations.StreamExchangeMode;
 import org.apache.flink.streaming.runtime.partitioner.ForwardPartitioner;
+import org.apache.flink.streaming.runtime.partitioner.RebalancePartitioner;
 import org.apache.flink.streaming.runtime.partitioner.StreamPartitioner;
 import org.apache.flink.util.OutputTag;
 
@@ -85,13 +86,13 @@ public class StreamEdge implements Serializable {
      * duplicated (meaning that it must be sent to the downstream nodes where the split data is
      * sent).
      */
-    private boolean interInputsKeyCorrelation;
+    private boolean interInputsKeysCorrelated;
 
     /**
      * For this edge the data corresponding to a specific join key must be sent to the same
      * downstream subtask.
      */
-    private boolean intraInputKeyCorrelation;
+    private boolean intraInputKeyCorrelated;
 
     public StreamEdge(
             StreamNode sourceVertex,
@@ -265,21 +266,23 @@ public class StreamEdge implements Serializable {
     }
 
     private void configureKeyCorrelation(StreamPartitioner<?> partitioner) {
-        this.intraInputKeyCorrelation =
-                !partitioner.isPointwise() || partitioner instanceof ForwardPartitioner;
-        this.interInputsKeyCorrelation = !partitioner.isPointwise();
+        this.intraInputKeyCorrelated =
+                (!partitioner.isPointwise() || partitioner instanceof ForwardPartitioner)
+                        && !(partitioner instanceof RebalancePartitioner);
+        this.interInputsKeysCorrelated =
+                !partitioner.isPointwise() && !(partitioner instanceof RebalancePartitioner);
     }
 
-    public boolean existInterInputsKeyCorrelation() {
-        return interInputsKeyCorrelation;
+    public boolean areInterInputsKeysCorrelated() {
+        return interInputsKeysCorrelated;
     }
 
-    public boolean existIntraInputKeyCorrelation() {
-        return intraInputKeyCorrelation;
+    public boolean isIntraInputKeyCorrelated() {
+        return intraInputKeyCorrelated;
     }
 
-    public void setIntraInputKeyCorrelation(boolean intraInputKeyCorrelation) {
-        checkState(interInputsKeyCorrelation, "InterInputsKeyCorrelation must be true");
-        this.intraInputKeyCorrelation = intraInputKeyCorrelation;
+    public void setIntraInputKeyCorrelated(boolean intraInputKeyCorrelated) {
+        checkState(interInputsKeysCorrelated, "interInputsKeysCorrelated must be true");
+        this.intraInputKeyCorrelated = intraInputKeyCorrelated;
     }
 }
