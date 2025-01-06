@@ -800,6 +800,9 @@ public class AdaptiveBatchScheduler extends DefaultScheduler implements JobGraph
                                     ir ->
                                             ir.getResultType() == HYBRID_FULL
                                                     || ir.getResultType() == HYBRID_SELECTIVE);
+            // When inputBytes have already been set (e.g. failed to restart), we don't need to
+            // recalculate, otherwise an exception may be triggered if BlockingResultInfo has
+            // already been aggregated.
             if (ev.getInputBytes() != ExecutionVertex.NUM_BYTES_UNKNOWN
                     || intermediateResults.isEmpty()
                     || hasHybridEdge) {
@@ -866,8 +869,8 @@ public class AdaptiveBatchScheduler extends DefaultScheduler implements JobGraph
                         new BlockingInputInfo(
                                 resultInfo,
                                 jobEdge.getTypeNumber(),
-                                jobEdge.existInterInputsKeyCorrelation(),
-                                jobEdge.existIntraInputKeyCorrelation()));
+                                jobEdge.areInterInputsKeysCorrelated(),
+                                jobEdge.isIntraInputKeyCorrelated()));
             } else {
                 // not all inputs consumable, return Optional.empty()
                 return Optional.empty();

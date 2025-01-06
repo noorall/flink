@@ -40,40 +40,40 @@ public class BlockingInputInfo implements BlockingResultInfo {
     private final int inputTypeNumber;
 
     /**
-     * If true, means that there are relationships between multiple inputs, if the data
-     * corresponding to a specific join key from one input is split, the corresponding join key data
-     * from the other inputs must be duplicated (meaning that it must be sent to the downstream
-     * nodes where the split data is sent).
+     * If true, means that there are relationships between multiple inputs, if the records
+     * corresponding to the same key from one input is split, the corresponding key records from the
+     * other inputs must be duplicated (meaning that it must be sent to the downstream nodes where
+     * the split data is sent).
      */
-    private final boolean interInputsKeyCorrelation;
+    private final boolean interInputsKeysCorrelated;
 
     /**
-     * If true, means that the data corresponding to a specific join key must be sent to the same
-     * downstream subtask.
+     * If true, means that records with the same key are correlated and must be sent to the same
+     * downstream task to be processed together.
      */
-    private final boolean intraInputKeyCorrelation;
+    private final boolean intraInputKeyCorrelated;
 
     public BlockingInputInfo(
             BlockingResultInfo blockingResultInfo,
             int inputTypeNumber,
-            boolean interInputsKeyCorrelation,
-            boolean intraInputKeyCorrelation) {
+            boolean interInputsKeysCorrelated,
+            boolean intraInputKeyCorrelated) {
         this.blockingResultInfo = checkNotNull(blockingResultInfo);
         this.inputTypeNumber = inputTypeNumber;
-        this.interInputsKeyCorrelation = interInputsKeyCorrelation;
-        this.intraInputKeyCorrelation = intraInputKeyCorrelation;
+        this.interInputsKeysCorrelated = interInputsKeysCorrelated;
+        this.intraInputKeyCorrelated = intraInputKeyCorrelated;
     }
 
     public int getInputTypeNumber() {
         return inputTypeNumber;
     }
 
-    public boolean existIntraInputKeyCorrelation() {
-        return intraInputKeyCorrelation;
+    public boolean isIntraInputKeyCorrelated() {
+        return intraInputKeyCorrelated;
     }
 
-    public boolean existInterInputsKeyCorrelation() {
-        return interInputsKeyCorrelation;
+    public boolean areInterInputsKeysCorrelated() {
+        return interInputsKeysCorrelated;
     }
 
     public List<Long> getAggregatedSubpartitionBytes() {
