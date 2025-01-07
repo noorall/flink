@@ -415,7 +415,14 @@ class DefaultVertexParallelismAndInputInfosDeciderTest {
                 BatchExecutionOptions.ADAPTIVE_AUTO_PARALLELISM_DEFAULT_SOURCE_PARALLELISM,
                 DEFAULT_SOURCE_PARALLELISM);
         VertexParallelismAndInputInfosDecider vertexParallelismAndInputInfosDecider =
-                DefaultVertexParallelismAndInputInfosDecider.from(MAX_PARALLELISM, configuration);
+                DefaultVertexParallelismAndInputInfosDecider.from(
+                        MAX_PARALLELISM,
+                        BatchExecutionOptionsInternal.ADAPTIVE_SKEWED_OPTIMIZATION_SKEWED_FACTOR
+                                .defaultValue(),
+                        BatchExecutionOptionsInternal.ADAPTIVE_SKEWED_OPTIMIZATION_SKEWED_THRESHOLD
+                                .defaultValue()
+                                .getBytes(),
+                        configuration);
         assertThat(
                         vertexParallelismAndInputInfosDecider.computeSourceParallelismUpperBound(
                                 new JobVertexID(), VERTEX_MAX_PARALLELISM))
@@ -426,7 +433,14 @@ class DefaultVertexParallelismAndInputInfosDeciderTest {
     void testComputeSourceParallelismUpperBoundFallback() {
         Configuration configuration = new Configuration();
         VertexParallelismAndInputInfosDecider vertexParallelismAndInputInfosDecider =
-                DefaultVertexParallelismAndInputInfosDecider.from(MAX_PARALLELISM, configuration);
+                DefaultVertexParallelismAndInputInfosDecider.from(
+                        MAX_PARALLELISM,
+                        BatchExecutionOptionsInternal.ADAPTIVE_SKEWED_OPTIMIZATION_SKEWED_FACTOR
+                                .defaultValue(),
+                        BatchExecutionOptionsInternal.ADAPTIVE_SKEWED_OPTIMIZATION_SKEWED_THRESHOLD
+                                .defaultValue()
+                                .getBytes(),
+                        configuration);
         assertThat(
                         vertexParallelismAndInputInfosDecider.computeSourceParallelismUpperBound(
                                 new JobVertexID(), VERTEX_MAX_PARALLELISM))
@@ -440,7 +454,14 @@ class DefaultVertexParallelismAndInputInfosDeciderTest {
                 BatchExecutionOptions.ADAPTIVE_AUTO_PARALLELISM_DEFAULT_SOURCE_PARALLELISM,
                 VERTEX_MAX_PARALLELISM * 2);
         VertexParallelismAndInputInfosDecider vertexParallelismAndInputInfosDecider =
-                DefaultVertexParallelismAndInputInfosDecider.from(MAX_PARALLELISM, configuration);
+                DefaultVertexParallelismAndInputInfosDecider.from(
+                        MAX_PARALLELISM,
+                        BatchExecutionOptionsInternal.ADAPTIVE_SKEWED_OPTIMIZATION_SKEWED_FACTOR
+                                .defaultValue(),
+                        BatchExecutionOptionsInternal.ADAPTIVE_SKEWED_OPTIMIZATION_SKEWED_THRESHOLD
+                                .defaultValue()
+                                .getBytes(),
+                        configuration);
         assertThat(
                         vertexParallelismAndInputInfosDecider.computeSourceParallelismUpperBound(
                                 new JobVertexID(), VERTEX_MAX_PARALLELISM))
@@ -500,7 +521,14 @@ class DefaultVertexParallelismAndInputInfosDeciderTest {
                 BatchExecutionOptions.ADAPTIVE_AUTO_PARALLELISM_DEFAULT_SOURCE_PARALLELISM,
                 defaultSourceParallelism);
 
-        return DefaultVertexParallelismAndInputInfosDecider.from(maxParallelism, configuration);
+        return DefaultVertexParallelismAndInputInfosDecider.from(
+                maxParallelism,
+                BatchExecutionOptionsInternal.ADAPTIVE_SKEWED_OPTIMIZATION_SKEWED_FACTOR
+                        .defaultValue(),
+                BatchExecutionOptionsInternal.ADAPTIVE_SKEWED_OPTIMIZATION_SKEWED_THRESHOLD
+                        .defaultValue()
+                        .getBytes(),
+                configuration);
     }
 
     private static int createDeciderAndDecideParallelism(List<BlockingResultInfo> consumedResults) {

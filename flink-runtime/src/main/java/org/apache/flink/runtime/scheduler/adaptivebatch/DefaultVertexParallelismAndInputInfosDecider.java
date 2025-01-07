@@ -307,7 +307,10 @@ public class DefaultVertexParallelismAndInputInfosDecider
     }
 
     static DefaultVertexParallelismAndInputInfosDecider from(
-            int maxParallelism, Configuration configuration) {
+            int maxParallelism,
+            double skewedFactor,
+            long skewedThreshold,
+            Configuration configuration) {
         return new DefaultVertexParallelismAndInputInfosDecider(
                 maxParallelism,
                 configuration.get(BatchExecutionOptions.ADAPTIVE_AUTO_PARALLELISM_MIN_PARALLELISM),
@@ -316,12 +319,7 @@ public class DefaultVertexParallelismAndInputInfosDecider
                 configuration.get(
                         BatchExecutionOptions.ADAPTIVE_AUTO_PARALLELISM_DEFAULT_SOURCE_PARALLELISM,
                         maxParallelism),
-                configuration.get(
-                        BatchExecutionOptionsInternal.ADAPTIVE_SKEWED_OPTIMIZATION_SKEWED_FACTOR),
-                configuration
-                        .get(
-                                BatchExecutionOptionsInternal
-                                        .ADAPTIVE_SKEWED_OPTIMIZATION_SKEWED_THRESHOLD)
-                        .getBytes());
+                skewedFactor,
+                skewedThreshold);
     }
 }
