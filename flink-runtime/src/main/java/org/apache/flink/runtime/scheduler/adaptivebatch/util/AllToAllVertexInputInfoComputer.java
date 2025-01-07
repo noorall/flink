@@ -125,18 +125,24 @@ public class AllToAllVertexInputInfoComputer {
         }
 
         Map<IntermediateDataSetID, JobVertexInputInfo> vertexInputInfos = new HashMap<>();
-        vertexInputInfos.putAll(
-                computeJobVertexInputInfosForInputWithInterOrIntraCorrelation(
-                        jobVertexId,
-                        inputInfosWithInterOrIntraCorrelations,
-                        parallelism,
-                        minParallelism,
-                        maxParallelism));
+        if (!inputInfosWithInterOrIntraCorrelations.isEmpty()) {
+            vertexInputInfos.putAll(
+                    computeJobVertexInputInfosForInputWithInterOrIntraCorrelation(
+                            jobVertexId,
+                            inputInfosWithInterOrIntraCorrelations,
+                            parallelism,
+                            minParallelism,
+                            maxParallelism));
+            // keep the parallelism consistent
+            parallelism = checkAndGetParallelism(vertexInputInfos.values());
+        }
 
-        vertexInputInfos.putAll(
-                computeJobVertexInputInfosForInputWithoutInterAndIntraCorrelations(
-                        inputInfosWithoutInterAndIntraCorrelations,
-                        checkAndGetParallelism(vertexInputInfos.values())));
+        if (!inputInfosWithoutInterAndIntraCorrelations.isEmpty()) {
+            vertexInputInfos.putAll(
+                    computeJobVertexInputInfosForInputWithoutInterAndIntraCorrelations(
+                            inputInfosWithoutInterAndIntraCorrelations, parallelism));
+        }
+
         return vertexInputInfos;
     }
 
@@ -147,6 +153,7 @@ public class AllToAllVertexInputInfoComputer {
                     int parallelism,
                     int minParallelism,
                     int maxParallelism) {
+        checkArgument(!inputInfos.isEmpty());
         List<BlockingInputInfo> nonBroadcastInputInfos = getNonBroadcastInputInfos(inputInfos);
         List<BlockingInputInfo> broadcastInputInfos = getBroadcastInputInfos(inputInfos);
         if (nonBroadcastInputInfos.isEmpty()) {
@@ -197,6 +204,7 @@ public class AllToAllVertexInputInfoComputer {
     private Map<IntermediateDataSetID, JobVertexInputInfo>
             computeJobVertexInputInfosForInputWithoutInterAndIntraCorrelations(
                     List<BlockingInputInfo> inputInfos, int parallelism) {
+        checkArgument(!inputInfos.isEmpty());
         Map<IntermediateDataSetID, JobVertexInputInfo> vertexInputInfos = new HashMap<>();
         for (BlockingInputInfo inputInfo : inputInfos) {
             vertexInputInfos.put(
