@@ -46,9 +46,9 @@ class AllToAllVertexInputInfoComputerTest {
         AllToAllVertexInputInfoComputer computer = createAllToAllVertexInputInfoComputer();
         List<BlockingInputInfo> inputInfos = new ArrayList<>();
         List<BlockingInputInfo> leftInputInfos =
-                createBlockingInputInfos(1, numInputInfos, 10, true, List.of(0));
+                createBlockingInputInfos(1, numInputInfos, 10, true, true, List.of(0));
         List<BlockingInputInfo> rightInputInfos =
-                createBlockingInputInfos(2, numInputInfos, 10, true, List.of());
+                createBlockingInputInfos(2, numInputInfos, 10, true, true, List.of());
         inputInfos.addAll(leftInputInfos);
         inputInfos.addAll(rightInputInfos);
         Map<IntermediateDataSetID, JobVertexInputInfo> vertexInputs =
@@ -71,9 +71,9 @@ class AllToAllVertexInputInfoComputerTest {
         AllToAllVertexInputInfoComputer computer = createAllToAllVertexInputInfoComputer();
         List<BlockingInputInfo> inputInfos = new ArrayList<>();
         List<BlockingInputInfo> leftInputInfos =
-                createBlockingInputInfos(1, numInputInfos, 10, false, List.of(0));
+                createBlockingInputInfos(1, numInputInfos, 10, false, true, List.of(0));
         List<BlockingInputInfo> rightInputInfos =
-                createBlockingInputInfos(2, numInputInfos, 10, true, List.of());
+                createBlockingInputInfos(2, numInputInfos, 10, true, true, List.of());
         inputInfos.addAll(leftInputInfos);
         inputInfos.addAll(rightInputInfos);
         Map<IntermediateDataSetID, JobVertexInputInfo> vertexInputs =
@@ -112,9 +112,9 @@ class AllToAllVertexInputInfoComputerTest {
         AllToAllVertexInputInfoComputer computer = createAllToAllVertexInputInfoComputer();
         List<BlockingInputInfo> inputInfos = new ArrayList<>();
         List<BlockingInputInfo> leftInputInfos =
-                createBlockingInputInfos(1, numInputInfos, 2, false, List.of(1));
+                createBlockingInputInfos(1, numInputInfos, 2, false, true, List.of(1));
         List<BlockingInputInfo> rightInputInfos =
-                createBlockingInputInfos(2, numInputInfos, 2, false, List.of(1));
+                createBlockingInputInfos(2, numInputInfos, 2, false, true, List.of(1));
         inputInfos.addAll(leftInputInfos);
         inputInfos.addAll(rightInputInfos);
         Map<IntermediateDataSetID, JobVertexInputInfo> vertexInputs =
@@ -149,11 +149,11 @@ class AllToAllVertexInputInfoComputerTest {
         AllToAllVertexInputInfoComputer computer = createAllToAllVertexInputInfoComputer();
         List<BlockingInputInfo> inputInfos = new ArrayList<>();
         List<BlockingInputInfo> leftInputInfos1 =
-                createBlockingInputInfos(1, 1, 2, true, List.of());
+                createBlockingInputInfos(1, 1, 2, true, true, List.of());
         List<BlockingInputInfo> leftInputInfos2 =
-                createBlockingInputInfos(1, 1, 3, true, List.of());
+                createBlockingInputInfos(1, 1, 3, true, true, List.of());
         List<BlockingInputInfo> rightInputInfos =
-                createBlockingInputInfos(2, 1, 2, true, List.of());
+                createBlockingInputInfos(2, 1, 2, true, true, List.of());
         inputInfos.addAll(leftInputInfos1);
         inputInfos.addAll(leftInputInfos2);
         inputInfos.addAll(rightInputInfos);
@@ -188,11 +188,11 @@ class AllToAllVertexInputInfoComputerTest {
         AllToAllVertexInputInfoComputer computer = createAllToAllVertexInputInfoComputer();
         List<BlockingInputInfo> inputInfos = new ArrayList<>();
         List<BlockingInputInfo> leftInputInfos1 =
-                createBlockingInputInfos(1, 1, 2, false, List.of(1));
+                createBlockingInputInfos(1, 1, 2, false, true, List.of(1));
         List<BlockingInputInfo> leftInputInfos2 =
-                createBlockingInputInfos(1, 1, 3, false, List.of(1));
+                createBlockingInputInfos(1, 1, 3, false, true, List.of(1));
         List<BlockingInputInfo> rightInputInfos =
-                createBlockingInputInfos(2, 1, 2, false, List.of(1));
+                createBlockingInputInfos(2, 1, 2, false, true, List.of(1));
         inputInfos.addAll(leftInputInfos1);
         inputInfos.addAll(leftInputInfos2);
         inputInfos.addAll(rightInputInfos);
@@ -230,19 +230,76 @@ class AllToAllVertexInputInfoComputerTest {
                 2, rightInputInfos, rightTargetConsumedSubpartitionGroups, vertexInputs);
     }
 
+    @Test
+    void testComputeRebalancedAllToAll() {
+        AllToAllVertexInputInfoComputer computer = createAllToAllVertexInputInfoComputer();
+        List<BlockingInputInfo> inputInfos =
+                createBlockingInputInfos(1, 1, 2, false, false, List.of());
+        Map<IntermediateDataSetID, JobVertexInputInfo> vertexInputs =
+                computer.compute(new JobVertexID(), inputInfos, 3, 3, 3);
+
+        List<Map<IndexRange, IndexRange>> targetConsumedSubpartitionGroups =
+                List.of(
+                        Map.of(new IndexRange(0, 0), new IndexRange(0, 1)),
+                        Map.of(
+                                new IndexRange(0, 0),
+                                new IndexRange(2, 2),
+                                new IndexRange(1, 1),
+                                new IndexRange(0, 0)),
+                        Map.of(new IndexRange(1, 1), new IndexRange(1, 2)));
+
+        checkJobVertexInputInfo(3, inputInfos, targetConsumedSubpartitionGroups, vertexInputs);
+    }
+
+    @Test
+    void testComputeRebalancedAllToAllWithNormalAllToAll() {
+        AllToAllVertexInputInfoComputer computer = createAllToAllVertexInputInfoComputer();
+        List<BlockingInputInfo> inputInfos = new ArrayList<>();
+        List<BlockingInputInfo> rebalancedInputInfos =
+                createBlockingInputInfos(1, 1, 2, false, false, List.of());
+        List<BlockingInputInfo> normalInputInfos =
+                createBlockingInputInfos(1, 1, 10, true, true, List.of());
+        inputInfos.addAll(rebalancedInputInfos);
+        inputInfos.addAll(normalInputInfos);
+
+        Map<IntermediateDataSetID, JobVertexInputInfo> vertexInputs =
+                computer.compute(new JobVertexID(), inputInfos, 10, 1, 10);
+        List<Map<IndexRange, IndexRange>> rebalancedTargetConsumedSubpartitionGroups =
+                List.of(
+                        Map.of(new IndexRange(0, 0), new IndexRange(0, 1)),
+                        Map.of(
+                                new IndexRange(0, 0),
+                                new IndexRange(2, 2),
+                                new IndexRange(1, 1),
+                                new IndexRange(0, 0)),
+                        Map.of(new IndexRange(1, 1), new IndexRange(1, 2)));
+
+        checkJobVertexInputInfo(
+                3, rebalancedInputInfos, rebalancedTargetConsumedSubpartitionGroups, vertexInputs);
+
+        List<Map<IndexRange, IndexRange>> targetConsumedSubpartitionGroups =
+                List.of(
+                        Map.of(new IndexRange(0, 9), new IndexRange(0, 0)),
+                        Map.of(new IndexRange(0, 9), new IndexRange(1, 1)),
+                        Map.of(new IndexRange(0, 9), new IndexRange(2, 2)));
+        checkJobVertexInputInfo(
+                3, normalInputInfos, targetConsumedSubpartitionGroups, vertexInputs);
+    }
+
     private static List<BlockingInputInfo> createBlockingInputInfos(
             int typeNumber,
             int numInputInfos,
             int numPartitions,
-            boolean existIntraInputKeyCorrelation,
+            boolean isIntraInputKeyCorrelated,
+            boolean areInterInputsKeysCorrelated,
             List<Integer> skewedSubpartitionIndex) {
         return VertexInputInfoComputerTestUtil.createBlockingInputInfos(
                 typeNumber,
                 numInputInfos,
                 numPartitions,
                 3,
-                existIntraInputKeyCorrelation,
-                true,
+                isIntraInputKeyCorrelated,
+                areInterInputsKeysCorrelated,
                 1,
                 10,
                 List.of(),
