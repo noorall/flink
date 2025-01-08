@@ -22,8 +22,9 @@ import org.apache.flink.runtime.executiongraph.IndexRange;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.IntStream;
 
-import static org.apache.flink.util.Preconditions.checkArgument;
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
 /**
@@ -80,7 +81,12 @@ public class SubpartitionSlice {
                 && partitionRange.getEndIndex() >= numPartitions) {
             return new IndexRange(partitionRange.getStartIndex(), numPartitions - 1);
         } else {
-            throw new IllegalStateException("Invalid partition range.");
+            throw new IllegalStateException(
+                    "Invalid partition range "
+                            + partitionRange
+                            + ", number of partitions: "
+                            + numPartitions
+                            + ".");
         }
     }
 
@@ -92,14 +98,37 @@ public class SubpartitionSlice {
     public static List<SubpartitionSlice> createSubpartitionSlicesByMultiPartitionRanges(
             List<IndexRange> partitionRanges,
             IndexRange subpartitionRange,
-            long[] dataBytesPerSlice) {
-        checkArgument(dataBytesPerSlice.length == partitionRanges.size());
+            Map<Integer, long[]> subpartitionBytesByPartition) {
         List<SubpartitionSlice> subpartitionSlices = new ArrayList<>();
-        for (int i = 0; i < partitionRanges.size(); i++) {
+        for (IndexRange partitionRange : partitionRanges) {
             subpartitionSlices.add(
                     createSubpartitionSlice(
-                            partitionRanges.get(i), subpartitionRange, dataBytesPerSlice[i]));
+                            partitionRange,
+                            subpartitionRange,
+                            calculateDataBytes(
+                                    partitionRange,
+                                    subpartitionRange,
+                                    subpartitionBytesByPartition)));
         }
         return subpartitionSlices;
+    }
+
+    private static long calculateDataBytes(
+            IndexRange partitionRange,
+            IndexRange subpartitionRange,
+            Map<Integer, long[]> subpartitionBytesByPartitionIndex) {
+        return IntStream.rangeClosed(partitionRange.getStartIndex(), partitionRange.getEndIndex())
+                .mapToLong(
+                        partitionIndex ->
+                                IntStream.rangeClosed(
+                                                subpartitionRange.getStartIndex(),
+                                                subpartitionRange.getEndIndex())
+                                        .mapToLong(
+                                                subpartitionIndex ->
+                                                        subpartitionBytesByPartitionIndex
+                                                                .get(partitionIndex)[
+                                                                subpartitionIndex])
+                                        .sum())
+                .sum();
     }
 }

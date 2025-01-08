@@ -20,6 +20,9 @@ package org.apache.flink.runtime.scheduler.adaptivebatch.util;
 
 import org.apache.flink.runtime.scheduler.adaptivebatch.BlockingInputInfo;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -37,7 +40,8 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
  * Helper class that aggregates input information with the same typeNumber so that they can be
  * processed as a single unit.
  */
-public class AggregatedBlockingInputInfo {
+class AggregatedBlockingInputInfo {
+    private static final Logger LOG = LoggerFactory.getLogger(AggregatedBlockingInputInfo.class);
     /** The maximum number of partitions among all aggregated inputs. */
     private final int maxPartitionNum;
 
@@ -48,14 +52,18 @@ public class AggregatedBlockingInputInfo {
     private final long targetSize;
 
     /**
-     * Indicates whether the data corresponding to a specific join key must be sent to the same
+     * Indicates whether the records corresponding to the same key must be sent to the same
      * downstream subtask.
      */
-    private final boolean intraInputKeyCorrelation;
+    private final boolean intraInputKeyCorrelated;
 
     /**
      * A map where the key is the partition index and the value is an array representing the size of
-     * each subpartition for that partition.
+     * each subpartition for that partition. This map is used to provide fine-grained information
+     * for splitting subpartitions with same index. If it is empty, means that the split operation
+     * cannot be performed. In the following cases, this map will be empty: 1.
+     * IntraInputKeyCorrelated is true. 2. The aggregated input infos have different num partitions.
+     * 3. The SubpartitionBytesByPartitionIndex of inputs has been aggregated.
      */
     private final Map<Integer, long[]> subpartitionBytesByPartition;
 
@@ -69,13 +77,13 @@ public class AggregatedBlockingInputInfo {
             long targetSize,
             long skewedThreshold,
             int maxPartitionNum,
-            boolean intraInputKeyCorrelation,
+            boolean intraInputKeyCorrelated,
             Map<Integer, long[]> subpartitionBytesByPartition,
             long[] aggregatedSubpartitionBytes) {
         this.maxPartitionNum = maxPartitionNum;
         this.skewedThreshold = skewedThreshold;
         this.targetSize = targetSize;
-        this.intraInputKeyCorrelation = intraInputKeyCorrelation;
+        this.intraInputKeyCorrelated = intraInputKeyCorrelated;
         this.subpartitionBytesByPartition = checkNotNull(subpartitionBytesByPartition);
         this.aggregatedSubpartitionBytes = checkNotNull(aggregatedSubpartitionBytes);
     }
@@ -97,7 +105,7 @@ public class AggregatedBlockingInputInfo {
     }
 
     public boolean isSplittable() {
-        return !intraInputKeyCorrelation && !subpartitionBytesByPartition.isEmpty();
+        return !intraInputKeyCorrelated && !subpartitionBytesByPartition.isEmpty();
     }
 
     public boolean isSkewedSubpartition(int subpartitionIndex) {
@@ -118,8 +126,11 @@ public class AggregatedBlockingInputInfo {
 
     private static Map<Integer, long[]> computeSubpartitionBytesByPartitionIndex(
             List<BlockingInputInfo> inputInfos, int subpartitionNum) {
-        // If inputInfos have different of parallelism, skip aggregation.
+        // If inputInfos have different num partitions (means that these upstream have different
+        // parallelisms), skip aggregation.
         if (!hasSameNumPartitions(inputInfos)) {
+            LOG.warn(
+                    "Input infos have different num partitions, skip calculate SubpartitionBytesByPartitionIndex");
             return Collections.emptyMap();
         }
         Map<Integer, long[]> subpartitionBytesByPartitionIndex = new HashMap<>();
@@ -143,22 +154,31 @@ public class AggregatedBlockingInputInfo {
             long defaultSkewedThreshold,
             double skewedFactor,
             long dataVolumePerTask,
-            int subPartitionNum,
+            int subpartitionNum,
             List<BlockingInputInfo> inputInfos) {
         long[] aggregatedSubpartitionBytes =
-                computeAggregatedSubpartitionBytes(inputInfos, subPartitionNum);
+                computeAggregatedSubpartitionBytes(inputInfos, subpartitionNum);
         long skewedThreshold =
                 computeSkewThreshold(
                         median(aggregatedSubpartitionBytes), skewedFactor, defaultSkewedThreshold);
         long targetSize =
                 computeTargetSize(
                         aggregatedSubpartitionBytes, defaultSkewedThreshold, dataVolumePerTask);
+        boolean isIntraInputKeyCorrelated = checkAndGetIntraCorrelation(inputInfos);
+        Map<Integer, long[]> subpartitionBytesByPartitionIndex;
+        if (isIntraInputKeyCorrelated) {
+            // subpartitions with same index will not be split, skipped calculate it
+            subpartitionBytesByPartitionIndex = new HashMap<>();
+        } else {
+            subpartitionBytesByPartitionIndex =
+                    computeSubpartitionBytesByPartitionIndex(inputInfos, subpartitionNum);
+        }
         return new AggregatedBlockingInputInfo(
                 targetSize,
                 skewedThreshold,
                 getMaxNumPartitions(inputInfos),
-                checkAndGetIntraCorrelation(inputInfos),
-                computeSubpartitionBytesByPartitionIndex(inputInfos, subPartitionNum),
+                isIntraInputKeyCorrelated,
+                subpartitionBytesByPartitionIndex,
                 aggregatedSubpartitionBytes);
     }
 }

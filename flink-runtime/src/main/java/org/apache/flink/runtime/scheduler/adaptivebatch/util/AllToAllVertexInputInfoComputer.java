@@ -18,26 +18,6 @@
 
 package org.apache.flink.runtime.scheduler.adaptivebatch.util;
 
-import org.apache.flink.runtime.executiongraph.ExecutionVertexInputInfo;
-import org.apache.flink.runtime.executiongraph.IndexRange;
-import org.apache.flink.runtime.executiongraph.JobVertexInputInfo;
-import org.apache.flink.runtime.executiongraph.VertexInputInfoComputationUtils;
-import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
-import org.apache.flink.runtime.jobgraph.JobVertexID;
-import org.apache.flink.runtime.scheduler.adaptivebatch.BlockingInputInfo;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
-
 import static org.apache.flink.runtime.scheduler.adaptivebatch.DefaultVertexParallelismAndInputInfosDecider.MAX_NUM_SUBPARTITIONS_PER_TASK_CONSUME;
 import static org.apache.flink.runtime.scheduler.adaptivebatch.util.SubpartitionSlice.createSubpartitionSlicesByMultiPartitionRanges;
 import static org.apache.flink.runtime.scheduler.adaptivebatch.util.VertexParallelismAndInputInfosDeciderUtils.cartesianProduct;
@@ -52,6 +32,24 @@ import static org.apache.flink.runtime.scheduler.adaptivebatch.util.VertexParall
 import static org.apache.flink.runtime.scheduler.adaptivebatch.util.VertexParallelismAndInputInfosDeciderUtils.tryComputeSubpartitionSliceRange;
 import static org.apache.flink.util.Preconditions.checkArgument;
 import static org.apache.flink.util.Preconditions.checkState;
+
+import org.apache.flink.runtime.executiongraph.ExecutionVertexInputInfo;
+import org.apache.flink.runtime.executiongraph.IndexRange;
+import org.apache.flink.runtime.executiongraph.JobVertexInputInfo;
+import org.apache.flink.runtime.executiongraph.VertexInputInfoComputationUtils;
+import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
+import org.apache.flink.runtime.jobgraph.JobVertexID;
+import org.apache.flink.runtime.scheduler.adaptivebatch.BlockingInputInfo;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
 /** Helper class that computes VertexInputInfo for all to all like inputs. */
 public class AllToAllVertexInputInfoComputer {
@@ -217,20 +215,21 @@ public class AllToAllVertexInputInfoComputer {
 
     private Map<Integer, List<SubpartitionSlice>> createSubpartitionSlices(
             List<BlockingInputInfo> nonBroadcastInputInfos) {
+        // Currently, we consider all inputs in this method to have inter-inputs key correlation,
+        checkArgument(
+                nonBroadcastInputInfos.stream()
+                        .allMatch(BlockingInputInfo::areInterInputsKeysCorrelated));
 
         int subPartitionNum = checkAndGetSubpartitionNum(nonBroadcastInputInfos);
-
         // Aggregate input info with the same type number.
         Map<Integer, AggregatedBlockingInputInfo> aggregatedInputInfoByTypeNumber =
                 createAggregatedBlockingInputInfos(subPartitionNum, nonBroadcastInputInfos);
 
         Map<Integer, List<SubpartitionSlice>> subpartitionSliceGroupByTypeNumber = new HashMap<>();
-
         for (int subpartitionIndex = 0; subpartitionIndex < subPartitionNum; ++subpartitionIndex) {
-
             // Split the given subpartition group into balanced subpartition slices.
             Map<Integer, List<SubpartitionSlice>> subpartitionSlices =
-                    createSubpartitionSlicesBySubpartitionIndex(
+                    createBalancedSubpartitionSlicesForCorrelatedInputs(
                             subpartitionIndex, aggregatedInputInfoByTypeNumber);
 
             List<Integer> typeNumberList = new ArrayList<>(subpartitionSlices.keySet());
@@ -262,7 +261,7 @@ public class AllToAllVertexInputInfoComputer {
                 nonBroadcastInputInfos.stream()
                         .collect(Collectors.groupingBy(BlockingInputInfo::getInputTypeNumber));
 
-        checkArgument(isLegalInputGroups(inputsByTypeNumber));
+        checkArgument(hasSameIntraInputKeyCorrelation(inputsByTypeNumber));
 
         Map<Integer, AggregatedBlockingInputInfo> blockingInputInfoContexts = new HashMap<>();
         for (Map.Entry<Integer, List<BlockingInputInfo>> entry : inputsByTypeNumber.entrySet()) {
@@ -282,7 +281,7 @@ public class AllToAllVertexInputInfoComputer {
     }
 
     private static Map<Integer, List<SubpartitionSlice>>
-            createSubpartitionSlicesBySubpartitionIndex(
+            createBalancedSubpartitionSlicesForCorrelatedInputs(
                     int subpartitionIndex,
                     Map<Integer, AggregatedBlockingInputInfo> aggregatedInputInfoByTypeNumber) {
         Map<Integer, List<SubpartitionSlice>> subpartitionSlices = new HashMap<>();
@@ -298,15 +297,12 @@ public class AllToAllVertexInputInfoComputer {
                                 subpartitionIndex,
                                 aggregatedBlockingInputInfo.getTargetSize(),
                                 aggregatedBlockingInputInfo.getSubpartitionBytesByPartition());
-                long[] dataBytesPerSlice =
-                        computeDataBytesPerSlice(
-                                subpartitionIndex,
-                                partitionRanges,
-                                aggregatedBlockingInputInfo.getSubpartitionBytesByPartition());
                 subpartitionSlices.put(
                         typeNumber,
                         createSubpartitionSlicesByMultiPartitionRanges(
-                                partitionRanges, subpartitionRange, dataBytesPerSlice));
+                                partitionRanges,
+                                subpartitionRange,
+                                aggregatedBlockingInputInfo.getSubpartitionBytesByPartition()));
             } else {
                 IndexRange partitionRange =
                         new IndexRange(0, aggregatedBlockingInputInfo.getMaxPartitionNum() - 1);
@@ -356,26 +352,6 @@ public class AllToAllVertexInputInfoComputer {
         return splitPartitionRange;
     }
 
-    private static long[] computeDataBytesPerSlice(
-            int subpartitionIndex,
-            List<IndexRange> partitionRanges,
-            Map<Integer, long[]> subpartitionBytesByPartitionIndex) {
-        long[] dataBytesPerSlice = new long[partitionRanges.size()];
-        for (int i = 0; i < partitionRanges.size(); ++i) {
-            IndexRange partitionIndexRange = partitionRanges.get(i);
-            dataBytesPerSlice[i] =
-                    IntStream.rangeClosed(
-                                    partitionIndexRange.getStartIndex(),
-                                    partitionIndexRange.getEndIndex())
-                            .mapToLong(
-                                    partitionIndex ->
-                                            subpartitionBytesByPartitionIndex
-                                                    .get(partitionIndex)[subpartitionIndex])
-                            .sum();
-        }
-        return dataBytesPerSlice;
-    }
-
     private static Map<IntermediateDataSetID, JobVertexInputInfo> createJobVertexInputInfos(
             Map<Integer, List<SubpartitionSlice>> subpartitionSlices,
             List<BlockingInputInfo> nonBroadcastInputInfos,
@@ -403,7 +379,8 @@ public class AllToAllVertexInputInfoComputer {
         return vertexInputInfos;
     }
 
-    private static boolean isLegalInputGroups(Map<Integer, List<BlockingInputInfo>> inputGroups) {
+    private static boolean hasSameIntraInputKeyCorrelation(
+            Map<Integer, List<BlockingInputInfo>> inputGroups) {
         return inputGroups.values().stream()
                 .allMatch(
                         inputs ->

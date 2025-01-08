@@ -24,6 +24,9 @@ import org.apache.flink.runtime.executiongraph.JobVertexInputInfo;
 import org.apache.flink.runtime.scheduler.adaptivebatch.BisectionSearchUtils;
 import org.apache.flink.runtime.scheduler.adaptivebatch.BlockingInputInfo;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -45,6 +48,8 @@ import static org.apache.flink.util.Preconditions.checkState;
 
 /** Utils class for VertexParallelismAndInputInfosDecider. */
 public class VertexParallelismAndInputInfosDeciderUtils {
+    private static final Logger LOG =
+            LoggerFactory.getLogger(VertexParallelismAndInputInfosDeciderUtils.class);
     /**
      * Adjust the parallelism to the closest legal parallelism and return the computed subpartition
      * ranges.
@@ -325,6 +330,9 @@ public class VertexParallelismAndInputInfosDeciderUtils {
                         maxDataVolumePerTask,
                         subpartitionSlicesByTypeNumber);
         if (subpartitionSliceRanges.isEmpty()) {
+            LOG.info(
+                    "Failed to compute a legal subpartition slice range that can evenly distribute data amount, "
+                            + "fallback to compute it that can evenly distribute the number of subpartition slices.");
             subpartitionSliceRanges =
                     tryComputeSubpartitionSliceRangeEvenlyDistributedSubpartitionSlices(
                             minParallelism, maxParallelism, subpartitionSlicesByTypeNumber);
@@ -387,7 +395,7 @@ public class VertexParallelismAndInputInfosDeciderUtils {
             long maxDataVolumePerTask,
             Map<Integer, List<SubpartitionSlice>> subpartitionSlicesByTypeNumber) {
         int subpartitionSlicesSize =
-                checkAdnGetSubpartitionSlicesSize(subpartitionSlicesByTypeNumber);
+                checkAndGetSubpartitionSlicesSize(subpartitionSlicesByTypeNumber);
         // Distribute the input data evenly among the downstream tasks and record the
         // subpartition slice range for each task.
         List<IndexRange> subpartitionSliceRanges =
@@ -438,7 +446,7 @@ public class VertexParallelismAndInputInfosDeciderUtils {
                     int maxParallelism,
                     Map<Integer, List<SubpartitionSlice>> subpartitionSlicesByTypeNumber) {
         int subpartitionSlicesSize =
-                checkAdnGetSubpartitionSlicesSize(subpartitionSlicesByTypeNumber);
+                checkAndGetSubpartitionSlicesSize(subpartitionSlicesByTypeNumber);
         if (subpartitionSlicesSize < minParallelism) {
             return Optional.empty();
         }
@@ -495,6 +503,7 @@ public class VertexParallelismAndInputInfosDeciderUtils {
                                         Map.Entry::getKey,
                                         entry -> mergeIndexRanges(entry.getValue())));
 
+        // reversed the map to merge keys associated with the same value
         Map<IndexRange, List<IndexRange>> reversedRangeMap = new HashMap<>();
         for (Map.Entry<IndexRange, List<IndexRange>> entry : rangeMap.entrySet()) {
             IndexRange valueRange = entry.getKey();
@@ -526,7 +535,7 @@ public class VertexParallelismAndInputInfosDeciderUtils {
      * Reassembling subpartition slices into balanced n parts and returning the range of index
      * corresponding to each piece of data. Reassembling need to meet the following conditions:<br>
      * 1. The data size of each piece does not exceed the limit.<br>
-     * 2. The SubpartitionSlice numbers in each piece does not larger than maxRangeSize.
+     * 2. The SubpartitionSlice number in each piece is not larger than maxRangeSize.
      *
      * @param limit the limit of data size
      * @param maxRangeSize the max number of SubpartitionSlice in each range
@@ -539,13 +548,13 @@ public class VertexParallelismAndInputInfosDeciderUtils {
             int subpartitionGroupSize,
             Map<Integer, List<SubpartitionSlice>> subpartitionSlices) {
         List<IndexRange> subpartitionSliceRanges = new ArrayList<>();
-        long totalSize = 0;
+        long accumulatedSize = 0;
         int startIndex = 0;
         Map<Integer, Set<SubpartitionSlice>> bucketsByTypeNumber = new HashMap<>();
         for (int i = 0; i < subpartitionGroupSize; ++i) {
-            long currentSize = 0L;
+            long currentGroupSize = 0L;
             // bytes size after deduplication
-            long distinctSize = 0L;
+            long currentGroupSizeDeduplicated = 0L;
             for (Map.Entry<Integer, List<SubpartitionSlice>> entry :
                     subpartitionSlices.entrySet()) {
                 Integer typeNumber = entry.getKey();
@@ -555,18 +564,18 @@ public class VertexParallelismAndInputInfosDeciderUtils {
                 // When the bucket already contains duplicate subpartitionSlices, its size should be
                 // ignored.
                 if (!bucket.contains(subpartitionSlice)) {
-                    distinctSize += subpartitionSlice.getDataBytes();
+                    currentGroupSizeDeduplicated += subpartitionSlice.getDataBytes();
                 }
-                currentSize += subpartitionSlice.getDataBytes();
+                currentGroupSize += subpartitionSlice.getDataBytes();
             }
             if (i == startIndex
-                    || (totalSize + distinctSize <= limit
+                    || (accumulatedSize + currentGroupSizeDeduplicated <= limit
                             && (i - startIndex + 1) <= maxRangeSize)) {
-                totalSize += distinctSize;
+                accumulatedSize += currentGroupSizeDeduplicated;
             } else {
                 subpartitionSliceRanges.add(new IndexRange(startIndex, i - 1));
                 startIndex = i;
-                totalSize = currentSize;
+                accumulatedSize = currentGroupSize;
                 bucketsByTypeNumber.clear();
             }
             for (Map.Entry<Integer, List<SubpartitionSlice>> entry :
@@ -597,12 +606,12 @@ public class VertexParallelismAndInputInfosDeciderUtils {
             int subpartitionSlicesSize,
             Map<Integer, List<SubpartitionSlice>> subpartitionSlices) {
         int count = 1;
-        long totalSize = 0;
+        long accumulatedSize = 0;
         int startIndex = 0;
         Map<Integer, Set<SubpartitionSlice>> bucketsByTypeNumber = new HashMap<>();
         for (int i = 0; i < subpartitionSlicesSize; ++i) {
-            long currentSize = 0L;
-            long distinctSize = 0L;
+            long currentGroupSize = 0L;
+            long currentGroupSizeDeduplicated = 0L;
             for (Map.Entry<Integer, List<SubpartitionSlice>> entry :
                     subpartitionSlices.entrySet()) {
                 Integer typeNumber = entry.getKey();
@@ -610,18 +619,18 @@ public class VertexParallelismAndInputInfosDeciderUtils {
                 Set<SubpartitionSlice> bucket =
                         bucketsByTypeNumber.computeIfAbsent(typeNumber, ignored -> new HashSet<>());
                 if (!bucket.contains(subpartitionSlice)) {
-                    distinctSize += subpartitionSlice.getDataBytes();
+                    currentGroupSizeDeduplicated += subpartitionSlice.getDataBytes();
                 }
-                currentSize += subpartitionSlice.getDataBytes();
+                currentGroupSize += subpartitionSlice.getDataBytes();
             }
             if (i == startIndex
-                    || (totalSize + distinctSize <= limit
+                    || (accumulatedSize + currentGroupSizeDeduplicated <= limit
                             && (i - startIndex + 1) <= maxRangeSize)) {
-                totalSize += distinctSize;
+                accumulatedSize += currentGroupSizeDeduplicated;
             } else {
                 ++count;
                 startIndex = i;
-                totalSize = currentSize;
+                accumulatedSize = currentGroupSize;
                 bucketsByTypeNumber.clear();
             }
             for (Map.Entry<Integer, List<SubpartitionSlice>> entry :
@@ -636,7 +645,7 @@ public class VertexParallelismAndInputInfosDeciderUtils {
         return count;
     }
 
-    private static int checkAdnGetSubpartitionSlicesSize(
+    private static int checkAndGetSubpartitionSlicesSize(
             Map<Integer, List<SubpartitionSlice>> subpartitionSlices) {
         Set<Integer> subpartitionSliceSizes =
                 subpartitionSlices.values().stream().map(List::size).collect(Collectors.toSet());

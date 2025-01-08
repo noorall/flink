@@ -92,7 +92,9 @@ public class PointwiseVertexInputInfoComputer {
      * subscribe.
      *
      * @param inputInfo The information of consumed blocking results
-     * @param parallelism The parallelism of the job vertex
+     * @param parallelism The parallelism of the job vertex. Since pointwise inputs always compute
+     *     vertex input info one-by-one, we need a determined parallelism to ensure the final
+     *     decided parallelism for all inputs is consistent.
      * @return the vertex input info
      */
     static JobVertexInputInfo computeVertexInputInfo(
@@ -112,7 +114,7 @@ public class PointwiseVertexInputInfoComputer {
 
         if (optionalSubpartitionSliceRanges.isEmpty()) {
             LOG.info(
-                    "Filed to decide parallelism in balanced way for input {}, fallback to computePartitionOrSubpartitionRangesEvenlySum",
+                    "Filed to decide parallelism in balanced way for input {}, fallback to decide it by the number of subpartitions.",
                     inputInfo.getResultId());
             return VertexInputInfoComputationUtils.computeVertexInputInfoForPointwise(
                     inputInfo.getNumPartitions(),
