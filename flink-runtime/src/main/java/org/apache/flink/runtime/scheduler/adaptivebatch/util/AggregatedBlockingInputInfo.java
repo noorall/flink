@@ -65,7 +65,7 @@ public class AggregatedBlockingInputInfo {
      */
     private final long[] aggregatedSubpartitionBytes;
 
-    public AggregatedBlockingInputInfo(
+    private AggregatedBlockingInputInfo(
             long targetSize,
             long skewedThreshold,
             int maxPartitionNum,
@@ -118,6 +118,7 @@ public class AggregatedBlockingInputInfo {
 
     private static Map<Integer, long[]> computeSubpartitionBytesByPartitionIndex(
             List<BlockingInputInfo> inputInfos, int subpartitionNum) {
+        // If inputInfos have different of parallelism, skip aggregation.
         if (!hasSameNumPartitions(inputInfos)) {
             return Collections.emptyMap();
         }
@@ -150,7 +151,8 @@ public class AggregatedBlockingInputInfo {
                 computeSkewThreshold(
                         median(aggregatedSubpartitionBytes), skewedFactor, defaultSkewedThreshold);
         long targetSize =
-                computeTargetSize(aggregatedSubpartitionBytes, subPartitionNum, dataVolumePerTask);
+                computeTargetSize(
+                        aggregatedSubpartitionBytes, defaultSkewedThreshold, dataVolumePerTask);
         return new AggregatedBlockingInputInfo(
                 targetSize,
                 skewedThreshold,
