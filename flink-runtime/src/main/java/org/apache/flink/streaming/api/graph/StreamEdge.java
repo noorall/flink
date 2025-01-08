@@ -266,11 +266,13 @@ public class StreamEdge implements Serializable {
     }
 
     private void configureKeyCorrelation(StreamPartitioner<?> partitioner) {
-        this.intraInputKeyCorrelated =
-                (!partitioner.isPointwise() || partitioner instanceof ForwardPartitioner)
-                        && !(partitioner instanceof RebalancePartitioner);
-        this.interInputsKeysCorrelated =
-                !partitioner.isPointwise() && !(partitioner instanceof RebalancePartitioner);
+        if (partitioner.isPointwise()) {
+            this.intraInputKeyCorrelated = partitioner instanceof ForwardPartitioner;
+            this.interInputsKeysCorrelated = false;
+        } else {
+            this.intraInputKeyCorrelated = !(partitioner instanceof RebalancePartitioner);
+            this.interInputsKeysCorrelated = !(partitioner instanceof RebalancePartitioner);
+        }
     }
 
     public boolean areInterInputsKeysCorrelated() {
@@ -282,6 +284,7 @@ public class StreamEdge implements Serializable {
     }
 
     public void setIntraInputKeyCorrelated(boolean intraInputKeyCorrelated) {
+        // We hope to strictly control the behavior of this modification to avoid unexpected errors.
         checkState(interInputsKeysCorrelated, "interInputsKeysCorrelated must be true");
         this.intraInputKeyCorrelated = intraInputKeyCorrelated;
     }

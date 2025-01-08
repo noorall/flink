@@ -260,12 +260,12 @@ public class JobEdge implements java.io.Serializable {
         return typeNumber;
     }
 
-    /** Gets whether the edge exist interInputsKeysCorrelated. */
+    /** Gets whether the records with same key of this edge are correlated with other inputs. */
     public boolean areInterInputsKeysCorrelated() {
         return interInputsKeysCorrelated;
     }
 
-    /** Gets whether the edge exist intraInputKeyCorrelated. */
+    /** Gets whether the records with same key of this edge are correlated. */
     public boolean isIntraInputKeyCorrelated() {
         return intraInputKeyCorrelated;
     }
