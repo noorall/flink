@@ -19,7 +19,6 @@
 package org.apache.flink.runtime.deployment;
 
 import org.apache.flink.runtime.executiongraph.IndexRange;
-import org.apache.flink.runtime.executiongraph.IndexRangeUtil;
 import org.apache.flink.runtime.executiongraph.IntermediateResult;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
 
@@ -33,6 +32,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import static org.apache.flink.runtime.executiongraph.IndexRangeUtil.mergeIndexRanges;
 import static org.apache.flink.util.Preconditions.checkNotNull;
 import static org.apache.flink.util.Preconditions.checkState;
 
@@ -79,8 +79,10 @@ class ConsumedSubpartitionContext implements Serializable {
     }
 
     public Collection<IndexRange> getConsumedShuffleDescriptorRanges() {
+        // The original consumed shuffle descriptors may have overlaps, we need to deduplicate it
+        // by merging.
         return Collections.unmodifiableCollection(
-                consumedShuffleDescriptorToSubpartitionRangeMap.keySet());
+                mergeIndexRanges(consumedShuffleDescriptorToSubpartitionRangeMap.keySet()));
     }
 
     public IndexRange getConsumedSubpartitionRange(int shuffleDescriptorIndex) {
@@ -97,7 +99,7 @@ class ConsumedSubpartitionContext implements Serializable {
             }
         }
         List<IndexRange> mergedConsumedSubpartitionRanges =
-                IndexRangeUtil.mergeIndexRanges(consumedSubpartitionRanges);
+                mergeIndexRanges(consumedSubpartitionRanges);
         checkState(
                 mergedConsumedSubpartitionRanges.size() == 1,
                 "Illegal consumed subpartition range for shuffle descriptor index "
@@ -153,8 +155,7 @@ class ConsumedSubpartitionContext implements Serializable {
         // merging.
         int numConsumedShuffleDescriptors = 0;
         List<IndexRange> mergedConsumedShuffleDescriptor =
-                IndexRangeUtil.mergeIndexRanges(
-                        consumedShuffleDescriptorToSubpartitionRangeMap.keySet());
+                mergeIndexRanges(consumedShuffleDescriptorToSubpartitionRangeMap.keySet());
         for (IndexRange range : mergedConsumedShuffleDescriptor) {
             numConsumedShuffleDescriptors += range.size();
         }

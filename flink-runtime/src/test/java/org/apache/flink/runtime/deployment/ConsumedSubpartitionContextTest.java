@@ -56,7 +56,7 @@ class ConsumedSubpartitionContextTest {
 
         Collection<IndexRange> shuffleDescriptorRanges =
                 context.getConsumedShuffleDescriptorRanges();
-        assertThat(shuffleDescriptorRanges).hasSize(2);
+        assertThat(shuffleDescriptorRanges).hasSize(1);
 
         assertThat(context.getConsumedSubpartitionRange(0)).isEqualTo(new IndexRange(0, 2));
         assertThat(context.getConsumedSubpartitionRange(1)).isEqualTo(new IndexRange(0, 2));
@@ -116,7 +116,7 @@ class ConsumedSubpartitionContextTest {
 
         Collection<IndexRange> shuffleDescriptorRanges =
                 context.getConsumedShuffleDescriptorRanges();
-        assertThat(shuffleDescriptorRanges).hasSize(2);
+        assertThat(shuffleDescriptorRanges).hasSize(1);
 
         assertThat(context.getConsumedSubpartitionRange(0)).isEqualTo(new IndexRange(1, 2));
         assertThat(context.getConsumedSubpartitionRange(1)).isEqualTo(new IndexRange(1, 2));
