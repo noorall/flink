@@ -42,6 +42,7 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
  */
 class AggregatedBlockingInputInfo {
     private static final Logger LOG = LoggerFactory.getLogger(AggregatedBlockingInputInfo.class);
+
     /** The maximum number of partitions among all aggregated inputs. */
     private final int maxPartitionNum;
 

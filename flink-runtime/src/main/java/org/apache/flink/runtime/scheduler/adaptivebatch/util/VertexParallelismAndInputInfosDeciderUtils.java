@@ -50,6 +50,7 @@ import static org.apache.flink.util.Preconditions.checkState;
 public class VertexParallelismAndInputInfosDeciderUtils {
     private static final Logger LOG =
             LoggerFactory.getLogger(VertexParallelismAndInputInfosDeciderUtils.class);
+
     /**
      * Adjust the parallelism to the closest legal parallelism and return the computed subpartition
      * ranges.
