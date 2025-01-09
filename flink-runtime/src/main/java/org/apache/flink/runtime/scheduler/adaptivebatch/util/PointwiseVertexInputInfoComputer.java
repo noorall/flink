@@ -23,7 +23,6 @@ import org.apache.flink.runtime.executiongraph.JobVertexInputInfo;
 import org.apache.flink.runtime.executiongraph.VertexInputInfoComputationUtils;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 import org.apache.flink.runtime.scheduler.adaptivebatch.BlockingInputInfo;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -34,10 +33,9 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.apache.flink.runtime.scheduler.adaptivebatch.util.SubpartitionSlice.createSubpartitionSlice;
-import static org.apache.flink.runtime.scheduler.adaptivebatch.util.VertexParallelismAndInputInfosDeciderUtils.createdExecutionVertexInputInfosForNonBroadcast;
+import static org.apache.flink.runtime.scheduler.adaptivebatch.util.VertexParallelismAndInputInfosDeciderUtils.createdJobVertexInputInfoForNonBroadcast;
 import static org.apache.flink.runtime.scheduler.adaptivebatch.util.VertexParallelismAndInputInfosDeciderUtils.isLegalParallelism;
 import static org.apache.flink.runtime.scheduler.adaptivebatch.util.VertexParallelismAndInputInfosDeciderUtils.tryComputeSubpartitionSliceRange;
-import static org.apache.flink.util.Preconditions.checkArgument;
 import static org.apache.flink.util.Preconditions.checkState;
 
 /** Helper class that computes VertexInputInfo for pointwise input. */
@@ -63,10 +61,12 @@ public class PointwiseVertexInputInfoComputer {
      */
     public Map<IntermediateDataSetID, JobVertexInputInfo> compute(
             List<BlockingInputInfo> inputInfos, int parallelism) {
-        checkArgument(
-                inputInfos.stream().noneMatch(BlockingInputInfo::areInterInputsKeysCorrelated));
         Map<IntermediateDataSetID, JobVertexInputInfo> vertexInputInfos = new HashMap<>();
         for (BlockingInputInfo inputInfo : inputInfos) {
+            // Currently, we consider all inputs in this method must don't have inter-inputs key
+            // correlation. If other possibilities are introduced in the future, please add new
+            // branches to this method.
+            checkState(!inputInfo.areInterInputsKeysCorrelated());
             vertexInputInfos.put(
                     inputInfo.getResultId(),
                     computeVertexInputInfo(inputInfo, parallelism, dataVolumePerTask));
@@ -97,7 +97,7 @@ public class PointwiseVertexInputInfoComputer {
      *     decided parallelism for all inputs is consistent.
      * @return the vertex input info
      */
-    static JobVertexInputInfo computeVertexInputInfo(
+    private static JobVertexInputInfo computeVertexInputInfo(
             BlockingInputInfo inputInfo, int parallelism, long dataVolumePerTask) {
         List<SubpartitionSlice> subpartitionSlices = createSubpartitionSlices(inputInfo);
 
@@ -108,14 +108,16 @@ public class PointwiseVertexInputInfoComputer {
                 tryComputeSubpartitionSliceRange(
                         parallelism,
                         parallelism,
-                        subpartitionSlices.size(),
                         dataVolumePerTask,
                         Map.of(inputInfo.getInputTypeNumber(), subpartitionSlices));
 
         if (optionalSubpartitionSliceRanges.isEmpty()) {
             LOG.info(
-                    "Filed to decide parallelism in balanced way for input {}, fallback to decide it by the number of subpartitions.",
+                    "Cannot find a legal parallelism to evenly distribute data amount for input {}, "
+                            + "fallback to compute a parallelism that can evenly distribute num subpartitions.",
                     inputInfo.getResultId());
+            // This computer is only used in the adaptive batch scenario, where isDynamicGraph
+            // should always be true.
             return VertexInputInfoComputationUtils.computeVertexInputInfoForPointwise(
                     inputInfo.getNumPartitions(),
                     parallelism,
@@ -167,8 +169,8 @@ public class PointwiseVertexInputInfoComputer {
             BlockingInputInfo inputInfo,
             List<IndexRange> subpartitionSliceRanges,
             List<SubpartitionSlice> subpartitionSlices) {
-        return new JobVertexInputInfo(
-                createdExecutionVertexInputInfosForNonBroadcast(
-                        inputInfo, subpartitionSliceRanges, subpartitionSlices));
+        checkState(!inputInfo.isBroadcast());
+        return createdJobVertexInputInfoForNonBroadcast(
+                inputInfo, subpartitionSliceRanges, subpartitionSlices);
     }
 }

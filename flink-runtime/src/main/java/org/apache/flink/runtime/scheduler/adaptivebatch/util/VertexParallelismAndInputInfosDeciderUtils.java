@@ -247,19 +247,6 @@ public class VertexParallelismAndInputInfosDeciderUtils {
                 .getAsInt();
     }
 
-    public static int getMaxNumSubpartitions(List<BlockingInputInfo> consumedResults) {
-        checkArgument(!consumedResults.isEmpty());
-        return consumedResults.stream()
-                .mapToInt(
-                        resultInfo ->
-                                IntStream.range(0, resultInfo.getNumPartitions())
-                                        .boxed()
-                                        .mapToInt(resultInfo::getNumSubpartitions)
-                                        .sum())
-                .max()
-                .getAsInt();
-    }
-
     public static int checkAndGetSubpartitionNum(List<BlockingInputInfo> consumedResults) {
         final Set<Integer> subpartitionNumSet =
                 consumedResults.stream()
@@ -268,6 +255,17 @@ public class VertexParallelismAndInputInfosDeciderUtils {
                                         IntStream.range(0, resultInfo.getNumPartitions())
                                                 .boxed()
                                                 .map(resultInfo::getNumSubpartitions))
+                        .collect(Collectors.toSet());
+        // all partitions have the same subpartition num
+        checkState(subpartitionNumSet.size() == 1);
+        return subpartitionNumSet.iterator().next();
+    }
+
+    public static int checkAndGetSubpartitionNumForAggregatedInputs(
+            Collection<AggregatedBlockingInputInfo> inputInfos) {
+        final Set<Integer> subpartitionNumSet =
+                inputInfos.stream()
+                        .map(AggregatedBlockingInputInfo::getNumSubpartitions)
                         .collect(Collectors.toSet());
         // all partitions have the same subpartition num
         checkState(subpartitionNumSet.size() == 1);
@@ -309,8 +307,6 @@ public class VertexParallelismAndInputInfosDeciderUtils {
      *
      * @param minParallelism The minimum parallelism.
      * @param maxParallelism The maximum parallelism.
-     * @param maxSubpartitionSliceRangePerTask The maximum number of subpartition slice ranges per
-     *     task.
      * @param maxDataVolumePerTask The maximum data volume per task.
      * @param subpartitionSlicesByTypeNumber A map of lists of subpartition slices grouped by type
      *     number.
@@ -320,14 +316,12 @@ public class VertexParallelismAndInputInfosDeciderUtils {
     public static Optional<List<IndexRange>> tryComputeSubpartitionSliceRange(
             int minParallelism,
             int maxParallelism,
-            int maxSubpartitionSliceRangePerTask,
             long maxDataVolumePerTask,
             Map<Integer, List<SubpartitionSlice>> subpartitionSlicesByTypeNumber) {
         Optional<List<IndexRange>> subpartitionSliceRanges =
                 tryComputeSubpartitionSliceRangeEvenlyDistributedData(
                         minParallelism,
                         maxParallelism,
-                        maxSubpartitionSliceRangePerTask,
                         maxDataVolumePerTask,
                         subpartitionSlicesByTypeNumber);
         if (subpartitionSliceRanges.isEmpty()) {
@@ -341,7 +335,7 @@ public class VertexParallelismAndInputInfosDeciderUtils {
         return subpartitionSliceRanges;
     }
 
-    public static List<ExecutionVertexInputInfo> createdExecutionVertexInputInfosForBroadcast(
+    public static JobVertexInputInfo createdJobVertexInputInfoForBroadcast(
             BlockingInputInfo inputInfo, int parallelism) {
         checkArgument(inputInfo.isBroadcast());
         int numPartitions = inputInfo.getNumPartitions();
@@ -364,10 +358,10 @@ public class VertexParallelismAndInputInfosDeciderUtils {
             }
             executionVertexInputInfos.add(executionVertexInputInfo);
         }
-        return executionVertexInputInfos;
+        return new JobVertexInputInfo(executionVertexInputInfos);
     }
 
-    public static List<ExecutionVertexInputInfo> createdExecutionVertexInputInfosForNonBroadcast(
+    public static JobVertexInputInfo createdJobVertexInputInfoForNonBroadcast(
             BlockingInputInfo inputInfo,
             List<IndexRange> subpartitionSliceRanges,
             List<SubpartitionSlice> subpartitionSlices) {
@@ -379,20 +373,19 @@ public class VertexParallelismAndInputInfosDeciderUtils {
             // Convert subpartitionSlices to partition range to subpartition range
             Map<IndexRange, IndexRange> consumedSubpartitionGroups =
                     computeConsumedSubpartitionGroups(
-                            numPartitions,
-                            inputInfo.isPointwise(),
                             subpartitionSliceRange,
-                            subpartitionSlices);
+                            subpartitionSlices,
+                            numPartitions,
+                            inputInfo.isPointwise());
             executionVertexInputInfos.add(
                     new ExecutionVertexInputInfo(i, consumedSubpartitionGroups));
         }
-        return executionVertexInputInfos;
+        return new JobVertexInputInfo(executionVertexInputInfos);
     }
 
     private static Optional<List<IndexRange>> tryComputeSubpartitionSliceRangeEvenlyDistributedData(
             int minParallelism,
             int maxParallelism,
-            int maxSubpartitionSliceRangePerTask,
             long maxDataVolumePerTask,
             Map<Integer, List<SubpartitionSlice>> subpartitionSlicesByTypeNumber) {
         int subpartitionSlicesSize =
@@ -402,7 +395,6 @@ public class VertexParallelismAndInputInfosDeciderUtils {
         List<IndexRange> subpartitionSliceRanges =
                 computeSubpartitionSliceRanges(
                         maxDataVolumePerTask,
-                        maxSubpartitionSliceRangePerTask,
                         subpartitionSlicesSize,
                         subpartitionSlicesByTypeNumber);
         // if the parallelism is not legal, try to adjust to a legal parallelism
@@ -427,16 +419,10 @@ public class VertexParallelismAndInputInfosDeciderUtils {
                     sumBytesSize,
                     limit ->
                             computeParallelism(
-                                    limit,
-                                    maxSubpartitionSliceRangePerTask,
-                                    subpartitionSlicesSize,
-                                    subpartitionSlicesByTypeNumber),
+                                    limit, subpartitionSlicesSize, subpartitionSlicesByTypeNumber),
                     limit ->
                             computeSubpartitionSliceRanges(
-                                    limit,
-                                    maxSubpartitionSliceRangePerTask,
-                                    subpartitionSlicesSize,
-                                    subpartitionSlicesByTypeNumber));
+                                    limit, subpartitionSlicesSize, subpartitionSlicesByTypeNumber));
         }
         return Optional.of(subpartitionSliceRanges);
     }
@@ -466,20 +452,27 @@ public class VertexParallelismAndInputInfosDeciderUtils {
      * Merge the subpartition slices of the specified range into an index range map, which the key
      * is the partition index range and the value is the subpartition range.
      *
-     * <p>Note: For pointwise, we prioritize that their partition ranges have no overlap, and for
-     * allToAll, we prioritize that their subpartition ranges have no overlap.
+     * <p>Note: In existing algorithms, the consumed subpartition groups for POINTWISE always ensure
+     * that there is no overlap in the partition ranges, while for ALL_TO_ALL, the consumed
+     * subpartition groups always ensure that there is no overlap in the subpartition ranges. For
+     * example, if a task needs to subscribe to {[0,0]->[0,1] ,[1,1]->[0]} (partition range to
+     * subpartition range), for POINT WISE it will be: {[0,0]->[0,1], [1,1]->[0,0]}, for ALL_TO-ALL
+     * it will be: {[0,1]->[0,0], [0,0]->[1,1]}.The result of this method will also follow this
+     * convention.
      *
-     * @param numPartitions the number of partitions of input info
      * @param subpartitionSliceRange the range of subpartition slices to be merged
      * @param subpartitionSlices subpartition slices
+     * @param numPartitions the real number of partitions of input info, use to correct the
+     *     partition range
+     * @param isPointwise whether the input info is pointwise
      * @return a map indicating the ranges that task needs to consume, the key is partition range
      *     and the value is subpartition range.
      */
     private static Map<IndexRange, IndexRange> computeConsumedSubpartitionGroups(
-            int numPartitions,
-            boolean isPointwise,
             IndexRange subpartitionSliceRange,
-            List<SubpartitionSlice> subpartitionSlices) {
+            List<SubpartitionSlice> subpartitionSlices,
+            int numPartitions,
+            boolean isPointwise) {
         Map<IndexRange, List<IndexRange>> rangeMap =
                 new TreeMap<>(Comparator.comparingInt(IndexRange::getStartIndex));
         for (int i = subpartitionSliceRange.getStartIndex();
@@ -539,13 +532,12 @@ public class VertexParallelismAndInputInfosDeciderUtils {
      * 2. The SubpartitionSlice number in each piece is not larger than maxRangeSize.
      *
      * @param limit the limit of data size
-     * @param maxRangeSize the max number of SubpartitionSlice in each range
      * @param subpartitionGroupSize the number of SubpartitionSlices
+     * @param subpartitionSlices the subpartition slices to be processed
      * @return the range of index corresponding to each piece of data
      */
     private static List<IndexRange> computeSubpartitionSliceRanges(
             long limit,
-            int maxRangeSize,
             int subpartitionGroupSize,
             Map<Integer, List<SubpartitionSlice>> subpartitionSlices) {
         List<IndexRange> subpartitionSliceRanges = new ArrayList<>();
@@ -569,9 +561,7 @@ public class VertexParallelismAndInputInfosDeciderUtils {
                 }
                 currentGroupSize += subpartitionSlice.getDataBytes();
             }
-            if (i == startIndex
-                    || (accumulatedSize + currentGroupSizeDeduplicated <= limit
-                            && (i - startIndex + 1) <= maxRangeSize)) {
+            if (i == startIndex || accumulatedSize + currentGroupSizeDeduplicated <= limit) {
                 accumulatedSize += currentGroupSizeDeduplicated;
             } else {
                 subpartitionSliceRanges.add(new IndexRange(startIndex, i - 1));
@@ -597,13 +587,12 @@ public class VertexParallelismAndInputInfosDeciderUtils {
      * returns the parallelism after dividing base on the given limits.
      *
      * @param limit the limit of data size
-     * @param maxRangeSize the max number of SubpartitionSlice in each range
      * @param subpartitionSlicesSize the number of SubpartitionSlices
+     * @param subpartitionSlices the subpartition slices to be processed
      * @return the parallelism after dividing
      */
     private static int computeParallelism(
             long limit,
-            int maxRangeSize,
             int subpartitionSlicesSize,
             Map<Integer, List<SubpartitionSlice>> subpartitionSlices) {
         int count = 1;
@@ -624,9 +613,7 @@ public class VertexParallelismAndInputInfosDeciderUtils {
                 }
                 currentGroupSize += subpartitionSlice.getDataBytes();
             }
-            if (i == startIndex
-                    || (accumulatedSize + currentGroupSizeDeduplicated <= limit
-                            && (i - startIndex + 1) <= maxRangeSize)) {
+            if (i == startIndex || accumulatedSize + currentGroupSizeDeduplicated <= limit) {
                 accumulatedSize += currentGroupSizeDeduplicated;
             } else {
                 ++count;

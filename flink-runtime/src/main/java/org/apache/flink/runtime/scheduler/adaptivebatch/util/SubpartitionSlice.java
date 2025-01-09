@@ -43,7 +43,8 @@ public class SubpartitionSlice {
     /** The size of the subpartition slice in bytes. */
     private final long dataBytes;
 
-    SubpartitionSlice(IndexRange partitionRange, IndexRange subpartitionRange, long dataBytes) {
+    private SubpartitionSlice(
+            IndexRange partitionRange, IndexRange subpartitionRange, long dataBytes) {
         this.partitionRange = checkNotNull(partitionRange);
         this.subpartitionRange = checkNotNull(subpartitionRange);
         this.dataBytes = dataBytes;

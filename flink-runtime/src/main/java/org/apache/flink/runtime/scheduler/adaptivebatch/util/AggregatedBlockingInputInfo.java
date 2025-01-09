@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.apache.flink.runtime.scheduler.adaptivebatch.util.VertexParallelismAndInputInfosDeciderUtils.checkAndGetIntraCorrelation;
+import static org.apache.flink.runtime.scheduler.adaptivebatch.util.VertexParallelismAndInputInfosDeciderUtils.checkAndGetSubpartitionNum;
 import static org.apache.flink.runtime.scheduler.adaptivebatch.util.VertexParallelismAndInputInfosDeciderUtils.computeSkewThreshold;
 import static org.apache.flink.runtime.scheduler.adaptivebatch.util.VertexParallelismAndInputInfosDeciderUtils.computeTargetSize;
 import static org.apache.flink.runtime.scheduler.adaptivebatch.util.VertexParallelismAndInputInfosDeciderUtils.getMaxNumPartitions;
@@ -40,7 +41,7 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
  * Helper class that aggregates input information with the same typeNumber so that they can be
  * processed as a single unit.
  */
-class AggregatedBlockingInputInfo {
+public class AggregatedBlockingInputInfo {
     private static final Logger LOG = LoggerFactory.getLogger(AggregatedBlockingInputInfo.class);
 
     /** The maximum number of partitions among all aggregated inputs. */
@@ -64,7 +65,7 @@ class AggregatedBlockingInputInfo {
      * for splitting subpartitions with same index. If it is empty, means that the split operation
      * cannot be performed. In the following cases, this map will be empty: 1.
      * IntraInputKeyCorrelated is true. 2. The aggregated input infos have different num partitions.
-     * 3. The SubpartitionBytesByPartitionIndex of inputs has been aggregated.
+     * 3. The SubpartitionBytesByPartitionIndex of inputs is empty.
      */
     private final Map<Integer, long[]> subpartitionBytesByPartition;
 
@@ -113,6 +114,10 @@ class AggregatedBlockingInputInfo {
         return aggregatedSubpartitionBytes[subpartitionIndex] > skewedThreshold;
     }
 
+    public int getNumSubpartitions() {
+        return aggregatedSubpartitionBytes.length;
+    }
+
     private static long[] computeAggregatedSubpartitionBytes(
             List<BlockingInputInfo> inputInfos, int subpartitionNum) {
         long[] aggregatedSubpartitionBytes = new long[subpartitionNum];
@@ -128,7 +133,7 @@ class AggregatedBlockingInputInfo {
     private static Map<Integer, long[]> computeSubpartitionBytesByPartitionIndex(
             List<BlockingInputInfo> inputInfos, int subpartitionNum) {
         // If inputInfos have different num partitions (means that these upstream have different
-        // parallelisms), skip aggregation.
+        // parallelisms), return an empty result to disable data splitting.
         if (!hasSameNumPartitions(inputInfos)) {
             LOG.warn(
                     "Input infos have different num partitions, skip calculate SubpartitionBytesByPartitionIndex");
@@ -155,8 +160,8 @@ class AggregatedBlockingInputInfo {
             long defaultSkewedThreshold,
             double skewedFactor,
             long dataVolumePerTask,
-            int subpartitionNum,
             List<BlockingInputInfo> inputInfos) {
+        int subpartitionNum = checkAndGetSubpartitionNum(inputInfos);
         long[] aggregatedSubpartitionBytes =
                 computeAggregatedSubpartitionBytes(inputInfos, subpartitionNum);
         long skewedThreshold =

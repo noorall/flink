@@ -39,7 +39,6 @@ import java.util.List;
 import java.util.Map;
 
 import static org.apache.flink.runtime.scheduler.adaptivebatch.util.VertexParallelismAndInputInfosDeciderUtils.checkAndGetParallelism;
-import static org.apache.flink.runtime.scheduler.adaptivebatch.util.VertexParallelismAndInputInfosDeciderUtils.getMaxNumSubpartitions;
 import static org.apache.flink.runtime.scheduler.adaptivebatch.util.VertexParallelismAndInputInfosDeciderUtils.getNonBroadcastInputInfos;
 import static org.apache.flink.util.Preconditions.checkArgument;
 import static org.apache.flink.util.Preconditions.checkNotNull;
@@ -49,11 +48,12 @@ import static org.apache.flink.util.Preconditions.checkState;
  * Default implementation of {@link VertexParallelismAndInputInfosDecider}. This implementation will
  * decide parallelism and {@link JobVertexInputInfo}s as follows:
  *
- * <p>1. For job vertices whose inputs are all ALL_TO_ALL edges, evenly distribute data to
- * downstream subtasks, make different downstream subtasks consume roughly the same amount of data.
+ * <p>1. We will first attempt to: evenly distribute data to downstream subtasks, make different
+ * downstream subtasks consume roughly the same amount of data.
  *
- * <p>2. For other cases, evenly distribute subpartitions to downstream subtasks, make different
- * downstream subtasks consume roughly the same number of subpartitions.
+ * <p>2. If step 1 fails or is not applicable, we will proceed to: evenly distribute subpartitions
+ * to downstream subtasks, make different downstream subtasks consume roughly the same number of
+ * subpartitions.
  */
 public class DefaultVertexParallelismAndInputInfosDecider
         implements VertexParallelismAndInputInfosDecider {
@@ -218,12 +218,15 @@ public class DefaultVertexParallelismAndInputInfosDecider
                 });
 
         // For AllToAll like inputs, we derive parallelism as a whole, while for Pointwise inputs,
-        // we need to derive parallelism separately for each input.
-        //
-        // In the following cases, we need to reset min parallelism and max parallelism to ensure
-        // that the decided parallelism for all inputs is consistent :
-        // 1.  Vertex has a specified parallelism
-        // 2.  There are pointwise inputs
+        // we derive parallelism separately for each input, and our goal is ensured that the final
+        // parallelisms of those inputs are consistent and meet expectations.
+        // Since AllToAll supports deriving parallelism within a flexible range, this might
+        // interfere with the target parallelism. Therefore, in the following cases, we need to
+        // reset the minimum and maximum parallelism to limit the flexibility of parallelism
+        // derivation to achieve the goal:
+        // 1.  Vertex has a specified parallelism, we should follow it.
+        // 2.  There are pointwise inputs, which means that there may be inputs whose parallelism is
+        // derived one-by-one, we need to reset the min and max parallelism.
         if (vertexInitialParallelism > 0 || !pointwiseInputs.isEmpty()) {
             minParallelism = parallelism;
             maxParallelism = parallelism;
@@ -270,12 +273,6 @@ public class DefaultVertexParallelismAndInputInfosDecider
                         .mapToLong(BlockingInputInfo::getNumBytesProduced)
                         .sum();
         int parallelism = (int) Math.ceil((double) totalBytes / dataVolumePerTask);
-        int minParallelismLimitedByMaxSubpartitions =
-                (int)
-                        Math.ceil(
-                                (double) getMaxNumSubpartitions(nonBroadcastResults)
-                                        / MAX_NUM_SUBPARTITIONS_PER_TASK_CONSUME);
-        parallelism = Math.max(parallelism, minParallelismLimitedByMaxSubpartitions);
 
         LOG.debug(
                 "The total size of non-broadcast data is {}, the initially decided parallelism of job vertex {} is {}.",
