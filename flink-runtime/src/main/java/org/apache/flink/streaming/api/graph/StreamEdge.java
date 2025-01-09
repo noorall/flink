@@ -266,6 +266,9 @@ public class StreamEdge implements Serializable {
     }
 
     private void configureKeyCorrelation(StreamPartitioner<?> partitioner) {
+        // Set a safe value of correlations based on the partitioner to ensure the program can
+        // work normally by default. The final value of the correlations can be flexibly determined
+        // by the operator.
         if (partitioner.isPointwise()) {
             this.intraInputKeyCorrelated = partitioner instanceof ForwardPartitioner;
             this.interInputsKeysCorrelated = false;
