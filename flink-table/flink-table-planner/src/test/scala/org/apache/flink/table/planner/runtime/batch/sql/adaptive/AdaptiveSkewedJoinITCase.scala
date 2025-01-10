@@ -17,43 +17,37 @@
  */
 package org.apache.flink.table.planner.runtime.batch.sql.adaptive
 
-import org.apache.flink.api.common.typeinfo.BasicTypeInfo.{LONG_TYPE_INFO, STRING_TYPE_INFO}
-import org.apache.flink.api.java.typeutils.RowTypeInfo
-import org.apache.flink.table.api.config.{ExecutionConfigOptions, OptimizerConfigOptions}
-import org.apache.flink.table.planner.runtime.utils.BatchTestBase
-import org.apache.flink.types.Row
+import org.apache.flink.table.api.config.OptimizerConfigOptions
 
-import org.junit.jupiter.api.{BeforeEach, Test}
-
-import scala.collection.JavaConversions._
-import scala.util.Random
+import org.junit.jupiter.api.BeforeEach
 
 /** IT cases for adaptive broadcast join. */
-class AdaptiveBroadcastJoinITCase extends AdaptiveJoinITCase {
+class AdaptiveSkewedJoinITCase extends AdaptiveJoinITCase {
   @BeforeEach
   override def before(): Unit = {
     super.before()
     tEnv.getConfig
       .set(
-        OptimizerConfigOptions.TABLE_OPTIMIZER_ADAPTIVE_SKEWED_JOIN_OPTIMIZATION_STRATEGY,
-        OptimizerConfigOptions.AdaptiveSkewedJoinOptimizationStrategy.NONE)
+        OptimizerConfigOptions.TABLE_OPTIMIZER_ADAPTIVE_BROADCAST_JOIN_STRATEGY,
+        OptimizerConfigOptions.AdaptiveBroadcastJoinStrategy.NONE)
   }
 
   override def checkResult(sql: String): Unit = {
     tEnv.getConfig
       .set(
-        OptimizerConfigOptions.TABLE_OPTIMIZER_ADAPTIVE_BROADCAST_JOIN_STRATEGY,
-        OptimizerConfigOptions.AdaptiveBroadcastJoinStrategy.NONE)
+        OptimizerConfigOptions.TABLE_OPTIMIZER_ADAPTIVE_SKEWED_JOIN_OPTIMIZATION_STRATEGY,
+        OptimizerConfigOptions.AdaptiveSkewedJoinOptimizationStrategy.NONE)
     val expected = executeQuery(sql)
     tEnv.getConfig
       .set(
-        OptimizerConfigOptions.TABLE_OPTIMIZER_ADAPTIVE_BROADCAST_JOIN_STRATEGY,
-        OptimizerConfigOptions.AdaptiveBroadcastJoinStrategy.AUTO)
+        OptimizerConfigOptions.TABLE_OPTIMIZER_ADAPTIVE_SKEWED_JOIN_OPTIMIZATION_STRATEGY,
+        OptimizerConfigOptions.AdaptiveSkewedJoinOptimizationStrategy.AUTO)
     checkResult(sql, expected)
     tEnv.getConfig
       .set(
-        OptimizerConfigOptions.TABLE_OPTIMIZER_ADAPTIVE_BROADCAST_JOIN_STRATEGY,
-        OptimizerConfigOptions.AdaptiveBroadcastJoinStrategy.RUNTIME_ONLY)
+        OptimizerConfigOptions.TABLE_OPTIMIZER_ADAPTIVE_SKEWED_JOIN_OPTIMIZATION_STRATEGY,
+        OptimizerConfigOptions.AdaptiveSkewedJoinOptimizationStrategy.FORCED
+      )
     checkResult(sql, expected)
   }
 }

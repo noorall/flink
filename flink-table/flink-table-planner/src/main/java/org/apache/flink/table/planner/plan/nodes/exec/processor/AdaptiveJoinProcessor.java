@@ -142,6 +142,14 @@ public class AdaptiveJoinProcessor implements ExecNodeGraphProcessor {
                                 != OptimizerConfigOptions.AdaptiveBroadcastJoinStrategy.NONE
                         && !TableConfigUtils.isOperatorDisabled(
                                 tableConfig, OperatorType.BroadcastHashJoin);
+        if (!isAdaptiveJoinEnabled) {
+            int a = 1;
+        }
+        isAdaptiveJoinEnabled |=
+                tableConfig.get(
+                                OptimizerConfigOptions
+                                        .TABLE_OPTIMIZER_ADAPTIVE_SKEWED_JOIN_OPTIMIZATION_STRATEGY)
+                        != OptimizerConfigOptions.AdaptiveSkewedJoinOptimizationStrategy.NONE;
         JobManagerOptions.SchedulerType schedulerType =
                 context.getPlanner()
                         .getExecEnv()

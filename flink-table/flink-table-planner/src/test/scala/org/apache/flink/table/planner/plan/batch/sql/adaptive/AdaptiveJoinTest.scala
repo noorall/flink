@@ -38,6 +38,9 @@ class AdaptiveJoinTest extends TableTestBase {
     util.tableConfig.set(
       OptimizerConfigOptions.TABLE_OPTIMIZER_ADAPTIVE_BROADCAST_JOIN_STRATEGY,
       OptimizerConfigOptions.AdaptiveBroadcastJoinStrategy.AUTO)
+    util.tableConfig.set(
+      OptimizerConfigOptions.TABLE_OPTIMIZER_ADAPTIVE_SKEWED_JOIN_OPTIMIZATION_STRATEGY,
+      OptimizerConfigOptions.AdaptiveSkewedJoinOptimizationStrategy.AUTO)
   }
 
   @Test
