@@ -81,6 +81,12 @@ class AdaptiveSkewedJoinITCase extends AdaptiveJoinITCase {
     checkResult(sql)
   }
 
+  @Test
+  def testJoinWithUnspecifiedForwardOutput(): Unit = {
+    val sql = "SELECT * FROM T1, T2 WHERE a1 = a2 limit 3"
+    checkResult(sql)
+  }
+
   override def checkResult(sql: String): Unit = {
     tEnv.getConfig
       .set(
