@@ -298,6 +298,9 @@ public class AllToAllVertexInputInfoComputer {
                                 subpartitionIndex,
                                 aggregatedBlockingInputInfo.getTargetSize(),
                                 aggregatedBlockingInputInfo.getSubpartitionBytesByPartition());
+                if (partitionRanges.size() != 1) {
+                    LOG.info("Split subpartition from 1 to {}", partitionRanges.size());
+                }
                 subpartitionSlices.put(
                         typeNumber,
                         createSubpartitionSlicesByMultiPartitionRanges(
