@@ -59,4 +59,8 @@ public class ImmutableStreamEdge {
     public boolean isBroadcastEdge() {
         return streamEdge.getPartitioner() instanceof BroadcastPartitioner;
     }
+
+    public boolean isPointwiseEdge() {
+        return streamEdge.getPartitioner().isPointwise();
+    }
 }

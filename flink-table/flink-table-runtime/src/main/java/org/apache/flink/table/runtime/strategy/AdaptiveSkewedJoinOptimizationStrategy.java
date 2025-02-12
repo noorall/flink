@@ -301,22 +301,23 @@ public class AdaptiveSkewedJoinOptimizationStrategy
     }
 
     private static boolean canPerformOptimizationAutomatic(ImmutableStreamNode adaptiveJoinNode) {
-        // In AUTO mode, we need to ensure that there are no intra-correlated out edge to ensure the
-        // application of this optimization wouldn't break data correctness or introduce additional
-        // performance overhead.
+        // In AUTO mode, we need to ensure that all pointwise out edges do not have
+        // intra-correlation to ensure the application of this optimization wouldn't break data
+        // correctness or introduce additional performance overhead.
         return adaptiveJoinNode.getOutEdges().stream()
-                .noneMatch(ImmutableStreamEdge::isIntraInputKeyCorrelated);
+                .noneMatch(edge -> edge.isPointwiseEdge() && edge.isIntraInputKeyCorrelated());
     }
 
     private static boolean canPerformOptimizationForced(ImmutableStreamNode adaptiveJoinNode) {
-        // In FORCED mode, if there is an intra-correlated out edge, and the type of it is
-        // ForwardForConsecutiveHash, we can modify its partitioner to HashPartitioner to ensure
-        // the data correctness after the optimization applied. Otherwise, this optimization is not
-        // allowed.
+        // In FORCED mode, if there is a pointwise out edge with intra-correlation, and the
+        // type of it is ForwardForConsecutiveHash, we can modify its partitioner to HashPartitioner
+        // to ensure the data correctness after the optimization applied. Otherwise, this
+        // optimization is not allowed.
         return adaptiveJoinNode.getOutEdges().stream()
                 .noneMatch(
                         edge ->
-                                edge.isIntraInputKeyCorrelated()
+                                edge.isPointwiseEdge()
+                                        && edge.isIntraInputKeyCorrelated()
                                         && !edge.isForwardForConsecutiveHashEdge());
     }
 }
