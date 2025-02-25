@@ -19,6 +19,7 @@
 package org.apache.flink.table.runtime.operators.multipleinput.input;
 
 import org.apache.flink.streaming.api.operators.Input;
+import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.runtime.operators.multipleinput.TableOperatorWrapper;
 
 import java.io.Serializable;
@@ -34,7 +35,7 @@ public class InputSpec implements Serializable {
     private final InputSelectionSpec inputSelectionSpec;
 
     /** The output operator corresponding to the {@link Input}. */
-    private final TableOperatorWrapper<?> output;
+    private final TableOperatorWrapper<?, RowData> output;
 
     /** The input id (start from 1) is used for identifying each input of the output operator. */
     private final int outputOpInputId;
@@ -42,7 +43,7 @@ public class InputSpec implements Serializable {
     public InputSpec(
             int multipleInputId,
             int readOrder,
-            TableOperatorWrapper<?> output,
+            TableOperatorWrapper<?, RowData> output,
             int outputOpInputId) {
         this.inputSelectionSpec = new InputSelectionSpec(multipleInputId, readOrder);
         this.output = checkNotNull(output);
@@ -61,7 +62,7 @@ public class InputSpec implements Serializable {
         return inputSelectionSpec.getReadOrder();
     }
 
-    public TableOperatorWrapper<?> getOutput() {
+    public TableOperatorWrapper<?, RowData> getOutput() {
         return output;
     }
 

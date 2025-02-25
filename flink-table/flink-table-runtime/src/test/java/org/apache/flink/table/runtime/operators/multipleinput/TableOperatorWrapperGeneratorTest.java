@@ -90,12 +90,12 @@ class TableOperatorWrapperGeneratorTest extends MultipleInputTestBase {
 
         TableOperatorWrapperGenerator generator =
                 new TableOperatorWrapperGenerator(
-                        Arrays.asList(source1, source2), join, new int[] {1, 0});
+                        Arrays.asList(source1, source2), join, new int[]{1, 0});
         generator.generate();
 
-        TableOperatorWrapper<?> headWrapper1 = createWrapper(agg1, 1, 1.0 / 6);
-        TableOperatorWrapper<?> headWrapper2 = createWrapper(agg2, 2, 2.0 / 6);
-        TableOperatorWrapper<?> outputWrapper = createWrapper(join, 0, 3.0 / 6);
+        TableOperatorWrapper<?, RowData> headWrapper1 = createWrapper(agg1, 1, 1.0 / 6);
+        TableOperatorWrapper<?, RowData> headWrapper2 = createWrapper(agg2, 2, 2.0 / 6);
+        TableOperatorWrapper<?, RowData> outputWrapper = createWrapper(join, 0, 3.0 / 6);
         outputWrapper.addInput(headWrapper1, 1);
         outputWrapper.addInput(headWrapper2, 2);
         assertThat(generator.getInputTransformAndInputSpecPairs())
@@ -203,19 +203,19 @@ class TableOperatorWrapperGeneratorTest extends MultipleInputTestBase {
                 new TableOperatorWrapperGenerator(
                         Arrays.asList(source1, source2, source3, source4, source5),
                         join4,
-                        new int[] {2, 3, 4, 0, 1});
+                        new int[]{2, 3, 4, 0, 1});
         generator.generate();
 
-        TableOperatorWrapper<?> aggWrapper1 = createWrapper(agg1, 3, 1.0 / 21);
-        TableOperatorWrapper<?> aggWrapper2 = createWrapper(agg2, 4, 2.0 / 21);
-        TableOperatorWrapper<?> joinWrapper1 = createWrapper(join1, 2, 3.0 / 21);
+        TableOperatorWrapper<?, RowData> aggWrapper1 = createWrapper(agg1, 3, 1.0 / 21);
+        TableOperatorWrapper<?, RowData> aggWrapper2 = createWrapper(agg2, 4, 2.0 / 21);
+        TableOperatorWrapper<?, RowData> joinWrapper1 = createWrapper(join1, 2, 3.0 / 21);
         joinWrapper1.addInput(aggWrapper1, 1);
         joinWrapper1.addInput(aggWrapper2, 2);
-        TableOperatorWrapper<?> joinWrapper2 = createWrapper(join2, 1, 4.0 / 21);
+        TableOperatorWrapper<?, RowData> joinWrapper2 = createWrapper(join2, 1, 4.0 / 21);
         joinWrapper2.addInput(joinWrapper1, 1);
-        TableOperatorWrapper<?> joinWrapper3 = createWrapper(join3, 5, 5.0 / 21);
+        TableOperatorWrapper<?, RowData> joinWrapper3 = createWrapper(join3, 5, 5.0 / 21);
 
-        TableOperatorWrapper<?> outputWrapper = createWrapper(join4, 0, 6.0 / 21);
+        TableOperatorWrapper<?, RowData> outputWrapper = createWrapper(join4, 0, 6.0 / 21);
         outputWrapper.addInput(joinWrapper2, 1);
         outputWrapper.addInput(joinWrapper3, 2);
 
@@ -286,18 +286,18 @@ class TableOperatorWrapperGeneratorTest extends MultipleInputTestBase {
                 new TableOperatorWrapperGenerator(
                         Arrays.asList(source1, source2, source3, source4, source5),
                         union3,
-                        new int[] {1, 1, 1, 0, 2});
+                        new int[]{1, 1, 1, 0, 2});
         generator.generate();
 
-        TableOperatorWrapper<?> unionWrapper1 = createWrapper(union1, 4);
-        TableOperatorWrapper<?> unionWrapper2 = createWrapper(union2, 3);
+        TableOperatorWrapper<?, RowData> unionWrapper1 = createWrapper(union1, 4);
+        TableOperatorWrapper<?, RowData> unionWrapper2 = createWrapper(union2, 3);
         unionWrapper2.addInput(unionWrapper1, 1);
-        TableOperatorWrapper<?> aggWrapper1 = createWrapper(agg1, 2, 1.0 / 3);
-        TableOperatorWrapper<?> joinWrapper1 = createWrapper(join1, 1, 2.0 / 3);
+        TableOperatorWrapper<?, RowData> aggWrapper1 = createWrapper(agg1, 2, 1.0 / 3);
+        TableOperatorWrapper<?, RowData> joinWrapper1 = createWrapper(join1, 1, 2.0 / 3);
         joinWrapper1.addInput(aggWrapper1, 1);
         joinWrapper1.addInput(unionWrapper2, 2);
 
-        TableOperatorWrapper<?> outputWrapper = createWrapper(union3, 0);
+        TableOperatorWrapper<?, RowData> outputWrapper = createWrapper(union3, 0);
         outputWrapper.addInput(joinWrapper1, 1);
 
         assertThat(generator.getInputTransformAndInputSpecPairs())
@@ -368,15 +368,15 @@ class TableOperatorWrapperGeneratorTest extends MultipleInputTestBase {
 
         TableOperatorWrapperGenerator generator =
                 new TableOperatorWrapperGenerator(
-                        Arrays.asList(source1, source2, source3), join, new int[] {1, 1, 0});
+                        Arrays.asList(source1, source2, source3), join, new int[]{1, 1, 0});
         generator.generate();
 
-        TableOperatorWrapper<?> calcWrapper1 = createWrapper(calc1, 2, 1.0 / 3);
-        TableOperatorWrapper<?> calcWrapper2 = createWrapper(calc2, 3, 1.0 / 3);
-        TableOperatorWrapper<?> unionWrapper = createWrapper(union, 1);
+        TableOperatorWrapper<?, RowData> calcWrapper1 = createWrapper(calc1, 2, 1.0 / 3);
+        TableOperatorWrapper<?, RowData> calcWrapper2 = createWrapper(calc2, 3, 1.0 / 3);
+        TableOperatorWrapper<?, RowData> unionWrapper = createWrapper(union, 1);
         unionWrapper.addInput(calcWrapper1, 1);
         unionWrapper.addInput(calcWrapper2, 2);
-        TableOperatorWrapper<?> outputWrapper = createWrapper(join, 0, 1.0 / 3);
+        TableOperatorWrapper<?, RowData> outputWrapper = createWrapper(join, 0, 1.0 / 3);
         outputWrapper.addInput(unionWrapper, 2);
 
         assertThat(generator.getInputTransformAndInputSpecPairs())
@@ -388,10 +388,19 @@ class TableOperatorWrapperGeneratorTest extends MultipleInputTestBase {
         assertThat(unionWrapper.getInputEdges())
                 .isEqualTo(
                         Arrays.asList(
-                                new TableOperatorWrapper.Edge(calcWrapper1, unionWrapper, 1),
-                                new TableOperatorWrapper.Edge(calcWrapper2, unionWrapper, 2)));
+                                new TableOperatorWrapper.Edge<RowData>(
+                                        calcWrapper1,
+                                        unionWrapper,
+                                        1),
+                                new TableOperatorWrapper.Edge<RowData>(
+                                        calcWrapper2,
+                                        unionWrapper,
+                                        2)));
         assertThat(outputWrapper.getInputEdges())
-                .containsExactly(new TableOperatorWrapper.Edge(unionWrapper, outputWrapper, 2));
+                .containsExactly(new TableOperatorWrapper.Edge<RowData>(
+                        unionWrapper,
+                        outputWrapper,
+                        2));
 
         assertThat(generator.getTailWrapper()).isEqualTo(outputWrapper);
         assertThat(generator.getManagedMemoryWeight()).isEqualTo(3);
@@ -421,7 +430,7 @@ class TableOperatorWrapperGeneratorTest extends MultipleInputTestBase {
 
         TableOperatorWrapperGenerator generator =
                 new TableOperatorWrapperGenerator(
-                        Arrays.asList(source1, source2), join, new int[] {0, 0});
+                        Arrays.asList(source1, source2), join, new int[]{0, 0});
         assertThatThrownBy(() -> generator.generate()).isInstanceOf(RuntimeException.class);
     }
 
@@ -433,11 +442,11 @@ class TableOperatorWrapperGeneratorTest extends MultipleInputTestBase {
         return transform;
     }
 
-    private TableOperatorWrapper<StreamOperator<RowData>> createWrapper(
+    private TableOperatorWrapper<StreamOperator<RowData>, RowData> createWrapper(
             OneInputTransformation<RowData, RowData> transform,
             int index,
             double managedMemoryFraction) {
-        TableOperatorWrapper<StreamOperator<RowData>> wrapper =
+        TableOperatorWrapper<StreamOperator<RowData>, RowData> wrapper =
                 new TableOperatorWrapper<>(
                         transform.getOperatorFactory(),
                         "SubOp" + index + "_" + transform.getName(),
@@ -447,11 +456,11 @@ class TableOperatorWrapperGeneratorTest extends MultipleInputTestBase {
         return wrapper;
     }
 
-    private TableOperatorWrapper<StreamOperator<RowData>> createWrapper(
+    private TableOperatorWrapper<StreamOperator<RowData>, RowData> createWrapper(
             TwoInputTransformation<RowData, RowData, RowData> transform,
             int index,
             double managedMemoryFraction) {
-        TableOperatorWrapper<StreamOperator<RowData>> wrapper =
+        TableOperatorWrapper<StreamOperator<RowData>, RowData> wrapper =
                 new TableOperatorWrapper<>(
                         transform.getOperatorFactory(),
                         "SubOp" + index + "_" + transform.getName(),
@@ -461,9 +470,9 @@ class TableOperatorWrapperGeneratorTest extends MultipleInputTestBase {
         return wrapper;
     }
 
-    private TableOperatorWrapper<StreamOperator<RowData>> createWrapper(
+    private TableOperatorWrapper<StreamOperator<RowData>, RowData> createWrapper(
             UnionTransformation<RowData> transform, int index) {
-        TableOperatorWrapper<StreamOperator<RowData>> wrapper =
+        TableOperatorWrapper<StreamOperator<RowData>, RowData> wrapper =
                 new TableOperatorWrapper<>(
                         SimpleOperatorFactory.of(new UnionStreamOperator()),
                         "SubOp" + index + "_" + transform.getName(),

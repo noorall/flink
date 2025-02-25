@@ -117,7 +117,7 @@ public class MultipleInputTestBase {
         return new TwoInputTransformation<>(input1, input2, name, operator, outputType, 10);
     }
 
-    protected TableOperatorWrapper<TestingOneInputStreamOperator> createOneInputOperatorWrapper(
+    protected TableOperatorWrapper<TestingOneInputStreamOperator, RowData> createOneInputOperatorWrapper(
             TestingOneInputStreamOperator operator, String name) {
         return new TableOperatorWrapper<>(
                 SimpleOperatorFactory.of(operator),
@@ -126,12 +126,12 @@ public class MultipleInputTestBase {
                 new RowTypeInfo(Types.STRING));
     }
 
-    protected TableOperatorWrapper<TestingOneInputStreamOperator> createOneInputOperatorWrapper(
+    protected TableOperatorWrapper<TestingOneInputStreamOperator, RowData> createOneInputOperatorWrapper(
             String name) {
         return createOneInputOperatorWrapper(new TestingOneInputStreamOperator(), name);
     }
 
-    protected TableOperatorWrapper<TestingTwoInputStreamOperator> createTwoInputOperatorWrapper(
+    protected TableOperatorWrapper<TestingTwoInputStreamOperator, RowData> createTwoInputOperatorWrapper(
             TestingTwoInputStreamOperator operator, String name) {
         return new TableOperatorWrapper<>(
                 SimpleOperatorFactory.of(operator),
@@ -140,7 +140,7 @@ public class MultipleInputTestBase {
                 new RowTypeInfo(Types.STRING, Types.STRING));
     }
 
-    protected TableOperatorWrapper<TestingTwoInputStreamOperator> createTwoInputOperatorWrapper(
+    protected TableOperatorWrapper<TestingTwoInputStreamOperator, RowData> createTwoInputOperatorWrapper(
             String name) {
         return createTwoInputOperatorWrapper(new TestingTwoInputStreamOperator(), name);
     }

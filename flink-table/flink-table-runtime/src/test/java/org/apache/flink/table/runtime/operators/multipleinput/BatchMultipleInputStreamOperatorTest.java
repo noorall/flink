@@ -57,15 +57,18 @@ class BatchMultipleInputStreamOperatorTest extends MultipleInputTestBase {
         TestingTwoInputStreamOperator joinOp2 =
                 (TestingTwoInputStreamOperator) op.getTailWrapper().getStreamOperator();
 
-        TableOperatorWrapper<?> joinWrapper1 = op.getTailWrapper().getInputWrappers().get(0);
+        TableOperatorWrapper<?, RowData> joinWrapper1 = op
+                .getTailWrapper()
+                .getInputWrappers()
+                .get(0);
         TestingTwoInputStreamOperator joinOp1 =
                 (TestingTwoInputStreamOperator) joinWrapper1.getStreamOperator();
 
-        TableOperatorWrapper<?> aggWrapper1 = joinWrapper1.getInputWrappers().get(0);
+        TableOperatorWrapper<?, RowData> aggWrapper1 = joinWrapper1.getInputWrappers().get(0);
         TestingOneInputStreamOperator aggOp1 =
                 (TestingOneInputStreamOperator) aggWrapper1.getStreamOperator();
 
-        TableOperatorWrapper<?> aggWrapper2 = joinWrapper1.getInputWrappers().get(1);
+        TableOperatorWrapper<?, RowData> aggWrapper2 = joinWrapper1.getInputWrappers().get(1);
         TestingOneInputStreamOperator aggOp2 =
                 (TestingOneInputStreamOperator) aggWrapper2.getStreamOperator();
 
@@ -88,15 +91,18 @@ class BatchMultipleInputStreamOperatorTest extends MultipleInputTestBase {
         TestingTwoInputStreamOperator joinOp2 =
                 (TestingTwoInputStreamOperator) op.getTailWrapper().getStreamOperator();
 
-        TableOperatorWrapper<?> joinWrapper1 = op.getTailWrapper().getInputWrappers().get(0);
+        TableOperatorWrapper<?, RowData> joinWrapper1 = op
+                .getTailWrapper()
+                .getInputWrappers()
+                .get(0);
         TestingTwoInputStreamOperator joinOp1 =
                 (TestingTwoInputStreamOperator) joinWrapper1.getStreamOperator();
 
-        TableOperatorWrapper<?> aggWrapper1 = joinWrapper1.getInputWrappers().get(0);
+        TableOperatorWrapper<?, RowData> aggWrapper1 = joinWrapper1.getInputWrappers().get(0);
         TestingOneInputStreamOperator aggOp1 =
                 (TestingOneInputStreamOperator) aggWrapper1.getStreamOperator();
 
-        TableOperatorWrapper<?> aggWrapper2 = joinWrapper1.getInputWrappers().get(1);
+        TableOperatorWrapper<?, RowData> aggWrapper2 = joinWrapper1.getInputWrappers().get(1);
         TestingOneInputStreamOperator aggOp2 =
                 (TestingOneInputStreamOperator) aggWrapper2.getStreamOperator();
 
@@ -134,15 +140,18 @@ class BatchMultipleInputStreamOperatorTest extends MultipleInputTestBase {
         TestingTwoInputStreamOperator joinOp2 =
                 (TestingTwoInputStreamOperator) op.getTailWrapper().getStreamOperator();
 
-        TableOperatorWrapper<?> joinWrapper1 = op.getTailWrapper().getInputWrappers().get(0);
+        TableOperatorWrapper<?, RowData> joinWrapper1 = op
+                .getTailWrapper()
+                .getInputWrappers()
+                .get(0);
         TestingTwoInputStreamOperator joinOp1 =
                 (TestingTwoInputStreamOperator) joinWrapper1.getStreamOperator();
 
-        TableOperatorWrapper<?> aggWrapper1 = joinWrapper1.getInputWrappers().get(0);
+        TableOperatorWrapper<?, RowData> aggWrapper1 = joinWrapper1.getInputWrappers().get(0);
         TestingOneInputStreamOperator aggOp1 =
                 (TestingOneInputStreamOperator) aggWrapper1.getStreamOperator();
 
-        TableOperatorWrapper<?> aggWrapper2 = joinWrapper1.getInputWrappers().get(1);
+        TableOperatorWrapper<?, RowData> aggWrapper2 = joinWrapper1.getInputWrappers().get(1);
         TestingOneInputStreamOperator aggOp2 =
                 (TestingOneInputStreamOperator) aggWrapper2.getStreamOperator();
 
@@ -167,15 +176,18 @@ class BatchMultipleInputStreamOperatorTest extends MultipleInputTestBase {
         TestingTwoInputStreamOperator joinOp2 =
                 (TestingTwoInputStreamOperator) op.getTailWrapper().getStreamOperator();
 
-        TableOperatorWrapper<?> joinWrapper1 = op.getTailWrapper().getInputWrappers().get(0);
+        TableOperatorWrapper<?, RowData> joinWrapper1 = op
+                .getTailWrapper()
+                .getInputWrappers()
+                .get(0);
         TestingTwoInputStreamOperator joinOp1 =
                 (TestingTwoInputStreamOperator) joinWrapper1.getStreamOperator();
 
-        TableOperatorWrapper<?> aggWrapper1 = joinWrapper1.getInputWrappers().get(0);
+        TableOperatorWrapper<?, RowData> aggWrapper1 = joinWrapper1.getInputWrappers().get(0);
         TestingOneInputStreamOperator aggOp1 =
                 (TestingOneInputStreamOperator) aggWrapper1.getStreamOperator();
 
-        TableOperatorWrapper<?> aggWrapper2 = joinWrapper1.getInputWrappers().get(1);
+        TableOperatorWrapper<?, RowData> aggWrapper2 = joinWrapper1.getInputWrappers().get(1);
         TestingOneInputStreamOperator aggOp2 =
                 (TestingOneInputStreamOperator) aggWrapper2.getStreamOperator();
 
@@ -302,7 +314,7 @@ class BatchMultipleInputStreamOperatorTest extends MultipleInputTestBase {
 
         TableOperatorWrapperGenerator generator =
                 new TableOperatorWrapperGenerator(
-                        Arrays.asList(source1, source2, source3), join2, new int[] {1, 2, 0});
+                        Arrays.asList(source1, source2, source3), join2, new int[]{1, 2, 0});
         generator.generate();
 
         List<Pair<Transformation<?>, InputSpec>> inputTransformAndInputSpecPairs =
@@ -322,14 +334,14 @@ class BatchMultipleInputStreamOperatorTest extends MultipleInputTestBase {
     /** A sub class of {@link BatchMultipleInputStreamOperator} for testing. */
     private static class TestingBatchMultipleInputStreamOperator
             extends BatchMultipleInputStreamOperator {
-        private final TableOperatorWrapper<?> tailWrapper;
+        private final TableOperatorWrapper<?, RowData> tailWrapper;
         private final List<StreamElement> outputData;
 
         public TestingBatchMultipleInputStreamOperator(
                 StreamOperatorParameters<RowData> parameters,
                 List<InputSpec> inputSpecs,
-                List<TableOperatorWrapper<?>> headWrapper,
-                TableOperatorWrapper<?> tailWrapper,
+                List<TableOperatorWrapper<?, RowData>> headWrapper,
+                TableOperatorWrapper<?, RowData> tailWrapper,
                 List<StreamElement> outputData) {
             super(parameters, inputSpecs, headWrapper, tailWrapper);
             this.tailWrapper = tailWrapper;
@@ -340,7 +352,7 @@ class BatchMultipleInputStreamOperatorTest extends MultipleInputTestBase {
             return outputData;
         }
 
-        public TableOperatorWrapper<?> getTailWrapper() {
+        public TableOperatorWrapper<?, RowData> getTailWrapper() {
             return tailWrapper;
         }
     }

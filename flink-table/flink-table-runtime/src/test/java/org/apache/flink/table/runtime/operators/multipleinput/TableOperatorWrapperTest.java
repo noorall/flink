@@ -37,13 +37,13 @@ class TableOperatorWrapperTest extends MultipleInputTestBase {
         TestingOneInputStreamOperator inOperator1 = new TestingOneInputStreamOperator();
         TestingOneInputStreamOperator inOperator2 = new TestingOneInputStreamOperator();
         TestingTwoInputStreamOperator outOperator = new TestingTwoInputStreamOperator();
-        TableOperatorWrapper<TestingOneInputStreamOperator> wrapper1 =
+        TableOperatorWrapper<TestingOneInputStreamOperator, RowData> wrapper1 =
                 createOneInputOperatorWrapper(inOperator1, "test1");
 
-        TableOperatorWrapper<TestingOneInputStreamOperator> wrapper2 =
+        TableOperatorWrapper<TestingOneInputStreamOperator, RowData> wrapper2 =
                 createOneInputOperatorWrapper(inOperator2, "test2");
 
-        TableOperatorWrapper<TestingTwoInputStreamOperator> wrapper3 =
+        TableOperatorWrapper<TestingTwoInputStreamOperator, RowData> wrapper3 =
                 createTwoInputOperatorWrapper(outOperator, "test3");
         wrapper3.addInput(wrapper1, 1);
         wrapper3.addInput(wrapper2, 2);
@@ -51,12 +51,18 @@ class TableOperatorWrapperTest extends MultipleInputTestBase {
         assertThat(wrapper1.getInputEdges()).isEmpty();
         assertThat(wrapper1.getInputWrappers()).isEmpty();
         assertThat(wrapper1.getOutputWrappers()).containsExactly(wrapper3);
-        assertThat(wrapper1.getOutputEdges()).containsExactly(new Edge(wrapper1, wrapper3, 1));
+        assertThat(wrapper1.getOutputEdges()).containsExactly(new Edge<RowData>(
+                wrapper1,
+                wrapper3,
+                1));
 
         assertThat(wrapper2.getInputEdges()).isEmpty();
         assertThat(wrapper2.getInputWrappers()).isEmpty();
         assertThat(wrapper2.getOutputWrappers()).containsExactly(wrapper3);
-        assertThat(wrapper2.getOutputEdges()).containsExactly(new Edge(wrapper2, wrapper3, 2));
+        assertThat(wrapper2.getOutputEdges()).containsExactly(new Edge<>(
+                wrapper2,
+                wrapper3,
+                2));
 
         assertThat(wrapper3.getOutputEdges()).isEmpty();
         assertThat(wrapper3.getOutputWrappers()).isEmpty();
@@ -64,13 +70,14 @@ class TableOperatorWrapperTest extends MultipleInputTestBase {
         assertThat(wrapper3.getInputEdges())
                 .isEqualTo(
                         Arrays.asList(
-                                new Edge(wrapper1, wrapper3, 1), new Edge(wrapper2, wrapper3, 2)));
+                                new Edge<>(wrapper1, wrapper3, 1),
+                                new Edge<>(wrapper2, wrapper3, 2)));
     }
 
     @Test
     void testCreateOperator() throws Exception {
         TestingOneInputStreamOperator operator = new TestingOneInputStreamOperator();
-        TableOperatorWrapper<TestingOneInputStreamOperator> wrapper =
+        TableOperatorWrapper<TestingOneInputStreamOperator, RowData> wrapper =
                 createOneInputOperatorWrapper(operator, "test");
         StreamOperatorParameters<RowData> parameters = createStreamOperatorParameters();
         wrapper.createOperator(parameters);
@@ -88,15 +95,15 @@ class TableOperatorWrapperTest extends MultipleInputTestBase {
         TestingOneInputStreamOperator inOperator1 = new TestingOneInputStreamOperator();
         TestingOneInputStreamOperator inOperator2 = new TestingOneInputStreamOperator();
         TestingTwoInputStreamOperator outOperator = new TestingTwoInputStreamOperator();
-        TableOperatorWrapper<TestingOneInputStreamOperator> wrapper1 =
+        TableOperatorWrapper<TestingOneInputStreamOperator, RowData> wrapper1 =
                 createOneInputOperatorWrapper(inOperator1, "test1");
         wrapper1.createOperator(parameters);
 
-        TableOperatorWrapper<TestingOneInputStreamOperator> wrapper2 =
+        TableOperatorWrapper<TestingOneInputStreamOperator, RowData> wrapper2 =
                 createOneInputOperatorWrapper(inOperator2, "test2");
         wrapper2.createOperator(parameters);
 
-        TableOperatorWrapper<TestingTwoInputStreamOperator> wrapper3 =
+        TableOperatorWrapper<TestingTwoInputStreamOperator, RowData> wrapper3 =
                 createTwoInputOperatorWrapper(outOperator, "test3");
         wrapper3.addInput(wrapper1, 1);
         wrapper3.addInput(wrapper2, 2);
@@ -129,7 +136,7 @@ class TableOperatorWrapperTest extends MultipleInputTestBase {
     @Test
     void testClose() throws Exception {
         TestingOneInputStreamOperator operator = new TestingOneInputStreamOperator();
-        TableOperatorWrapper<TestingOneInputStreamOperator> wrapper =
+        TableOperatorWrapper<TestingOneInputStreamOperator, RowData> wrapper =
                 createOneInputOperatorWrapper(operator, "test");
         StreamOperatorParameters<RowData> parameters = createStreamOperatorParameters();
         wrapper.createOperator(parameters);

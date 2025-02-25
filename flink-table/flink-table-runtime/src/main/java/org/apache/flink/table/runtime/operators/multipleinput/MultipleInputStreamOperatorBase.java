@@ -65,19 +65,19 @@ public abstract class MultipleInputStreamOperatorBase extends AbstractStreamOper
     protected final Map<Integer, InputSpec> inputSpecMap;
 
     /** The head operators of this multiple input operator. */
-    private final List<TableOperatorWrapper<?>> headWrappers;
+    private final List<TableOperatorWrapper<?, RowData>> headWrappers;
 
     /** The tail operator of this multiple input operator. */
-    private final TableOperatorWrapper<?> tailWrapper;
+    private final TableOperatorWrapper<?, RowData> tailWrapper;
 
     /** all operator as topological ordering in this multiple input operator. */
-    protected final Deque<TableOperatorWrapper<?>> topologicalOrderingOperators;
+    protected final Deque<TableOperatorWrapper<?, RowData>> topologicalOrderingOperators;
 
     public MultipleInputStreamOperatorBase(
             StreamOperatorParameters<RowData> parameters,
             List<InputSpec> inputSpecs,
-            List<TableOperatorWrapper<?>> headWrappers,
-            TableOperatorWrapper<?> tailWrapper) {
+            List<TableOperatorWrapper<?, RowData>> headWrappers,
+            TableOperatorWrapper<?, RowData> tailWrapper) {
         super(parameters, inputSpecs.size());
         this.inputSpecs = inputSpecs;
         this.headWrappers = headWrappers;
@@ -121,7 +121,7 @@ public abstract class MultipleInputStreamOperatorBase extends AbstractStreamOper
     @Override
     public void open() throws Exception {
         super.open();
-        final Iterator<TableOperatorWrapper<?>> it =
+        final Iterator<TableOperatorWrapper<?, RowData>> it =
                 topologicalOrderingOperators.descendingIterator();
         while (it.hasNext()) {
             StreamOperator<?> operator = it.next().getStreamOperator();
@@ -137,7 +137,7 @@ public abstract class MultipleInputStreamOperatorBase extends AbstractStreamOper
     @Override
     public void finish() throws Exception {
         super.finish();
-        for (TableOperatorWrapper<?> wrapper : topologicalOrderingOperators) {
+        for (TableOperatorWrapper<?, RowData> wrapper : topologicalOrderingOperators) {
             StreamOperator<?> operator = wrapper.getStreamOperator();
             operator.finish();
         }
@@ -151,22 +151,22 @@ public abstract class MultipleInputStreamOperatorBase extends AbstractStreamOper
     @Override
     public void close() throws Exception {
         super.close();
-        for (TableOperatorWrapper<?> wrapper : topologicalOrderingOperators) {
+        for (TableOperatorWrapper<?, RowData> wrapper : topologicalOrderingOperators) {
             wrapper.close();
         }
     }
 
-    private Deque<TableOperatorWrapper<?>> getAllOperatorsAsTopologicalOrdering() {
-        final Deque<TableOperatorWrapper<?>> allOperators = new ArrayDeque<>();
-        final Queue<TableOperatorWrapper<?>> toVisitOperators = new LinkedList<>();
+    private Deque<TableOperatorWrapper<?, RowData>> getAllOperatorsAsTopologicalOrdering() {
+        final Deque<TableOperatorWrapper<?, RowData>> allOperators = new ArrayDeque<>();
+        final Queue<TableOperatorWrapper<?, RowData>> toVisitOperators = new LinkedList<>();
 
         // mapping an operator to its input count
-        final Map<TableOperatorWrapper<?>, Integer> operatorToInputCount =
+        final Map<TableOperatorWrapper<?, RowData>, Integer> operatorToInputCount =
                 buildOperatorToInputCountMap();
 
         // find the operators which all inputs are not in this multiple input operator to traverse
         // first
-        for (TableOperatorWrapper<?> wrapper : headWrappers) {
+        for (TableOperatorWrapper<?, RowData> wrapper : headWrappers) {
             if (operatorToInputCount.get(wrapper) == 0) {
                 toVisitOperators.add(wrapper);
             }
@@ -174,10 +174,10 @@ public abstract class MultipleInputStreamOperatorBase extends AbstractStreamOper
         checkArgument(!toVisitOperators.isEmpty(), "This should not happen.");
 
         while (!toVisitOperators.isEmpty()) {
-            TableOperatorWrapper<?> wrapper = toVisitOperators.poll();
+            TableOperatorWrapper<?, RowData> wrapper = toVisitOperators.poll();
             allOperators.add(wrapper);
 
-            for (TableOperatorWrapper<?> output : wrapper.getOutputWrappers()) {
+            for (TableOperatorWrapper<?, RowData> output : wrapper.getOutputWrappers()) {
                 int inputCountRemaining = operatorToInputCount.get(output) - 1;
                 operatorToInputCount.put(output, inputCountRemaining);
                 if (inputCountRemaining == 0) {
@@ -189,14 +189,14 @@ public abstract class MultipleInputStreamOperatorBase extends AbstractStreamOper
         return allOperators;
     }
 
-    private Map<TableOperatorWrapper<?>, Integer> buildOperatorToInputCountMap() {
-        final Map<TableOperatorWrapper<?>, Integer> operatorToInputCount = new IdentityHashMap<>();
-        final Queue<TableOperatorWrapper<?>> toVisitOperators = new LinkedList<>();
+    private Map<TableOperatorWrapper<?, RowData>, Integer> buildOperatorToInputCountMap() {
+        final Map<TableOperatorWrapper<?, RowData>, Integer> operatorToInputCount = new IdentityHashMap<>();
+        final Queue<TableOperatorWrapper<?, RowData>> toVisitOperators = new LinkedList<>();
         toVisitOperators.add(tailWrapper);
 
         while (!toVisitOperators.isEmpty()) {
-            TableOperatorWrapper<?> wrapper = toVisitOperators.poll();
-            List<TableOperatorWrapper<?>> inputs = wrapper.getInputWrappers();
+            TableOperatorWrapper<?, RowData> wrapper = toVisitOperators.poll();
+            List<TableOperatorWrapper<?, RowData>> inputs = wrapper.getInputWrappers();
             operatorToInputCount.put(wrapper, inputs.size());
             toVisitOperators.addAll(inputs);
         }
@@ -213,11 +213,11 @@ public abstract class MultipleInputStreamOperatorBase extends AbstractStreamOper
         final boolean isObjectReuseEnabled =
                 parameters.getContainingTask().getExecutionConfig().isObjectReuseEnabled();
         final ExecutionConfig executionConfig = parameters.getContainingTask().getExecutionConfig();
-        final Iterator<TableOperatorWrapper<?>> it =
+        final Iterator<TableOperatorWrapper<?, RowData>> it =
                 topologicalOrderingOperators.descendingIterator();
 
         while (it.hasNext()) {
-            final TableOperatorWrapper<?> wrapper = it.next();
+            final TableOperatorWrapper<?, RowData> wrapper = it.next();
             final Output<StreamRecord<RowData>> output;
             if (wrapper == this.tailWrapper) {
                 output = this.output;
@@ -225,9 +225,11 @@ public abstract class MultipleInputStreamOperatorBase extends AbstractStreamOper
                 final int numberOfOutputs = wrapper.getOutputEdges().size();
                 final Output<StreamRecord<RowData>>[] outputs = new Output[numberOfOutputs];
                 for (int i = 0; i < numberOfOutputs; ++i) {
-                    TableOperatorWrapper.Edge edge = wrapper.getOutputEdges().get(i);
+                    TableOperatorWrapper.Edge<RowData> edge = wrapper.getOutputEdges().get(i);
                     int inputId = edge.getInputId();
-                    StreamOperator<RowData> outputOperator = edge.getTarget().getStreamOperator();
+                    StreamOperator<RowData> outputOperator = (StreamOperator<RowData>) edge
+                            .getTarget()
+                            .getStreamOperator();
                     if (isObjectReuseEnabled) {
                         outputs[i] = createOutput(outputOperator, inputId);
                     } else {
@@ -264,7 +266,7 @@ public abstract class MultipleInputStreamOperatorBase extends AbstractStreamOper
     private StreamOperatorParameters<RowData> createSubOperatorParameters(
             StreamOperatorParameters<RowData> multipleInputOperatorParameters,
             Output<StreamRecord<RowData>> output,
-            TableOperatorWrapper<?> wrapper) {
+            TableOperatorWrapper<?, RowData> wrapper) {
         final StreamConfig streamConfig =
                 createStreamConfig(multipleInputOperatorParameters, wrapper);
         return new StreamOperatorParameters<>(
@@ -278,7 +280,7 @@ public abstract class MultipleInputStreamOperatorBase extends AbstractStreamOper
 
     protected StreamConfig createStreamConfig(
             StreamOperatorParameters<RowData> multipleInputOperatorParameters,
-            TableOperatorWrapper<?> wrapper) {
+            TableOperatorWrapper<?, RowData> wrapper) {
         final ExecutionConfig executionConfig = getExecutionConfig();
 
         final StreamConfig streamConfig =

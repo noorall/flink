@@ -32,13 +32,13 @@ public class BatchMultipleInputStreamOperatorFactory
     private static final long serialVersionUID = 1L;
 
     private final List<InputSpec> inputSpecs;
-    private final List<TableOperatorWrapper<?>> headWrappers;
-    private final TableOperatorWrapper<?> tailWrapper;
+    private final List<TableOperatorWrapper<?, RowData>> headWrappers;
+    private final TableOperatorWrapper<?, RowData> tailWrapper;
 
     public BatchMultipleInputStreamOperatorFactory(
             List<InputSpec> inputSpecs,
-            List<TableOperatorWrapper<?>> headWrappers,
-            TableOperatorWrapper<?> tailWrapper) {
+            List<TableOperatorWrapper<?, RowData>> headWrappers,
+            TableOperatorWrapper<?, RowData> tailWrapper) {
         this.inputSpecs = inputSpecs;
         this.headWrappers = headWrappers;
         this.tailWrapper = tailWrapper;
@@ -54,7 +54,7 @@ public class BatchMultipleInputStreamOperatorFactory
     }
 
     @Override
-    public Class<? extends StreamOperator> getStreamOperatorClass(ClassLoader classLoader) {
+    public Class<? extends StreamOperator<RowData>> getStreamOperatorClass(ClassLoader classLoader) {
         return BatchMultipleInputStreamOperator.class;
     }
 }

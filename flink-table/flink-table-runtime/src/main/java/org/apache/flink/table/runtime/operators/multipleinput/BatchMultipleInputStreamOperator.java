@@ -43,8 +43,8 @@ public class BatchMultipleInputStreamOperator extends MultipleInputStreamOperato
     public BatchMultipleInputStreamOperator(
             StreamOperatorParameters<RowData> parameters,
             List<InputSpec> inputSpecs,
-            List<TableOperatorWrapper<?>> headWrapper,
-            TableOperatorWrapper<?> tailWrapper) {
+            List<TableOperatorWrapper<?, RowData>> headWrapper,
+            TableOperatorWrapper<?, RowData> tailWrapper) {
         super(parameters, inputSpecs, headWrapper, tailWrapper);
         inputSelectionHandler = InputSelectionHandler.fromInputSpecs(inputSpecs);
     }
@@ -63,7 +63,7 @@ public class BatchMultipleInputStreamOperator extends MultipleInputStreamOperato
 
     protected StreamConfig createStreamConfig(
             StreamOperatorParameters<RowData> multipleInputOperatorParameters,
-            TableOperatorWrapper<?> wrapper) {
+            TableOperatorWrapper<?, RowData> wrapper) {
         StreamConfig streamConfig =
                 super.createStreamConfig(multipleInputOperatorParameters, wrapper);
         checkState(wrapper.getManagedMemoryFraction() >= 0);
@@ -71,12 +71,12 @@ public class BatchMultipleInputStreamOperator extends MultipleInputStreamOperato
                 getRuntimeContext().getTaskManagerRuntimeInfo().getConfiguration();
         double managedMemoryFraction =
                 multipleInputOperatorParameters
-                                .getStreamConfig()
-                                .getManagedMemoryFractionOperatorUseCaseOfSlot(
-                                        ManagedMemoryUseCase.OPERATOR,
-                                        getRuntimeContext().getJobConfiguration(),
-                                        taskManagerConfig,
-                                        getRuntimeContext().getUserCodeClassLoader())
+                        .getStreamConfig()
+                        .getManagedMemoryFractionOperatorUseCaseOfSlot(
+                                ManagedMemoryUseCase.OPERATOR,
+                                getRuntimeContext().getJobConfiguration(),
+                                taskManagerConfig,
+                                getRuntimeContext().getUserCodeClassLoader())
                         * wrapper.getManagedMemoryFraction();
         streamConfig.setManagedMemoryFractionOperatorOfUseCase(
                 ManagedMemoryUseCase.OPERATOR, managedMemoryFraction);

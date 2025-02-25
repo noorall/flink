@@ -65,16 +65,16 @@ public class TableOperatorWrapperGenerator {
      * The head (leaf) operator wrappers of the operator-graph in {@link
      * MultipleInputStreamOperatorBase}.
      */
-    private final List<TableOperatorWrapper<?>> headWrappers;
+    private final List<TableOperatorWrapper<?, RowData>> headWrappers;
 
     /**
      * The tail (root) operator wrapper of the operator-graph in {@link
      * MultipleInputStreamOperatorBase}.
      */
-    private TableOperatorWrapper<?> tailWrapper;
+    private TableOperatorWrapper<?, RowData> tailWrapper;
 
     /** Map the visited transformation to its generated TableOperatorWrapper. */
-    private final Map<Transformation<?>, TableOperatorWrapper<?>> visitedTransforms;
+    private final Map<Transformation<?>, TableOperatorWrapper<?, RowData>> visitedTransforms;
 
     /** The identifier for each sub operator in {@link MultipleInputStreamOperatorBase}. */
     private int identifierOfSubOp = 0;
@@ -117,11 +117,11 @@ public class TableOperatorWrapperGenerator {
         return inputTransformAndInputSpecPairs;
     }
 
-    public List<TableOperatorWrapper<?>> getHeadWrappers() {
+    public List<TableOperatorWrapper<?, RowData>> getHeadWrappers() {
         return headWrappers;
     }
 
-    public TableOperatorWrapper<?> getTailWrapper() {
+    public TableOperatorWrapper<?, RowData> getTailWrapper() {
         return tailWrapper;
     }
 
@@ -145,7 +145,7 @@ public class TableOperatorWrapperGenerator {
         return managedMemoryWeight;
     }
 
-    private TableOperatorWrapper<?> visit(Transformation<?> transform) {
+    private TableOperatorWrapper<?, RowData> visit(Transformation<?> transform) {
         // ignore UnionTransformation because it's not a real operator
         if (!(transform instanceof UnionTransformation)) {
             calcParallelismAndResource(transform);
@@ -189,7 +189,7 @@ public class TableOperatorWrapperGenerator {
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
-    private TableOperatorWrapper<?> visitTransformation(Transformation<?> transform) {
+    private TableOperatorWrapper<?, RowData> visitTransformation(Transformation<?> transform) {
         if (transform instanceof OneInputTransformation) {
             return visitOneInputTransformation((OneInputTransformation) transform);
         } else if (transform instanceof TwoInputTransformation) {
@@ -201,11 +201,11 @@ public class TableOperatorWrapperGenerator {
         }
     }
 
-    private TableOperatorWrapper<?> visitOneInputTransformation(
+    private TableOperatorWrapper<?, RowData> visitOneInputTransformation(
             OneInputTransformation<RowData, RowData> transform) {
         Transformation<?> input = transform.getInputs().get(0);
 
-        TableOperatorWrapper<?> wrapper =
+        TableOperatorWrapper<?, RowData> wrapper =
                 new TableOperatorWrapper<>(
                         transform.getOperatorFactory(),
                         genSubOperatorName(transform),
@@ -217,20 +217,20 @@ public class TableOperatorWrapperGenerator {
             processInput(input, inputIdx, wrapper, 1);
             headWrappers.add(wrapper);
         } else {
-            TableOperatorWrapper<?> inputWrapper = visit(input);
+            TableOperatorWrapper<?, RowData> inputWrapper = visit(input);
             wrapper.addInput(inputWrapper, 1);
         }
         return wrapper;
     }
 
-    private TableOperatorWrapper<?> visitTwoInputTransformation(
+    private TableOperatorWrapper<?, RowData> visitTwoInputTransformation(
             TwoInputTransformation<RowData, RowData, RowData> transform) {
         Transformation<?> input1 = transform.getInput1();
         Transformation<?> input2 = transform.getInput2();
         int inputIdx1 = inputTransforms.indexOf(input1);
         int inputIdx2 = inputTransforms.indexOf(input2);
 
-        TableOperatorWrapper<?> wrapper =
+        TableOperatorWrapper<?, RowData> wrapper =
                 new TableOperatorWrapper<>(
                         transform.getOperatorFactory(),
                         genSubOperatorName(transform),
@@ -242,30 +242,30 @@ public class TableOperatorWrapperGenerator {
             processInput(input2, inputIdx2, wrapper, 2);
             headWrappers.add(wrapper);
         } else if (inputIdx1 >= 0) {
-            TableOperatorWrapper<?> inputWrapper = visit(input2);
+            TableOperatorWrapper<?, RowData> inputWrapper = visit(input2);
             wrapper.addInput(inputWrapper, 2);
 
             processInput(input1, inputIdx1, wrapper, 1);
             headWrappers.add(wrapper);
         } else if (inputIdx2 >= 0) {
-            TableOperatorWrapper<?> inputWrapper = visit(input1);
+            TableOperatorWrapper<?, RowData> inputWrapper = visit(input1);
             wrapper.addInput(inputWrapper, 1);
 
             processInput(input2, inputIdx2, wrapper, 2);
             headWrappers.add(wrapper);
         } else {
-            TableOperatorWrapper<?> inputWrapper1 = visit(input1);
+            TableOperatorWrapper<?, RowData> inputWrapper1 = visit(input1);
             wrapper.addInput(inputWrapper1, 1);
-            TableOperatorWrapper<?> inputWrapper2 = visit(input2);
+            TableOperatorWrapper<?, RowData> inputWrapper2 = visit(input2);
             wrapper.addInput(inputWrapper2, 2);
         }
 
         return wrapper;
     }
 
-    private TableOperatorWrapper<?> visitUnionTransformation(
+    private TableOperatorWrapper<?, RowData> visitUnionTransformation(
             UnionTransformation<RowData> transform) {
-        TableOperatorWrapper<?> wrapper =
+        TableOperatorWrapper<?, RowData> wrapper =
                 new TableOperatorWrapper<>(
                         SimpleOperatorFactory.of(new UnionStreamOperator()),
                         genSubOperatorName(transform),
@@ -281,7 +281,7 @@ public class TableOperatorWrapperGenerator {
                 numberOfHeadInput++;
                 processInput(input, inputIdx, wrapper, 1); // always 1 here
             } else {
-                TableOperatorWrapper<?> inputWrapper = visit(input);
+                TableOperatorWrapper<?, RowData> inputWrapper = visit(input);
                 wrapper.addInput(inputWrapper, 1); // always 1 here
             }
         }
@@ -295,7 +295,7 @@ public class TableOperatorWrapperGenerator {
     private void processInput(
             Transformation<?> input,
             int inputIdx,
-            TableOperatorWrapper<?> outputWrapper,
+            TableOperatorWrapper<?, RowData> outputWrapper,
             int outputOpInputId) {
         int inputId = inputTransformAndInputSpecPairs.size() + 1;
         InputSpec inputSpec =
@@ -305,14 +305,14 @@ public class TableOperatorWrapperGenerator {
 
     /** calculate managed memory fraction for each operator wrapper. */
     private void calculateManagedMemoryFraction() {
-        for (Map.Entry<Transformation<?>, TableOperatorWrapper<?>> entry :
+        for (Map.Entry<Transformation<?>, TableOperatorWrapper<?, RowData>> entry :
                 visitedTransforms.entrySet()) {
             double fraction = 0;
             if (managedMemoryWeight != 0) {
                 fraction =
                         entry.getKey()
-                                        .getManagedMemoryOperatorScopeUseCaseWeights()
-                                        .getOrDefault(ManagedMemoryUseCase.OPERATOR, 0)
+                                .getManagedMemoryOperatorScopeUseCaseWeights()
+                                .getOrDefault(ManagedMemoryUseCase.OPERATOR, 0)
                                 * 1.0
                                 / this.managedMemoryWeight;
             }
