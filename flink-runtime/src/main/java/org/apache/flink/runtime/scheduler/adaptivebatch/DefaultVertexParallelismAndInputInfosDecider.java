@@ -217,7 +217,7 @@ public class DefaultVertexParallelismAndInputInfosDecider
         // 1.  Vertex has a specified parallelism, we should follow it.
         // 2.  There are pointwise inputs, which means that there may be inputs whose parallelism is
         // derived one-by-one, we need to reset the min and max parallelism.
-        if (vertexInitialParallelism > 0 || !pointwiseInputs.isEmpty()) {
+        if (vertexInitialParallelism > 0) {
             minParallelism = parallelism;
             maxParallelism = parallelism;
         }
@@ -233,6 +233,11 @@ public class DefaultVertexParallelismAndInputInfosDecider
                             maxParallelism,
                             calculateDataVolumePerTaskForInputsGroup(
                                     dataVolumePerTask, pointwiseInputs, consumedResults)));
+            if (!allToAllInputs.isEmpty()) {
+                parallelism = checkAndGetParallelism(vertexInputInfos.values());
+                minParallelism = parallelism;
+                maxParallelism = parallelism;
+            }
         }
 
         if (!allToAllInputs.isEmpty()) {
