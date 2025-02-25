@@ -392,6 +392,7 @@ public class VertexParallelismAndInputInfosDeciderUtils {
                         subpartitionSlicesByTypeNumber);
         // if the parallelism is not legal, try to adjust to a legal parallelism
         if (!isLegalParallelism(subpartitionSliceRanges.size(), minParallelism, maxParallelism)) {
+            LOG.info("try adjust subpartition range");
             long minBytesSize = maxDataVolumePerTask;
             long sumBytesSize = 0;
             for (int i = 0; i < subpartitionSlicesSize; ++i) {

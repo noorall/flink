@@ -80,6 +80,7 @@ public class PointwiseVertexInputInfoComputer {
                                     inputInfo.getNumBytesProduced(),
                                     totalDataBytes)));
         }
+        LOG.info("created vertex input info");
         return vertexInputInfos;
     }
 
@@ -109,6 +110,7 @@ public class PointwiseVertexInputInfoComputer {
     private static JobVertexInputInfo computeVertexInputInfo(
             BlockingInputInfo inputInfo, int parallelism, long dataVolumePerTask) {
         List<SubpartitionSlice> subpartitionSlices = createSubpartitionSlices(inputInfo);
+        LOG.info("created subpartition slice");
 
         // Node: SubpartitionSliceRanges does not represent the real index of the subpartitions, but
         // the location of that subpartition in all subpartitions, as we aggregate all subpartitions
@@ -119,6 +121,7 @@ public class PointwiseVertexInputInfoComputer {
                         parallelism,
                         dataVolumePerTask,
                         Map.of(inputInfo.getInputTypeNumber(), subpartitionSlices));
+        LOG.info("created subpartition slice range");
 
         if (optionalSubpartitionSliceRanges.isEmpty()) {
             LOG.info(

@@ -235,6 +235,8 @@ public class DefaultVertexParallelismAndInputInfosDecider
                                     dataVolumePerTask, allToAllInputs, consumedResults)));
         }
 
+        LOG.info("finish all to all");
+
         if (!pointwiseInputs.isEmpty()) {
             vertexInputInfos.putAll(
                     pointwiseVertexInputInfoComputer.compute(
@@ -243,7 +245,7 @@ public class DefaultVertexParallelismAndInputInfosDecider
                             calculateDataVolumePerTaskForInputsGroup(
                                     dataVolumePerTask, pointwiseInputs, consumedResults)));
         }
-
+        LOG.info("finish pointwise");
         return new ParallelismAndInputInfos(
                 checkAndGetParallelism(vertexInputInfos.values()), vertexInputInfos);
     }
