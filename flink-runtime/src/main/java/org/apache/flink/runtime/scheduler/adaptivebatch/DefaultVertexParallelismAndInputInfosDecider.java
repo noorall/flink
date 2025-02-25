@@ -224,6 +224,17 @@ public class DefaultVertexParallelismAndInputInfosDecider
 
         Map<IntermediateDataSetID, JobVertexInputInfo> vertexInputInfos = new HashMap<>();
 
+        if (!pointwiseInputs.isEmpty()) {
+            vertexInputInfos.putAll(
+                    pointwiseVertexInputInfoComputer.compute(
+                            pointwiseInputs,
+                            parallelism,
+                            minParallelism,
+                            maxParallelism,
+                            calculateDataVolumePerTaskForInputsGroup(
+                                    dataVolumePerTask, pointwiseInputs, consumedResults)));
+        }
+
         if (!allToAllInputs.isEmpty()) {
             vertexInputInfos.putAll(
                     allToAllVertexInputInfoComputer.compute(
@@ -234,15 +245,6 @@ public class DefaultVertexParallelismAndInputInfosDecider
                             maxParallelism,
                             calculateDataVolumePerTaskForInputsGroup(
                                     dataVolumePerTask, allToAllInputs, consumedResults)));
-        }
-
-        if (!pointwiseInputs.isEmpty()) {
-            vertexInputInfos.putAll(
-                    pointwiseVertexInputInfoComputer.compute(
-                            pointwiseInputs,
-                            parallelism,
-                            calculateDataVolumePerTaskForInputsGroup(
-                                    dataVolumePerTask, pointwiseInputs, consumedResults)));
         }
 
         for (BlockingInputInfo inputInfo : consumedResults) {
