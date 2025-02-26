@@ -199,6 +199,19 @@ public class DefaultVertexParallelismAndInputInfosDecider
                     }
                 });
 
+        // Currently, we decide parallelism separately for AllToAll and Pointwise. In order to make
+        // their data distribution balanced as possible, we need to reset max and min parallelism to
+        // a pre-computed parallelism (which uses all inputs statistics) to limit their parallelism
+        // decide flexibility to avoid the parallelism being decided too small.
+        // Specifically, if either of them is empty or all AllToAll inputs are the Broadcast type,
+        // this section will be skipped to enable more flexible parallel decided.
+        if (!pointwiseInputs.isEmpty()
+                && !allToAllInputs.isEmpty()
+                && !getNonBroadcastInputInfos(allToAllInputs).isEmpty()) {
+            minParallelism = parallelism;
+            maxParallelism = parallelism;
+        }
+
         Map<IntermediateDataSetID, JobVertexInputInfo> vertexInputInfos = new HashMap<>();
 
         if (!pointwiseInputs.isEmpty()) {

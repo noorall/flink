@@ -32,6 +32,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import static org.apache.flink.runtime.scheduler.adaptivebatch.util.SubpartitionSlice.createSubpartitionSlice;
 import static org.apache.flink.runtime.scheduler.adaptivebatch.util.VertexParallelismAndInputInfosDeciderUtils.checkAndGetPartitionNum;
@@ -81,7 +82,7 @@ public class PointwiseVertexInputInfoComputer {
         Map<Integer, List<SubpartitionSlice>> subpartitionSlicesByInputIndex =
                 createSubpartitionSlicesByInputIndex(inputInfos);
 
-        // Node: SubpartitionSliceRanges does not represent the real index of the subpartitions, but
+        // Note: SubpartitionSliceRanges does not represent the real index of the subpartitions, but
         // the location of that subpartition in all subpartitions, as we aggregate all subpartitions
         // into a one-digit array to calculate.
         Optional<List<IndexRange>> optionalSubpartitionSliceRanges =
@@ -93,8 +94,11 @@ public class PointwiseVertexInputInfoComputer {
 
         if (optionalSubpartitionSliceRanges.isEmpty()) {
             LOG.info(
-                    "Cannot find a legal parallelism to evenly distribute data amount for pointwise inputs, "
-                            + "fallback to compute a parallelism that can evenly distribute num subpartitions.");
+                    "Cannot find a legal parallelism to evenly distribute data amount for inputs {}, "
+                            + "fallback to compute a parallelism that can evenly distribute num subpartitions.",
+                    inputInfos.stream()
+                            .map(BlockingInputInfo::getResultId)
+                            .collect(Collectors.toList()));
             // This computer is only used in the adaptive batch scenario, where isDynamicGraph
             // should always be true.
             return VertexInputInfoComputationUtils.computeVertexInputInfos(
