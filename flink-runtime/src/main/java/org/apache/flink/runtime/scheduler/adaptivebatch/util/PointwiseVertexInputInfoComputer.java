@@ -80,7 +80,7 @@ public class PointwiseVertexInputInfoComputer {
             int maxParallelism,
             long dataVolumePerTask) {
         Map<Integer, List<SubpartitionSlice>> subpartitionSlicesByInputIndex =
-                createSubpartitionSlicesByInputIndex(inputInfos);
+                createSubpartitionSlicesByInputIndex(inputInfos, maxParallelism);
 
         // Note: SubpartitionSliceRanges does not represent the real index of the subpartitions, but
         // the location of that subpartition in all subpartitions, as we aggregate all subpartitions
@@ -119,7 +119,7 @@ public class PointwiseVertexInputInfoComputer {
     }
 
     private static Map<Integer, List<SubpartitionSlice>> createSubpartitionSlicesByInputIndex(
-            List<BlockingInputInfo> inputInfos) {
+            List<BlockingInputInfo> inputInfos, int maxParallelism) {
         int numSubpartitionSlices;
         List<BlockingInputInfo> inputsWithIntraCorrelation =
                 getInputsWithIntraCorrelation(inputInfos);
@@ -129,6 +129,9 @@ public class PointwiseVertexInputInfoComputer {
             numSubpartitionSlices = checkAndGetPartitionNum(inputsWithIntraCorrelation);
         } else {
             numSubpartitionSlices = getMinSubpartitionCount(inputInfos);
+            // Avoid creating too many subpartition slices, which will lead to too high the
+            // complexity of the parallelism deciding.
+            numSubpartitionSlices = Math.min(numSubpartitionSlices, 32 * maxParallelism);
         }
 
         Map<Integer, List<SubpartitionSlice>> subpartitionSlices = new HashMap<>();
