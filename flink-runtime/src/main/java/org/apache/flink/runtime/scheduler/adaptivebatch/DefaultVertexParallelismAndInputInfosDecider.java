@@ -185,6 +185,7 @@ public class DefaultVertexParallelismAndInputInfosDecider
             int maxParallelism) {
         int parallelism =
                 decideParallelism(jobVertexId, consumedResults, minParallelism, maxParallelism);
+        long dataVolumePerTask = decideDataVolumePerTask(consumedResults, maxParallelism);
 
         List<BlockingInputInfo> pointwiseInputs = new ArrayList<>();
 
@@ -301,6 +302,20 @@ public class DefaultVertexParallelismAndInputInfosDecider
         }
 
         return parallelism;
+    }
+
+    long decideDataVolumePerTask(List<BlockingInputInfo> consumedResults, int maxParallelism) {
+        checkArgument(!consumedResults.isEmpty());
+        final List<BlockingInputInfo> nonBroadcastResults =
+                getNonBroadcastInputInfos(consumedResults);
+        if (nonBroadcastResults.isEmpty()) {
+            return dataVolumePerTask;
+        }
+        long totalBytes =
+                nonBroadcastResults.stream()
+                        .mapToLong(BlockingInputInfo::getNumBytesProduced)
+                        .sum();
+        return Math.max(dataVolumePerTask, totalBytes / maxParallelism);
     }
 
     static DefaultVertexParallelismAndInputInfosDecider from(
