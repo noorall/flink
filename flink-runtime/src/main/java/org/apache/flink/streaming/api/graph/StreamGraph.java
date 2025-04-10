@@ -78,6 +78,7 @@ import org.apache.flink.streaming.runtime.tasks.SourceStreamTask;
 import org.apache.flink.streaming.runtime.tasks.StreamTaskException;
 import org.apache.flink.streaming.runtime.tasks.TwoInputStreamTask;
 import org.apache.flink.streaming.runtime.watermark.AbstractInternalWatermarkDeclaration;
+import org.apache.flink.table.planner.plan.nodes.exec.InputProperty;
 import org.apache.flink.util.FlinkRuntimeException;
 import org.apache.flink.util.InstantiationUtil;
 import org.apache.flink.util.OutputTag;
@@ -541,7 +542,8 @@ public class StreamGraph implements Pipeline, ExecutionPlan {
             SourceOperatorFactory<OUT> operatorFactory,
             TypeInformation<IN> inTypeInfo,
             TypeInformation<OUT> outTypeInfo,
-            String operatorName) {
+            String operatorName,
+            List<InputProperty> inputProperties) {
         addOperator(
                 vertexID,
                 slotSharingGroup,
@@ -550,7 +552,8 @@ public class StreamGraph implements Pipeline, ExecutionPlan {
                 inTypeInfo,
                 outTypeInfo,
                 operatorName,
-                SourceOperatorStreamTask.class);
+                SourceOperatorStreamTask.class,
+                inputProperties);
         sources.add(vertexID);
     }
 
@@ -561,7 +564,8 @@ public class StreamGraph implements Pipeline, ExecutionPlan {
             StreamOperatorFactory<OUT> operatorFactory,
             TypeInformation<IN> inTypeInfo,
             TypeInformation<OUT> outTypeInfo,
-            String operatorName) {
+            String operatorName,
+            List<InputProperty> inputProperties) {
         addOperator(
                 vertexID,
                 slotSharingGroup,
@@ -569,7 +573,8 @@ public class StreamGraph implements Pipeline, ExecutionPlan {
                 operatorFactory,
                 inTypeInfo,
                 outTypeInfo,
-                operatorName);
+                operatorName,
+                inputProperties);
         sources.add(vertexID);
     }
 
@@ -580,7 +585,8 @@ public class StreamGraph implements Pipeline, ExecutionPlan {
             StreamOperatorFactory<OUT> operatorFactory,
             TypeInformation<IN> inTypeInfo,
             TypeInformation<OUT> outTypeInfo,
-            String operatorName) {
+            String operatorName,
+            List<InputProperty> inputProperties) {
         addOperator(
                 vertexID,
                 slotSharingGroup,
@@ -588,7 +594,8 @@ public class StreamGraph implements Pipeline, ExecutionPlan {
                 operatorFactory,
                 inTypeInfo,
                 outTypeInfo,
-                operatorName);
+                operatorName,
+                inputProperties);
         if (operatorFactory instanceof OutputFormatOperatorFactory) {
             setOutputFormat(
                     vertexID, ((OutputFormatOperatorFactory) operatorFactory).getOutputFormat());
@@ -603,7 +610,8 @@ public class StreamGraph implements Pipeline, ExecutionPlan {
             StreamOperatorFactory<OUT> operatorFactory,
             TypeInformation<IN> inTypeInfo,
             TypeInformation<OUT> outTypeInfo,
-            String operatorName) {
+            String operatorName,
+            List<InputProperty> inputProperties) {
         Class<? extends TaskInvokable> invokableClass =
                 operatorFactory.isStreamSource()
                         ? SourceStreamTask.class
@@ -616,7 +624,8 @@ public class StreamGraph implements Pipeline, ExecutionPlan {
                 inTypeInfo,
                 outTypeInfo,
                 operatorName,
-                invokableClass);
+                invokableClass,
+                inputProperties);
     }
 
     private <IN, OUT> void addOperator(
@@ -627,7 +636,8 @@ public class StreamGraph implements Pipeline, ExecutionPlan {
             TypeInformation<IN> inTypeInfo,
             TypeInformation<OUT> outTypeInfo,
             String operatorName,
-            Class<? extends TaskInvokable> invokableClass) {
+            Class<? extends TaskInvokable> invokableClass,
+            List<InputProperty> inputProperties) {
 
         addNode(
                 vertexID,
@@ -635,7 +645,8 @@ public class StreamGraph implements Pipeline, ExecutionPlan {
                 coLocationGroup,
                 invokableClass,
                 operatorFactory,
-                operatorName);
+                operatorName,
+                inputProperties);
         setSerializers(vertexID, createSerializer(inTypeInfo), null, createSerializer(outTypeInfo));
 
         if (operatorFactory.isOutputTypeConfigurable() && outTypeInfo != null) {
@@ -660,7 +671,8 @@ public class StreamGraph implements Pipeline, ExecutionPlan {
             TypeInformation<IN1> in1TypeInfo,
             TypeInformation<IN2> in2TypeInfo,
             TypeInformation<OUT> outTypeInfo,
-            String operatorName) {
+            String operatorName,
+            List<InputProperty> inputProperties) {
 
         Class<? extends TaskInvokable> vertexClass = TwoInputStreamTask.class;
 
@@ -670,7 +682,8 @@ public class StreamGraph implements Pipeline, ExecutionPlan {
                 coLocationGroup,
                 vertexClass,
                 taskOperatorFactory,
-                operatorName);
+                operatorName,
+                inputProperties);
 
         TypeSerializer<OUT> outSerializer = createSerializer(outTypeInfo);
 
@@ -697,7 +710,8 @@ public class StreamGraph implements Pipeline, ExecutionPlan {
             StreamOperatorFactory<OUT> operatorFactory,
             List<TypeInformation<?>> inTypeInfos,
             TypeInformation<OUT> outTypeInfo,
-            String operatorName) {
+            String operatorName,
+            List<InputProperty> inputProperties) {
 
         Class<? extends TaskInvokable> vertexClass = MultipleInputStreamTask.class;
 
@@ -707,7 +721,8 @@ public class StreamGraph implements Pipeline, ExecutionPlan {
                 coLocationGroup,
                 vertexClass,
                 operatorFactory,
-                operatorName);
+                operatorName,
+                inputProperties);
 
         setSerializers(vertexID, inTypeInfos, createSerializer(outTypeInfo));
 
@@ -727,7 +742,8 @@ public class StreamGraph implements Pipeline, ExecutionPlan {
             @Nullable String coLocationGroup,
             Class<? extends TaskInvokable> vertexClass,
             @Nullable StreamOperatorFactory<?> operatorFactory,
-            String operatorName) {
+            String operatorName,
+            List<InputProperty> inputProperties) {
 
         if (streamNodes.containsKey(vertexID)) {
             throw new RuntimeException("Duplicate vertexID " + vertexID);
@@ -740,7 +756,8 @@ public class StreamGraph implements Pipeline, ExecutionPlan {
                         coLocationGroup,
                         operatorFactory,
                         operatorName,
-                        vertexClass);
+                        vertexClass,
+                        inputProperties);
 
         streamNodes.put(vertexID, vertex);
         isEmpty = false;

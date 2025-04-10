@@ -70,7 +70,8 @@ public class LegacySourceTransformationTranslator<OUT>
                 transformation.getOperatorFactory(),
                 null,
                 transformation.getOutputType(),
-                "Source: " + transformation.getName());
+                "Source: " + transformation.getName(),
+                transformation.getInputProperties());
 
         if (transformation.getOperatorFactory() instanceof InputFormatOperatorFactory) {
             streamGraph.setInputFormat(

@@ -19,7 +19,6 @@
 package org.apache.flink.table.planner.plan.nodes.exec;
 
 import org.apache.flink.annotation.Internal;
-import org.apache.flink.streaming.api.operators.Input;
 
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.annotation.JsonCreator;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -32,9 +31,9 @@ import static org.apache.flink.util.Preconditions.checkArgument;
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
 /**
- * The {@link InputProperty} describes the input information of the {@link ExecNode}.
+ * The {@link InputProperty} describes the input information of the ExecNode.
  *
- * <p>The input concept is not corresponding to the execution edge, but rather to the {@link Input}.
+ * <p>The input concept is not corresponding to the execution edge, but rather to the Input.
  */
 @Internal
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -59,10 +58,10 @@ public class InputProperty {
      * Returns a place-holder required distribution.
      *
      * <p>Currently {@link InputProperty} is only used for deadlock breakup and multi-input in batch
-     * mode, so for {@link ExecNode}s not affecting the algorithm we use this place-holder.
+     * mode, so for ExecNodes not affecting the algorithm we use this place-holder.
      *
-     * <p>We should fill out the detailed {@link InputProperty} for each sub-class of {@link
-     * ExecNode} in the future.
+     * <p>We should fill out the detailed {@link InputProperty} for each sub-class of ExecNode in
+     * the future.
      */
     public static final RequiredDistribution UNKNOWN_DISTRIBUTION =
             new RequiredDistribution(DistributionType.UNKNOWN) {};
@@ -74,18 +73,18 @@ public class InputProperty {
     public static final String FIELD_NAME_PRIORITY = "priority";
 
     /**
-     * The required input data distribution when the target {@link ExecNode} read data in from the
+     * The required input data distribution when the target ExecNode read data in from the
      * corresponding input.
      */
     @JsonProperty(FIELD_NAME_REQUIRED_DISTRIBUTION)
     private final RequiredDistribution requiredDistribution;
 
-    /** How does the input record trigger the output behavior of the target {@link ExecNode}. */
+    /** How does the input record trigger the output behavior of the target ExecNode. */
     @JsonProperty(FIELD_NAME_DAM_BEHAVIOR)
     private final DamBehavior damBehavior;
 
     /**
-     * The priority of this input read by the target {@link ExecNode}.
+     * The priority of this input read by the target ExecNode.
      *
      * <p>The smaller the integer, the higher the priority. Same integer indicates the same
      * priority.
@@ -371,25 +370,28 @@ public class InputProperty {
 
     /**
      * Enumeration which describes how an input record may trigger the output behavior of the target
-     * {@link ExecNode}.
+     * ExecNode.
      */
     public enum DamBehavior {
 
+        /** A placeholder that used by stream node and identify the dam behavior was not be set. */
+        UNKNOWN,
+
         /**
          * Constant indicating that some or all output records from the input will immediately
-         * trigger one or more output records of the target {@link ExecNode}.
+         * trigger one or more output records of the target ExecNode.
          */
         PIPELINED,
 
         /**
          * Constant indicating that only the last output record from the input will immediately
-         * trigger one or more output records of the target {@link ExecNode}.
+         * trigger one or more output records of the target ExecNode.
          */
         END_INPUT,
 
         /**
          * Constant indicating that all output records from the input will not trigger output
-         * records of the target {@link ExecNode}.
+         * records of the target ExecNode.
          */
         BLOCKING;
 

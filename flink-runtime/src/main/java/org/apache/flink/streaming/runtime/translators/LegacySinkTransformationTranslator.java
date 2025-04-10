@@ -86,7 +86,8 @@ public class LegacySinkTransformationTranslator<IN>
                 transformation.getOperatorFactory(),
                 input.getOutputType(),
                 null,
-                "Sink: " + transformation.getName());
+                "Sink: " + transformation.getName(),
+                transformation.getInputProperties());
 
         final int parallelism =
                 transformation.getParallelism() != ExecutionConfig.PARALLELISM_DEFAULT

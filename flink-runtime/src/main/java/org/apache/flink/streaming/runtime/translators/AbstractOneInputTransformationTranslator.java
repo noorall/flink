@@ -68,7 +68,8 @@ abstract class AbstractOneInputTransformationTranslator<IN, OUT, OP extends Tran
                 operatorFactory,
                 inputType,
                 transformation.getOutputType(),
-                transformation.getName());
+                transformation.getName(),
+                transformation.getInputProperties());
         streamGraph.setAttribute(transformationId, transformation.getAttribute());
         if (stateKeySelector != null) {
             TypeSerializer<?> keySerializer =

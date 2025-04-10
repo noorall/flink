@@ -35,6 +35,7 @@ import org.apache.flink.streaming.api.operators.CoordinatedOperatorFactory;
 import org.apache.flink.streaming.api.operators.SimpleOperatorFactory;
 import org.apache.flink.streaming.api.operators.StreamOperator;
 import org.apache.flink.streaming.api.operators.StreamOperatorFactory;
+import org.apache.flink.table.planner.plan.nodes.exec.InputProperty;
 
 import javax.annotation.Nullable;
 
@@ -50,6 +51,7 @@ import java.util.Optional;
 import java.util.Set;
 
 import static org.apache.flink.util.Preconditions.checkArgument;
+import static org.apache.flink.util.Preconditions.checkNotNull;
 import static org.apache.flink.util.Preconditions.checkState;
 
 /** Class representing the operators in the streaming programs, with all their properties. */
@@ -107,6 +109,8 @@ public class StreamNode implements Serializable {
 
     private Attribute attribute = new Attribute.Builder().build();
 
+    private final List<InputProperty> inputProperties;
+
     @VisibleForTesting
     public StreamNode(
             Integer id,
@@ -121,7 +125,8 @@ public class StreamNode implements Serializable {
                 coLocationGroup,
                 operator == null ? null : SimpleOperatorFactory.of(operator),
                 operatorName,
-                jobVertexClass);
+                jobVertexClass,
+                List.of());
     }
 
     public StreamNode(
@@ -130,7 +135,8 @@ public class StreamNode implements Serializable {
             @Nullable String coLocationGroup,
             @Nullable StreamOperatorFactory<?> operatorFactory,
             String operatorName,
-            Class<? extends TaskInvokable> jobVertexClass) {
+            Class<? extends TaskInvokable> jobVertexClass,
+            List<InputProperty> inputProperties) {
         this.id = id;
         this.operatorName = operatorName;
         this.operatorDescription = operatorName;
@@ -138,6 +144,7 @@ public class StreamNode implements Serializable {
         this.jobVertexClass = jobVertexClass;
         this.slotSharingGroup = slotSharingGroup;
         this.coLocationGroup = coLocationGroup;
+        this.inputProperties = checkNotNull(inputProperties);
     }
 
     public void addInEdge(StreamEdge inEdge) {
@@ -469,5 +476,9 @@ public class StreamNode implements Serializable {
 
     public void setOperatorFactory(StreamOperatorFactory<?> streamOperatorFactory) {
         this.operatorFactory = streamOperatorFactory;
+    }
+
+    public List<InputProperty> getInputProperties() {
+        return Collections.unmodifiableList(inputProperties);
     }
 }

@@ -29,6 +29,7 @@ import org.apache.flink.api.common.operators.util.OperatorValidationUtils;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.java.typeutils.MissingTypeInfo;
 import org.apache.flink.core.memory.ManagedMemoryUseCase;
+import org.apache.flink.table.planner.plan.nodes.exec.InputProperty;
 
 import javax.annotation.Nullable;
 
@@ -114,6 +115,7 @@ public abstract class Transformation<T> {
 
     // This is used to assign a unique ID to every Transformation
     private static final AtomicInteger ID_COUNTER = new AtomicInteger(0);
+    private final List<InputProperty> inputProperties;
 
     // If true, the parallelism of the transformation is explicitly set and should be respected.
     // Otherwise the parallelism can be changed at runtime.
@@ -200,7 +202,7 @@ public abstract class Transformation<T> {
      * @param parallelism The parallelism of this {@code Transformation}
      */
     public Transformation(String name, TypeInformation<T> outputType, int parallelism) {
-        this(name, outputType, parallelism, true);
+        this(name, outputType, parallelism, true, List.of());
     }
 
     /**
@@ -218,6 +220,15 @@ public abstract class Transformation<T> {
             TypeInformation<T> outputType,
             int parallelism,
             boolean parallelismConfigured) {
+        this(name, outputType, parallelism, parallelismConfigured, List.of());
+    }
+
+    public Transformation(
+            String name,
+            TypeInformation<T> outputType,
+            int parallelism,
+            boolean parallelismConfigured,
+            List<InputProperty> inputProperties) {
         this.id = getNewNodeId();
         this.name = checkNotNull(name);
         this.outputType = outputType;
@@ -225,6 +236,11 @@ public abstract class Transformation<T> {
         this.slotSharingGroup = Optional.empty();
         this.parallelismConfigured =
                 parallelismConfigured && parallelism != ExecutionConfig.PARALLELISM_DEFAULT;
+        this.inputProperties = inputProperties;
+    }
+
+    public List<InputProperty> getInputProperties() {
+        return inputProperties;
     }
 
     /** Returns the unique ID of this {@code Transformation}. */

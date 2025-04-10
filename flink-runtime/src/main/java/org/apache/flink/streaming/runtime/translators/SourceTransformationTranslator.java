@@ -86,7 +86,8 @@ public class SourceTransformationTranslator<OUT, SplitT extends SourceSplit, Enu
                 operatorFactory,
                 null,
                 transformation.getOutputType(),
-                "Source: " + transformation.getName());
+                "Source: " + transformation.getName(),
+                transformation.getInputProperties());
 
         final int parallelism =
                 transformation.getParallelism() != ExecutionConfig.PARALLELISM_DEFAULT

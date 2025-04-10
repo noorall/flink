@@ -38,7 +38,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 
-/** Translator for {@link CacheTransformationTranslator}. */
+/** Translator for {@link CacheTransformation}. */
 @Internal
 public class CacheTransformationTranslator<OUT, T extends CacheTransformation<OUT>>
         extends SimpleTransformationTranslator<OUT, T> {
@@ -140,7 +140,8 @@ public class CacheTransformationTranslator<OUT, T extends CacheTransformation<OU
                 operatorFactory,
                 cacheTransformation.getInputs().get(0).getOutputType(),
                 null,
-                CACHE_PRODUCER_OPERATOR_NAME);
+                CACHE_PRODUCER_OPERATOR_NAME,
+                cacheTransformation.getInputProperties());
 
         streamGraph.setParallelism(
                 cacheTransformation.getId(),
@@ -162,7 +163,8 @@ public class CacheTransformationTranslator<OUT, T extends CacheTransformation<OU
                 operatorFactory,
                 outputType,
                 outputType,
-                CACHE_CONSUMER_OPERATOR_NAME);
+                CACHE_CONSUMER_OPERATOR_NAME,
+                transformation.getInputProperties());
         streamGraph.setParallelism(
                 transformation.getId(),
                 transformation.getTransformationToCache().getParallelism(),
