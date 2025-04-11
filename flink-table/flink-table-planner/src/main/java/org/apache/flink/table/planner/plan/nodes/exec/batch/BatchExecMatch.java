@@ -140,7 +140,8 @@ public class BatchExecMatch extends CommonExecMatch
                         new StreamRecordTimestampInserter(timeOrderFieldIdx, precision),
                         inputTransform.getOutputType(),
                         inputTransform.getParallelism(),
-                        false);
+                        false,
+                        getInputProperties());
         if (inputsContainSingleton()) {
             transform.setParallelism(1);
             transform.setMaxParallelism(1);

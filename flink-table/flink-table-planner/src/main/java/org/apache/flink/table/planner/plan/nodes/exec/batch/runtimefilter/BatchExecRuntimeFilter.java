@@ -92,7 +92,8 @@ public class BatchExecRuntimeFilter extends ExecNodeBase<RowData>
                 InternalTypeInfo.of(getOutputType()),
                 probeTransform.getParallelism(),
                 0,
-                false);
+                false,
+                getInputProperties());
     }
 
     @Override

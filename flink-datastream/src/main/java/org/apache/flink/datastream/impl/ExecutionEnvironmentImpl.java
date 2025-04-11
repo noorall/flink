@@ -177,7 +177,8 @@ public class ExecutionEnvironmentImpl implements ExecutionEnvironment {
                             WatermarkStrategy.noWatermarks(),
                             resolvedTypeInfo,
                             getParallelism(),
-                            false);
+                            false,
+                            List.of());
             return StreamUtils.wrapWithConfigureHandle(
                     new NonKeyedPartitionStreamImpl<>(this, sourceTransformation));
         } else if (source instanceof FromDataSource) {

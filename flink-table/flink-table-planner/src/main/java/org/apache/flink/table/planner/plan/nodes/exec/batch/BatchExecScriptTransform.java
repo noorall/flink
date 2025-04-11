@@ -88,7 +88,8 @@ public class BatchExecScriptTransform extends ExecNodeBase<RowData>
                 SimpleOperatorFactory.of(scriptOperator),
                 InternalTypeInfo.of(getOutputType()),
                 inputTransform.getParallelism(),
-                false);
+                false,
+                getInputProperties());
     }
 
     @SuppressWarnings("unchecked")

@@ -181,6 +181,7 @@ public class StreamExecLocalGroupAggregate extends StreamExecAggregateBase {
                 operator,
                 InternalTypeInfo.of(getOutputType()),
                 inputTransform.getParallelism(),
-                false);
+                false,
+                getInputProperties());
     }
 }

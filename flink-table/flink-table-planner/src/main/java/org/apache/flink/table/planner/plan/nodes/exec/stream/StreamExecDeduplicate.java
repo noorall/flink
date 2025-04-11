@@ -232,7 +232,8 @@ public class StreamExecDeduplicate extends ExecNodeBase<RowData>
                         operator,
                         rowTypeInfo,
                         inputTransform.getParallelism(),
-                        false);
+                        false,
+                        getInputProperties());
 
         final RowDataKeySelector selector =
                 KeySelectorUtil.getRowDataSelector(

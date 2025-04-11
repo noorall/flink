@@ -142,7 +142,8 @@ public class BatchExecAdaptiveJoin extends ExecNodeBase<RowData>
                 // parallelism here.
                 Math.max(leftInputTransform.getParallelism(), rightInputTransform.getParallelism()),
                 managedMemory,
-                false);
+                false,
+                getInputProperties());
     }
 
     private StreamOperatorFactory<RowData> getAdaptiveJoinOperatorFactory(

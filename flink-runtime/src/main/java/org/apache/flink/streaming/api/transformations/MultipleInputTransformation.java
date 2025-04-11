@@ -19,13 +19,18 @@
 package org.apache.flink.streaming.api.transformations;
 
 import org.apache.flink.annotation.Internal;
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.dag.Transformation;
 import org.apache.flink.streaming.api.operators.StreamOperatorFactory;
+import org.apache.flink.table.planner.plan.nodes.exec.InputProperty;
+
+import java.util.List;
 
 /** {@link AbstractMultipleInputTransformation} implementation for non-keyed streams. */
 @Internal
 public class MultipleInputTransformation<OUT> extends AbstractMultipleInputTransformation<OUT> {
+    @VisibleForTesting
     public MultipleInputTransformation(
             String name,
             StreamOperatorFactory<OUT> operatorFactory,
@@ -39,8 +44,15 @@ public class MultipleInputTransformation<OUT> extends AbstractMultipleInputTrans
             StreamOperatorFactory<OUT> operatorFactory,
             TypeInformation<OUT> outputType,
             int parallelism,
-            boolean parallelismConfigured) {
-        super(name, operatorFactory, outputType, parallelism, parallelismConfigured);
+            boolean parallelismConfigured,
+            List<InputProperty> inputProperties) {
+        super(
+                name,
+                operatorFactory,
+                outputType,
+                parallelism,
+                parallelismConfigured,
+                inputProperties);
     }
 
     public MultipleInputTransformation<OUT> addInput(Transformation<?> input) {

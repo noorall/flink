@@ -152,6 +152,7 @@ public class BatchExecSortLimit extends ExecNodeBase<RowData>
                 SimpleOperatorFactory.of(operator),
                 InternalTypeInfo.of(inputType),
                 inputTransform.getParallelism(),
-                false);
+                false,
+                getInputProperties());
     }
 }

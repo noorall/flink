@@ -161,7 +161,8 @@ public class StreamExecTemporalSort extends ExecNodeBase<RowData>
                             sortOperator,
                             InternalTypeInfo.of(inputType),
                             inputTransform.getParallelism(),
-                            false);
+                            false,
+                            getInputProperties());
 
             // as input node is singleton exchange, its parallelism is 1.
             if (inputsContainSingleton()) {
@@ -210,7 +211,8 @@ public class StreamExecTemporalSort extends ExecNodeBase<RowData>
                         sortOperator,
                         InternalTypeInfo.of(inputType),
                         inputTransform.getParallelism(),
-                        false);
+                        false,
+                        getInputProperties());
 
         if (inputsContainSingleton()) {
             transform.setParallelism(1);

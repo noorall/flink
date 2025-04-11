@@ -25,6 +25,7 @@ import org.apache.flink.api.dag.Transformation;
 import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.streaming.api.datastream.KeyedStream;
 import org.apache.flink.streaming.api.operators.ChainingStrategy;
+import org.apache.flink.table.planner.plan.nodes.exec.InputProperty;
 
 import org.apache.flink.shaded.guava33.com.google.common.collect.Lists;
 
@@ -53,8 +54,9 @@ public final class ReduceTransformation<IN, K> extends PhysicalTransformation<IN
             ReduceFunction<IN> reducer,
             KeySelector<IN, K> keySelector,
             TypeInformation<K> keyTypeInfo,
-            boolean parallelismConfigured) {
-        super(name, input.getOutputType(), parallelism, parallelismConfigured);
+            boolean parallelismConfigured,
+            List<InputProperty> inputProperties) {
+        super(name, input.getOutputType(), parallelism, parallelismConfigured, inputProperties);
         this.input = input;
         this.reducer = reducer;
         this.keySelector = keySelector;

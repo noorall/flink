@@ -22,6 +22,7 @@ import org.apache.flink.annotation.Internal;
 import org.apache.flink.api.common.ExecutionConfig;
 import org.apache.flink.api.dag.Transformation;
 import org.apache.flink.streaming.api.graph.TransformationTranslator;
+import org.apache.flink.table.planner.plan.nodes.exec.InputProperty;
 
 import org.apache.flink.shaded.guava33.com.google.common.collect.Lists;
 
@@ -45,11 +46,14 @@ public class SourceTransformationWrapper<T> extends Transformation<T> {
 
     private final Transformation<T> input;
 
-    public SourceTransformationWrapper(Transformation<T> input) {
+    public SourceTransformationWrapper(
+            Transformation<T> input, List<InputProperty> inputProperties) {
         super(
                 "ChangeToDefaultParallel",
                 input.getOutputType(),
-                ExecutionConfig.PARALLELISM_DEFAULT);
+                ExecutionConfig.PARALLELISM_DEFAULT,
+                false,
+                inputProperties);
         this.input = input;
     }
 

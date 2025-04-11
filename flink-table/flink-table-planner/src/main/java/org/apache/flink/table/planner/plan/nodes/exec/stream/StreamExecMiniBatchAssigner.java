@@ -127,6 +127,7 @@ public class StreamExecMiniBatchAssigner extends ExecNodeBase<RowData>
                 operator,
                 InternalTypeInfo.of(getOutputType()),
                 inputTransform.getParallelism(),
-                false);
+                false,
+                getInputProperties());
     }
 }

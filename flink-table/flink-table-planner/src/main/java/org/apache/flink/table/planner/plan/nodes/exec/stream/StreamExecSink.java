@@ -272,7 +272,8 @@ public class StreamExecSink extends CommonExecSink implements StreamExecNode<Obj
                         operator,
                         inputTransform.getOutputType(),
                         sinkParallelism,
-                        sinkParallelismConfigured);
+                        sinkParallelismConfigured,
+                        getInputProperties());
         RowDataKeySelector keySelector =
                 KeySelectorUtil.getRowDataSelector(
                         classLoader, primaryKeys, InternalTypeInfo.of(physicalRowType));

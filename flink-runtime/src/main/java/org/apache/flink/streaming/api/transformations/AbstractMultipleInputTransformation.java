@@ -23,6 +23,7 @@ import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.dag.Transformation;
 import org.apache.flink.streaming.api.operators.ChainingStrategy;
 import org.apache.flink.streaming.api.operators.StreamOperatorFactory;
+import org.apache.flink.table.planner.plan.nodes.exec.InputProperty;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -55,8 +56,9 @@ public abstract class AbstractMultipleInputTransformation<OUT> extends PhysicalT
             StreamOperatorFactory<OUT> operatorFactory,
             TypeInformation<OUT> outputType,
             int parallelism,
-            boolean parallelismConfigured) {
-        super(name, outputType, parallelism, parallelismConfigured);
+            boolean parallelismConfigured,
+            List<InputProperty> inputProperties) {
+        super(name, outputType, parallelism, parallelismConfigured, inputProperties);
         this.operatorFactory = operatorFactory;
     }
 

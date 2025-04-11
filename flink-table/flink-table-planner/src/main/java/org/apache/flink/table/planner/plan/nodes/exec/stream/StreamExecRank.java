@@ -407,7 +407,8 @@ public class StreamExecRank extends ExecNodeBase<RowData>
                         operator,
                         InternalTypeInfo.of((RowType) getOutputType()),
                         inputTransform.getParallelism(),
-                        false);
+                        false,
+                        getInputProperties());
 
         // set KeyType and Selector for state
         RowDataKeySelector selector =

@@ -263,7 +263,8 @@ public class StreamExecWindowRank extends ExecNodeBase<RowData>
                         InternalTypeInfo.of(getOutputType()),
                         inputTransform.getParallelism(),
                         WINDOW_RANK_MEMORY_RATIO,
-                        false);
+                        false,
+                        getInputProperties());
 
         // set KeyType and Selector for state
         transform.setStateKeySelector(selector);

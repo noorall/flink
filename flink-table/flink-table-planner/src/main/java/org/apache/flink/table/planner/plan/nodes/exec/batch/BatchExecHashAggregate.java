@@ -226,7 +226,8 @@ public class BatchExecHashAggregate extends ExecNodeBase<RowData>
                 InternalTypeInfo.of(outputRowType),
                 inputTransform.getParallelism(),
                 managedMemory,
-                false);
+                false,
+                getInputProperties());
     }
 
     @Override

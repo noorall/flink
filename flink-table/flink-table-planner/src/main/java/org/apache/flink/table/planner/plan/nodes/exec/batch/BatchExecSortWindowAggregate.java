@@ -159,6 +159,7 @@ public class BatchExecSortWindowAggregate extends ExecNodeBase<RowData>
                 new CodeGenOperatorFactory<>(generatedOperator),
                 InternalTypeInfo.of(getOutputType()),
                 inputTransform.getParallelism(),
-                false);
+                false,
+                getInputProperties());
     }
 }

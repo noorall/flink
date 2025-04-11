@@ -236,7 +236,8 @@ public class BroadcastConnectedStream<IN1, IN2> {
                         broadcastStateDescriptors,
                         outTypeInfo,
                         environment.getParallelism(),
-                        false);
+                        false,
+                        List.of());
 
         @SuppressWarnings({"unchecked", "rawtypes"})
         final SingleOutputStreamOperator<OUT> returnStream =
@@ -268,7 +269,8 @@ public class BroadcastConnectedStream<IN1, IN2> {
                         keyedInputStream.getKeySelector(),
                         outTypeInfo,
                         environment.getParallelism(),
-                        false);
+                        false,
+                        List.of());
 
         @SuppressWarnings({"unchecked", "rawtypes"})
         final SingleOutputStreamOperator<OUT> returnStream =

@@ -216,7 +216,8 @@ public class BatchExecOverAggregate extends BatchExecOverAggregateBase {
                 InternalTypeInfo.of(getOutputType()),
                 inputTransform.getParallelism(),
                 managedMemory,
-                false);
+                false,
+                getInputProperties());
     }
 
     private List<OverWindowFrame> createOverWindowFrames(

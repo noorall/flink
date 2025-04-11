@@ -141,7 +141,8 @@ public class BatchExecExecutionOrderEnforcer extends ExecNodeBase<RowData>
                 InternalTypeInfo.of(getOutputType()),
                 sourceTransform.getParallelism(),
                 0,
-                false);
+                false,
+                getInputProperties());
     }
 
     private static ExecNode<?> ignoreExchange(ExecNode<?> execNode) {

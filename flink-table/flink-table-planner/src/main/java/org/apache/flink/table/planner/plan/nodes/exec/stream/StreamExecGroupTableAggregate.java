@@ -172,7 +172,8 @@ public class StreamExecGroupTableAggregate extends ExecNodeBase<RowData>
                         operator,
                         InternalTypeInfo.of(getOutputType()),
                         inputTransform.getParallelism(),
-                        false);
+                        false,
+                        getInputProperties());
 
         // set KeyType and Selector for state
         final RowDataKeySelector selector =

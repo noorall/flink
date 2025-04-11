@@ -264,7 +264,8 @@ public class StreamExecIntervalJoin extends ExecNodeBase<RowData>
                         new StreamFlatMap<>(allFilter),
                         returnTypeInfo,
                         leftParallelism,
-                        false);
+                        false,
+                        getInputProperties());
         if (shouldCreateUid) {
             filterAllLeftStream.setUid(createTransformationUid(FILTER_LEFT_TRANSFORMATION, config));
         }
@@ -282,7 +283,8 @@ public class StreamExecIntervalJoin extends ExecNodeBase<RowData>
                         new StreamFlatMap<>(allFilter),
                         returnTypeInfo,
                         rightParallelism,
-                        false);
+                        false,
+                        getInputProperties());
         if (shouldCreateUid) {
             filterAllRightStream.setUid(
                     createTransformationUid(FILTER_RIGHT_TRANSFORMATION, config));
@@ -301,7 +303,8 @@ public class StreamExecIntervalJoin extends ExecNodeBase<RowData>
                         new StreamMap<>(leftPadder),
                         returnTypeInfo,
                         leftParallelism,
-                        false);
+                        false,
+                        getInputProperties());
         if (shouldCreateUid) {
             padLeftStream.setUid(createTransformationUid(PAD_LEFT_TRANSFORMATION, config));
         }
@@ -318,7 +321,8 @@ public class StreamExecIntervalJoin extends ExecNodeBase<RowData>
                         new StreamMap<>(rightPadder),
                         returnTypeInfo,
                         rightParallelism,
-                        false);
+                        false,
+                        getInputProperties());
         if (shouldCreateUid) {
             padRightStream.setUid(createTransformationUid(PAD_RIGHT_TRANSFORMATION, config));
         }
@@ -375,7 +379,8 @@ public class StreamExecIntervalJoin extends ExecNodeBase<RowData>
                 new KeyedCoProcessOperator<>(procJoinFunc),
                 returnTypeInfo,
                 leftInputTransform.getParallelism(),
-                false);
+                false,
+                getInputProperties());
     }
 
     private TwoInputTransformation<RowData, RowData, RowData> createRowTimeJoin(
@@ -413,6 +418,7 @@ public class StreamExecIntervalJoin extends ExecNodeBase<RowData>
                         rowJoinFunc, rowJoinFunc.getMaxOutputDelay()),
                 returnTypeInfo,
                 leftInputTransform.getParallelism(),
-                false);
+                false,
+                getInputProperties());
     }
 }

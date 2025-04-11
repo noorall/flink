@@ -19,6 +19,7 @@ limitations under the License.
 package org.apache.flink.streaming.api.transformations;
 
 import org.apache.flink.annotation.Internal;
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.connector.source.Boundedness;
@@ -27,6 +28,7 @@ import org.apache.flink.api.connector.source.SourceSplit;
 import org.apache.flink.api.dag.Transformation;
 import org.apache.flink.streaming.api.lineage.LineageVertexProvider;
 import org.apache.flink.streaming.api.operators.ChainingStrategy;
+import org.apache.flink.table.planner.plan.nodes.exec.InputProperty;
 
 import javax.annotation.Nullable;
 
@@ -56,6 +58,7 @@ public class SourceTransformation<OUT, SplitT extends SourceSplit, EnumChkT>
      * @param outputType The output type of this {@code Transformation}
      * @param parallelism The parallelism of this {@code Transformation}
      */
+    @VisibleForTesting
     public SourceTransformation(
             String name,
             Source<OUT, SplitT, EnumChkT> source,
@@ -74,8 +77,9 @@ public class SourceTransformation<OUT, SplitT extends SourceSplit, EnumChkT>
             WatermarkStrategy<OUT> watermarkStrategy,
             TypeInformation<OUT> outputType,
             int parallelism,
-            boolean parallelismConfigured) {
-        super(name, outputType, parallelism, parallelismConfigured);
+            boolean parallelismConfigured,
+            List<InputProperty> inputProperties) {
+        super(name, outputType, parallelism, parallelismConfigured, inputProperties);
         this.source = source;
         this.watermarkStrategy = watermarkStrategy;
         this.extractLineageVertex();

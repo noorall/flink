@@ -30,6 +30,8 @@ import org.apache.flink.streaming.api.operators.StreamSource;
 import org.apache.flink.streaming.api.transformations.LegacySourceTransformation;
 import org.apache.flink.streaming.api.transformations.SourceTransformation;
 
+import java.util.List;
+
 /**
  * The DataStreamSource represents the starting point of a DataStream.
  *
@@ -88,7 +90,8 @@ public class DataStreamSource<T> extends SingleOutputStreamOperator<T> {
                         outTypeInfo,
                         environment.getParallelism(),
                         boundedness,
-                        false);
+                        false,
+                        List.of());
         transformation.setChainingStrategy(ChainingStrategy.HEAD);
         return transformation;
     }
@@ -117,7 +120,8 @@ public class DataStreamSource<T> extends SingleOutputStreamOperator<T> {
                         watermarkStrategy,
                         outTypeInfo,
                         environment.getParallelism(),
-                        false));
+                        false,
+                        List.of()));
         this.isParallel = true;
     }
 

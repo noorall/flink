@@ -50,7 +50,8 @@ public class CacheTransformation<T> extends Transformation<T> {
                 name,
                 transformationToCache.getOutputType(),
                 transformationToCache.getParallelism(),
-                transformationToCache.isParallelismConfigured());
+                transformationToCache.isParallelismConfigured(),
+                transformationToCache.getInputProperties());
         this.transformationToCache = transformationToCache;
 
         this.datasetId = new AbstractID();

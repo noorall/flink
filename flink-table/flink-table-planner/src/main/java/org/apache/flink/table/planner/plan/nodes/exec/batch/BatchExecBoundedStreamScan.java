@@ -87,7 +87,8 @@ public class BatchExecBoundedStreamScan extends ExecNodeBase<RowData>
                     (description) -> createFormattedTransformationDescription(description, config),
                     JavaScalaConversionUtil.toScala(Optional.empty()),
                     "",
-                    "");
+                    "",
+                    getInputProperties());
         } else {
             return (Transformation<RowData>) sourceTransform;
         }

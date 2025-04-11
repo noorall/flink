@@ -201,7 +201,8 @@ public class BatchExecPythonOverAggregate extends BatchExecOverAggregateBase {
                 pythonOperator,
                 InternalTypeInfo.of(outputRowType),
                 inputTransform.getParallelism(),
-                false);
+                false,
+                getInputProperties());
     }
 
     @SuppressWarnings("unchecked")

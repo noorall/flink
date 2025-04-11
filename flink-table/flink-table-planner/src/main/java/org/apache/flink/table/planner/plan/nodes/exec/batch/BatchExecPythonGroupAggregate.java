@@ -139,7 +139,8 @@ public class BatchExecPythonGroupAggregate extends ExecNodeBase<RowData>
                 pythonOperator,
                 InternalTypeInfo.of(outputRowType),
                 inputTransform.getParallelism(),
-                false);
+                false,
+                getInputProperties());
     }
 
     @SuppressWarnings("unchecked")

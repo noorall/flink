@@ -664,7 +664,8 @@ public class DataStream<T> {
                         inputParallelism,
                         getTransformation(),
                         cleanedStrategy,
-                        false);
+                        false,
+                        List.of());
         getExecutionEnvironment().addOperator(transformation);
         return new SingleOutputStreamOperator<>(getExecutionEnvironment(), transformation);
     }
@@ -835,7 +836,8 @@ public class DataStream<T> {
                         operatorFactory,
                         outTypeInfo,
                         environment.getParallelism(),
-                        false);
+                        false,
+                        List.of());
 
         @SuppressWarnings({"unchecked", "rawtypes"})
         SingleOutputStreamOperator<R> returnStream =

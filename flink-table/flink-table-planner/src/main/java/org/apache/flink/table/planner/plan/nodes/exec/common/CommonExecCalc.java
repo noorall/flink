@@ -111,6 +111,7 @@ public abstract class CommonExecCalc extends ExecNodeBase<RowData>
                 substituteStreamOperator,
                 InternalTypeInfo.of(getOutputType()),
                 inputTransform.getParallelism(),
-                false);
+                false,
+                getInputProperties());
     }
 }

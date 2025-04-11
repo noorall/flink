@@ -157,6 +157,7 @@ public class BatchExecHashWindowAggregate extends ExecNodeBase<RowData>
                 InternalTypeInfo.of(getOutputType()),
                 inputTransform.getParallelism(),
                 managedMemory,
-                false);
+                false,
+                getInputProperties());
     }
 }

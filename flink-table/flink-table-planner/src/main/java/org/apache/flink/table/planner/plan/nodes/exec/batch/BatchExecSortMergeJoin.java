@@ -166,7 +166,8 @@ public class BatchExecSortMergeJoin extends ExecNodeBase<RowData>
                 InternalTypeInfo.of(getOutputType()),
                 rightInputTransform.getParallelism(),
                 managedMemory,
-                false);
+                false,
+                getInputProperties());
     }
 
     @Override

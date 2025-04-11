@@ -136,6 +136,7 @@ public class StreamExecWatermarkAssigner extends ExecNodeBase<RowData>
                 operatorFactory,
                 InternalTypeInfo.of(getOutputType()),
                 inputTransform.getParallelism(),
-                false);
+                false,
+                getInputProperties());
     }
 }

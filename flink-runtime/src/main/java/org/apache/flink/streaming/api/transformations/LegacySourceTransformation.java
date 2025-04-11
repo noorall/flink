@@ -29,6 +29,7 @@ import org.apache.flink.streaming.api.operators.ChainingStrategy;
 import org.apache.flink.streaming.api.operators.SimpleOperatorFactory;
 import org.apache.flink.streaming.api.operators.StreamOperatorFactory;
 import org.apache.flink.streaming.api.operators.StreamSource;
+import org.apache.flink.table.planner.plan.nodes.exec.InputProperty;
 
 import java.util.Collections;
 import java.util.List;
@@ -67,8 +68,9 @@ public class LegacySourceTransformation<T> extends TransformationWithLineage<T>
             TypeInformation<T> outputType,
             int parallelism,
             Boundedness boundedness,
-            boolean parallelismConfigured) {
-        super(name, outputType, parallelism, parallelismConfigured);
+            boolean parallelismConfigured,
+            List<InputProperty> inputProperties) {
+        super(name, outputType, parallelism, parallelismConfigured, inputProperties);
         this.operatorFactory = checkNotNull(SimpleOperatorFactory.of(operator));
         this.boundedness = checkNotNull(boundedness);
         this.extractLineageVertex(operator);

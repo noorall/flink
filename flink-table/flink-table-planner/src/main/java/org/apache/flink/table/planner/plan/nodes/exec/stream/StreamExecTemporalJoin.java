@@ -194,7 +194,8 @@ public class StreamExecTemporalJoin extends ExecNodeBase<RowData>
                         joinOperator,
                         InternalTypeInfo.of(returnType),
                         leftTransform.getParallelism(),
-                        false);
+                        false,
+                        getInputProperties());
 
         // set KeyType and Selector for state
         RowDataKeySelector leftKeySelector =

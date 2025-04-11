@@ -26,6 +26,9 @@ import org.apache.flink.table.connector.sink.DynamicTableSink;
 import org.apache.flink.table.connector.sink.OutputFormatProvider;
 import org.apache.flink.table.connector.sink.legacy.SinkFunctionProvider;
 import org.apache.flink.table.data.RowData;
+import org.apache.flink.table.planner.plan.nodes.exec.InputProperty;
+
+import java.util.List;
 
 /**
  * Provider that produces a {@link Transformation} as a runtime implementation for {@link
@@ -59,5 +62,7 @@ public interface TransformationSinkProvider extends DynamicTableSink.SinkRuntime
 
         /** Returns the field index of the rowtime attribute, or {@code -1} otherwise. */
         int getRowtimeIndex();
+
+        List<InputProperty> getInputProperties();
     }
 }

@@ -345,7 +345,8 @@ public abstract class CommonExecLookupJoin extends ExecNodeBase<RowData> {
                     operatorFactory,
                     InternalTypeInfo.of(resultRowType),
                     inputTransformation.getParallelism(),
-                    false);
+                    false,
+                    getInputProperties());
         }
     }
 

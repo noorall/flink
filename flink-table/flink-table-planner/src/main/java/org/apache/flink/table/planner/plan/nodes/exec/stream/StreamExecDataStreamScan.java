@@ -125,7 +125,8 @@ public class StreamExecDataStreamScan extends ExecNodeBase<RowData>
                                     createFormattedTransformationDescription(description, config),
                             JavaScalaConversionUtil.toScala(rowtimeExpr),
                             extractElement,
-                            resetElement);
+                            resetElement,
+                            getInputProperties());
         } else {
             transformation = (Transformation<RowData>) sourceTransform;
         }

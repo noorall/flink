@@ -159,7 +159,7 @@ public abstract class CommonExecTableSourceScan extends ExecNodeBase<RowData>
                     .setLineageVertex(sourceLineageVertex);
             if (function instanceof ParallelSourceFunction && sourceParallelismConfigured) {
                 meta.fill(sourceTransform);
-                return new SourceTransformationWrapper<>(sourceTransform);
+                return new SourceTransformationWrapper<>(sourceTransform, getInputProperties());
             } else {
                 return meta.fill(sourceTransform);
             }
@@ -193,7 +193,8 @@ public abstract class CommonExecTableSourceScan extends ExecNodeBase<RowData>
         } else if (provider instanceof TransformationScanProvider) {
             sourceTransform =
                     ((TransformationScanProvider) provider)
-                            .createTransformation(createProviderContext(config));
+                            .createTransformation(
+                                    createProviderContext(config), getInputProperties());
             meta.fill(sourceTransform);
             sourceTransform.setOutputType(outputTypeInfo);
         } else {
@@ -275,7 +276,7 @@ public abstract class CommonExecTableSourceScan extends ExecNodeBase<RowData>
             int sourceParallelism) {
         sourceTransform.setParallelism(sourceParallelism, true);
         Transformation<RowData> sourceTransformationWrapper =
-                new SourceTransformationWrapper<>(sourceTransform);
+                new SourceTransformationWrapper<>(sourceTransform, getInputProperties());
 
         if (!changelogMode.containsOnly(RowKind.INSERT)) {
             final ResolvedSchema schema =
@@ -362,7 +363,8 @@ public abstract class CommonExecTableSourceScan extends ExecNodeBase<RowData>
                         outputTypeInfo,
                         parallelism,
                         boundedness,
-                        sourceParallelismConfigured);
+                        sourceParallelismConfigured,
+                        getInputProperties());
         transformation.setChainingStrategy(ChainingStrategy.HEAD);
         return transformation;
     }

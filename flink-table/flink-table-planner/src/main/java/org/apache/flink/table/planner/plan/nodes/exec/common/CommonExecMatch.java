@@ -191,7 +191,8 @@ public abstract class CommonExecMatch extends ExecNodeBase<RowData>
                         operator,
                         InternalTypeInfo.of(getOutputType()),
                         timestampedInputTransform.getParallelism(),
-                        false);
+                        false,
+                        getInputProperties());
         final RowDataKeySelector selector =
                 KeySelectorUtil.getRowDataSelector(
                         planner.getFlinkContext().getClassLoader(), partitionKeys, inputTypeInfo);

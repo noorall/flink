@@ -32,6 +32,7 @@ import org.apache.flink.table.connector.source.ScanTableSource;
 import org.apache.flink.table.connector.source.abilities.SupportsReadingMetadata;
 import org.apache.flink.table.connector.source.abilities.SupportsSourceWatermark;
 import org.apache.flink.table.data.RowData;
+import org.apache.flink.table.planner.plan.nodes.exec.InputProperty;
 import org.apache.flink.table.planner.plan.nodes.exec.utils.ExecNodeUtil;
 import org.apache.flink.table.planner.plan.nodes.exec.utils.TransformationMetadata;
 import org.apache.flink.table.runtime.operators.source.InputConversionOperator;
@@ -115,7 +116,8 @@ final class ExternalDynamicSource<E>
 
         return new TransformationScanProvider() {
             @Override
-            public Transformation<RowData> createTransformation(ProviderContext providerContext) {
+            public Transformation<RowData> createTransformation(
+                    ProviderContext providerContext, List<InputProperty> inputProperties) {
                 return ExecNodeUtil.createOneInputTransformation(
                         externalTransformation,
                         providerContext
@@ -139,7 +141,8 @@ final class ExternalDynamicSource<E>
                                 changelogMode.containsOnly(RowKind.INSERT)),
                         null, // will be filled by the framework
                         externalTransformation.getParallelism(),
-                        false);
+                        false,
+                        inputProperties);
             }
 
             @Override

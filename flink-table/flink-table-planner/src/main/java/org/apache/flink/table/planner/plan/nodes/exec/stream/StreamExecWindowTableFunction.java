@@ -123,7 +123,8 @@ public class StreamExecWindowTableFunction extends CommonExecWindowTableFunction
                         windowTableFunctionOperator,
                         InternalTypeInfo.of(getOutputType()),
                         inputTransform.getParallelism(),
-                        false);
+                        false,
+                        getInputProperties());
 
         final int[] partitionKeys = extractPartitionKeys(windowingStrategy.getWindow());
         // set KeyType and Selector for state

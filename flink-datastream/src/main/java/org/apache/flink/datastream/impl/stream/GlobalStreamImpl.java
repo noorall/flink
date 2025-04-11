@@ -55,6 +55,7 @@ import org.apache.flink.util.OutputTag;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
 
 import static org.apache.flink.datastream.impl.utils.StreamUtils.validateStates;
 
@@ -248,7 +249,8 @@ public class GlobalStreamImpl<T> extends AbstractDataStream<T> implements Global
                         1,
                         // parallelismConfigured should be true to avoid overwritten by
                         // AdaptiveBatchScheduler.
-                        true);
+                        true,
+                        List.of());
         resultTransform.setAttribute(attribute);
         GlobalStreamImpl<R> returnStream = new GlobalStreamImpl<>(environment, resultTransform);
 

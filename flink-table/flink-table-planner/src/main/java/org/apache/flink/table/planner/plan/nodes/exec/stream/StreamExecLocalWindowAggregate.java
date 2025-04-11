@@ -207,7 +207,8 @@ public class StreamExecLocalWindowAggregate extends StreamExecWindowAggregateBas
                 inputTransform.getParallelism(),
                 // use less memory here to let the chained head operator can have more memory
                 WINDOW_AGG_MEMORY_RATIO / 2,
-                false);
+                false,
+                getInputProperties());
     }
 
     private GeneratedNamespaceAggsHandleFunction<Long> createAggsHandler(

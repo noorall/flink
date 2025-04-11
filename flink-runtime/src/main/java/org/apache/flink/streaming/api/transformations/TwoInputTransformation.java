@@ -28,6 +28,7 @@ import org.apache.flink.streaming.api.operators.SimpleOperatorFactory;
 import org.apache.flink.streaming.api.operators.StreamOperatorFactory;
 import org.apache.flink.streaming.api.operators.TwoInputStreamOperator;
 import org.apache.flink.streaming.runtime.operators.asyncprocessing.AsyncStateProcessingOperator;
+import org.apache.flink.table.planner.plan.nodes.exec.InputProperty;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -67,6 +68,7 @@ public class TwoInputTransformation<IN1, IN2, OUT> extends PhysicalTransformatio
      * @param outputType The type of the elements produced by this Transformation
      * @param parallelism The parallelism of this Transformation
      */
+    @VisibleForTesting
     public TwoInputTransformation(
             Transformation<IN1> input1,
             Transformation<IN2> input2,
@@ -74,7 +76,14 @@ public class TwoInputTransformation<IN1, IN2, OUT> extends PhysicalTransformatio
             TwoInputStreamOperator<IN1, IN2, OUT> operator,
             TypeInformation<OUT> outputType,
             int parallelism) {
-        this(input1, input2, name, SimpleOperatorFactory.of(operator), outputType, parallelism);
+        this(
+                input1,
+                input2,
+                name,
+                SimpleOperatorFactory.of(operator),
+                outputType,
+                parallelism,
+                List.of());
     }
 
     public TwoInputTransformation(
@@ -84,7 +93,8 @@ public class TwoInputTransformation<IN1, IN2, OUT> extends PhysicalTransformatio
             TwoInputStreamOperator<IN1, IN2, OUT> operator,
             TypeInformation<OUT> outputType,
             int parallelism,
-            boolean parallelismConfigured) {
+            boolean parallelismConfigured,
+            List<InputProperty> inputProperties) {
         this(
                 input1,
                 input2,
@@ -92,7 +102,8 @@ public class TwoInputTransformation<IN1, IN2, OUT> extends PhysicalTransformatio
                 SimpleOperatorFactory.of(operator),
                 outputType,
                 parallelism,
-                parallelismConfigured);
+                parallelismConfigured,
+                inputProperties);
     }
 
     public TwoInputTransformation(
@@ -101,8 +112,9 @@ public class TwoInputTransformation<IN1, IN2, OUT> extends PhysicalTransformatio
             String name,
             StreamOperatorFactory<OUT> operatorFactory,
             TypeInformation<OUT> outputType,
-            int parallelism) {
-        super(name, outputType, parallelism);
+            int parallelism,
+            List<InputProperty> inputProperties) {
+        super(name, outputType, parallelism, true, inputProperties);
         this.input1 = input1;
         this.input2 = input2;
         this.operatorFactory = operatorFactory;
@@ -128,8 +140,9 @@ public class TwoInputTransformation<IN1, IN2, OUT> extends PhysicalTransformatio
             StreamOperatorFactory<OUT> operatorFactory,
             TypeInformation<OUT> outputType,
             int parallelism,
-            boolean parallelismConfigured) {
-        super(name, outputType, parallelism, parallelismConfigured);
+            boolean parallelismConfigured,
+            List<InputProperty> inputProperties) {
+        super(name, outputType, parallelism, parallelismConfigured, inputProperties);
         this.input1 = input1;
         this.input2 = input2;
         this.operatorFactory = operatorFactory;

@@ -125,6 +125,7 @@ public class StreamExecSort extends ExecNodeBase<RowData> implements StreamExecN
                 sortOperator,
                 InternalTypeInfo.of(inputType),
                 inputTransform.getParallelism(),
-                false);
+                false,
+                getInputProperties());
     }
 }

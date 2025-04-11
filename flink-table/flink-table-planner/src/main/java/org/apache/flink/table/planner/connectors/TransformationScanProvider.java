@@ -28,6 +28,9 @@ import org.apache.flink.table.connector.source.InputFormatProvider;
 import org.apache.flink.table.connector.source.ScanTableSource;
 import org.apache.flink.table.connector.source.SourceProvider;
 import org.apache.flink.table.data.RowData;
+import org.apache.flink.table.planner.plan.nodes.exec.InputProperty;
+
+import java.util.List;
 
 /**
  * Provider that produces a {@link Transformation} as a runtime implementation for {@link
@@ -52,5 +55,6 @@ public interface TransformationScanProvider
      *
      * @see Transformation#setUid(String)
      */
-    Transformation<RowData> createTransformation(ProviderContext providerContext);
+    Transformation<RowData> createTransformation(
+            ProviderContext providerContext, List<InputProperty> inputProperties);
 }

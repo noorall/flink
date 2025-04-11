@@ -188,7 +188,8 @@ public abstract class CommonExecPythonCalc extends ExecNodeBase<RowData>
                 pythonOperator,
                 pythonOperatorResultTyeInfo,
                 inputTransform.getParallelism(),
-                false);
+                false,
+                getInputProperties());
     }
 
     private Tuple2<int[], PythonFunctionInfo[]> extractPythonScalarFunctionInfos(

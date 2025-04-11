@@ -169,7 +169,8 @@ class StreamGraphGeneratorExecutionModeDetectionTest {
                                 new StreamGraphGeneratorTest
                                         .OutputTypeConfigurableOperationWithTwoInputs()),
                         BasicTypeInfo.INT_TYPE_INFO,
-                        1);
+                        1,
+                        List.of());
 
         final StreamGraph graph =
                 generateStreamGraph(RuntimeExecutionMode.AUTOMATIC, resultTransform);

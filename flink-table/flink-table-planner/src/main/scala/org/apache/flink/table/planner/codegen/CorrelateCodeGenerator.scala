@@ -28,6 +28,7 @@ import org.apache.flink.table.planner.calcite.FlinkTypeFactory
 import org.apache.flink.table.planner.codegen.CodeGenUtils._
 import org.apache.flink.table.planner.functions.bridging.BridgingSqlFunction
 import org.apache.flink.table.planner.functions.utils.TableSqlFunction
+import org.apache.flink.table.planner.plan.nodes.exec.InputProperty
 import org.apache.flink.table.planner.plan.nodes.exec.utils.{ExecNodeUtil, TransformationMetadata}
 import org.apache.flink.table.runtime.operators.CodeGenOperatorFactory
 import org.apache.flink.table.runtime.operators.join.FlinkJoinType
@@ -36,6 +37,8 @@ import org.apache.flink.table.runtime.util.StreamRecordCollector
 import org.apache.flink.table.types.logical.RowType
 
 import org.apache.calcite.rex._
+
+import java.util
 
 object CorrelateCodeGenerator {
 
@@ -52,7 +55,8 @@ object CorrelateCodeGenerator {
       retainHeader: Boolean,
       opName: String,
       transformationMeta: TransformationMetadata,
-      parallelismConfigured: Boolean): Transformation[RowData] = {
+      parallelismConfigured: Boolean,
+      inputProperties: util.List[InputProperty]): Transformation[RowData] = {
 
     // according to the SQL standard, every scalar function should also be a table function
     // but we don't allow that for now
@@ -90,7 +94,8 @@ object CorrelateCodeGenerator {
       InternalTypeInfo.of(outputType),
       parallelism,
       0,
-      parallelismConfigured)
+      parallelismConfigured,
+      inputProperties)
   }
 
   /** Generates the flat map operator to run the user-defined table function. */

@@ -54,7 +54,12 @@ public class GlobalCommitterTransform<CommT> extends TransformationWithLineage<V
             DataStream<CommittableMessage<CommT>> inputStream,
             SerializableFunction<CommitterInitContext, Committer<CommT>> committerFactory,
             SerializableSupplier<SimpleVersionedSerializer<CommT>> committableSerializer) {
-        super(StandardSinkTopologies.GLOBAL_COMMITTER_TRANSFORMATION_NAME, Types.VOID, 1, true);
+        super(
+                StandardSinkTopologies.GLOBAL_COMMITTER_TRANSFORMATION_NAME,
+                Types.VOID,
+                1,
+                true,
+                List.of());
         this.inputStream = inputStream;
         this.committerFactory = committerFactory;
         this.committableSerializer = committableSerializer;

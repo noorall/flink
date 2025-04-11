@@ -22,6 +22,9 @@ import org.apache.flink.annotation.Internal;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.dag.Transformation;
 import org.apache.flink.streaming.api.operators.ChainingStrategy;
+import org.apache.flink.table.planner.plan.nodes.exec.InputProperty;
+
+import java.util.List;
 
 /**
  * A {@link Transformation} that creates a physical operation. It enables setting {@link
@@ -61,8 +64,9 @@ public abstract class PhysicalTransformation<T> extends Transformation<T> {
             String name,
             TypeInformation<T> outputType,
             int parallelism,
-            boolean parallelismConfigured) {
-        super(name, outputType, parallelism, parallelismConfigured);
+            boolean parallelismConfigured,
+            List<InputProperty> inputProperties) {
+        super(name, outputType, parallelism, parallelismConfigured, inputProperties);
     }
 
     /** Sets the chaining strategy of this {@code Transformation}. */

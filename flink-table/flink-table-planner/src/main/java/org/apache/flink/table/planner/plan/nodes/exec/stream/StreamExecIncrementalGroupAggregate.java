@@ -256,7 +256,8 @@ public class StreamExecIncrementalGroupAggregate extends StreamExecAggregateBase
                         operator,
                         InternalTypeInfo.of(getOutputType()),
                         inputTransform.getParallelism(),
-                        false);
+                        false,
+                        getInputProperties());
 
         // set KeyType and Selector for state
         transform.setStateKeySelector(partialKeySelector);

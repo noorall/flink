@@ -232,7 +232,8 @@ public class StreamExecWindowAggregate extends StreamExecWindowAggregateBase {
                         InternalTypeInfo.of(getOutputType()),
                         inputTransform.getParallelism(),
                         WINDOW_AGG_MEMORY_RATIO,
-                        false);
+                        false,
+                        getInputProperties());
 
         // set KeyType and Selector for state
         transform.setStateKeySelector(selector);

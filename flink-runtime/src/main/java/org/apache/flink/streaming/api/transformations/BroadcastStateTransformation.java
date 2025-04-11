@@ -23,6 +23,7 @@ import org.apache.flink.api.common.state.MapStateDescriptor;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.dag.Transformation;
 import org.apache.flink.streaming.api.functions.co.BroadcastProcessFunction;
+import org.apache.flink.table.planner.plan.nodes.exec.InputProperty;
 
 import java.util.List;
 
@@ -41,7 +42,8 @@ public class BroadcastStateTransformation<IN1, IN2, OUT>
             final List<MapStateDescriptor<?, ?>> broadcastStateDescriptors,
             final TypeInformation<OUT> outTypeInfo,
             final int parallelism,
-            final boolean parallelismConfigured) {
+            final boolean parallelismConfigured,
+            List<InputProperty> inputProperties) {
         super(
                 name,
                 inputStream,
@@ -49,7 +51,8 @@ public class BroadcastStateTransformation<IN1, IN2, OUT>
                 broadcastStateDescriptors,
                 outTypeInfo,
                 parallelism,
-                parallelismConfigured);
+                parallelismConfigured,
+                inputProperties);
         this.userFunction = userFunction;
         updateManagedMemoryStateBackendUseCase(false /* not keyed */);
     }

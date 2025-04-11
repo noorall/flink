@@ -80,6 +80,7 @@ public class BatchExecGlobalRuntimeFilterBuilder extends ExecNodeBase<RowData>
                 InternalTypeInfo.of(getOutputType()),
                 1,
                 0,
-                true);
+                true,
+                getInputProperties());
     }
 }

@@ -289,7 +289,8 @@ public class StreamExecLookupJoin extends CommonExecLookupJoin
                         operator,
                         InternalTypeInfo.of(resultRowType),
                         partitionedTransform.getParallelism(),
-                        false);
+                        false,
+                        getInputProperties());
         transform.setStateKeySelector(keySelector);
         transform.setStateKeyType(keySelector.getProducedType());
         return transform;

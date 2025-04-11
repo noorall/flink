@@ -19,6 +19,7 @@
 package org.apache.flink.streaming.api.transformations;
 
 import org.apache.flink.annotation.Internal;
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.dag.Transformation;
 import org.apache.flink.api.java.functions.KeySelector;
@@ -34,6 +35,7 @@ public class KeyedMultipleInputTransformation<OUT>
     private final List<KeySelector<?, ?>> stateKeySelectors = new ArrayList<>();
     protected final TypeInformation<?> stateKeyType;
 
+    @VisibleForTesting
     public KeyedMultipleInputTransformation(
             String name,
             StreamOperatorFactory<OUT> operatorFactory,

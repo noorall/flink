@@ -218,7 +218,8 @@ public abstract class CommonExecLegacySink<T> extends ExecNodeBase<T>
                     converterOperator,
                     outputTypeInfo,
                     inputTransform.getParallelism(),
-                    false);
+                    false,
+                    getInputProperties());
         }
     }
 

@@ -234,7 +234,8 @@ public class BatchExecMultipleInput extends ExecNodeBase<RowData>
                         operatorFactory,
                         InternalTypeInfo.of(getOutputType()),
                         parallelism,
-                        false);
+                        false,
+                        getInputProperties());
         multipleInputTransform.setDescription(createTransformationDescription(config));
         if (maxParallelism > 0) {
             multipleInputTransform.setMaxParallelism(maxParallelism);

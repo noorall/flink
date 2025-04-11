@@ -271,7 +271,8 @@ public class StreamExecJoin extends ExecNodeBase<RowData>
                         operator,
                         InternalTypeInfo.of(returnType),
                         leftTransform.getParallelism(),
-                        false);
+                        false,
+                        getInputProperties());
 
         // set KeyType and Selector for state
         RowDataKeySelector leftSelect =

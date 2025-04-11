@@ -24,6 +24,7 @@ import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.dag.Transformation;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.operators.ChainingStrategy;
+import org.apache.flink.table.planner.plan.nodes.exec.InputProperty;
 
 import org.apache.flink.shaded.guava33.com.google.common.collect.Lists;
 
@@ -60,8 +61,9 @@ public class TimestampsAndWatermarksTransformation<IN> extends PhysicalTransform
             int parallelism,
             Transformation<IN> input,
             WatermarkStrategy<IN> watermarkStrategy,
-            boolean parallelismConfigured) {
-        super(name, input.getOutputType(), parallelism, parallelismConfigured);
+            boolean parallelismConfigured,
+            List<InputProperty> inputProperties) {
+        super(name, input.getOutputType(), parallelism, parallelismConfigured, inputProperties);
         this.input = input;
         this.watermarkStrategy = watermarkStrategy;
     }

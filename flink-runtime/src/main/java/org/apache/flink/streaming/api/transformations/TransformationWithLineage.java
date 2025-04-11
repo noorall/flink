@@ -22,6 +22,9 @@ import org.apache.flink.annotation.Internal;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.dag.Transformation;
 import org.apache.flink.streaming.api.lineage.LineageVertex;
+import org.apache.flink.table.planner.plan.nodes.exec.InputProperty;
+
+import java.util.List;
 
 /**
  * A {@link Transformation} that contains lineage information.
@@ -59,8 +62,9 @@ public abstract class TransformationWithLineage<T> extends PhysicalTransformatio
             String name,
             TypeInformation<T> outputType,
             int parallelism,
-            boolean parallelismConfigured) {
-        super(name, outputType, parallelism, parallelismConfigured);
+            boolean parallelismConfigured,
+            List<InputProperty> inputProperties) {
+        super(name, outputType, parallelism, parallelismConfigured, inputProperties);
     }
 
     /** Returns the lineage vertex of this {@code Transformation}. */

@@ -96,6 +96,7 @@ public class StreamExecDropUpdateBefore extends ExecNodeBase<RowData>
                 operator,
                 inputTransform.getOutputType(),
                 inputTransform.getParallelism(),
-                false);
+                false,
+                getInputProperties());
     }
 }

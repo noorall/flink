@@ -154,7 +154,8 @@ public class StreamExecPythonGroupTableAggregate extends ExecNodeBase<RowData>
                         pythonOperator,
                         InternalTypeInfo.of(getOutputType()),
                         inputTransform.getParallelism(),
-                        false);
+                        false,
+                        getInputProperties());
 
         if (CommonPythonUtil.isPythonWorkerUsingManagedMemory(
                 pythonConfig, planner.getFlinkContext().getClassLoader())) {

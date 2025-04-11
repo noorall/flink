@@ -34,6 +34,8 @@ import org.apache.flink.streaming.api.transformations.LegacySinkTransformation;
 import org.apache.flink.streaming.api.transformations.PhysicalTransformation;
 import org.apache.flink.streaming.api.transformations.SinkTransformation;
 
+import java.util.List;
+
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
 /**
@@ -61,7 +63,8 @@ public class DataStreamSink<T> {
                         "Unnamed",
                         sinkOperator,
                         executionEnvironment.getParallelism(),
-                        false);
+                        false,
+                        List.of());
         if (sinkFunction instanceof LineageVertexProvider) {
             transformation.setLineageVertex(
                     ((LineageVertexProvider) sinkFunction).getLineageVertex());
@@ -86,7 +89,8 @@ public class DataStreamSink<T> {
                         "Sink",
                         executionEnvironment.getParallelism(),
                         false,
-                        customSinkOperatorUidHashes);
+                        customSinkOperatorUidHashes,
+                        List.of());
         if (sink instanceof LineageVertexProvider) {
             transformation.setLineageVertex(((LineageVertexProvider) sink).getLineageVertex());
         }

@@ -241,7 +241,8 @@ public class BatchExecHashJoin extends ExecNodeBase<RowData>
                 InternalTypeInfo.of(getOutputType()),
                 probeTransform.getParallelism(),
                 managedMemory,
-                false);
+                false,
+                getInputProperties());
     }
 
     @Override

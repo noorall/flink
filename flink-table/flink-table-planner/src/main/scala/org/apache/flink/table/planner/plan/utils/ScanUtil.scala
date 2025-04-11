@@ -24,6 +24,7 @@ import org.apache.flink.table.legacy.sources.TableSource
 import org.apache.flink.table.planner.codegen.{CodeGeneratorContext, CodeGenUtils, ExprCodeGenerator, OperatorCodeGenerator}
 import org.apache.flink.table.planner.codegen.CodeGenUtils.{DEFAULT_INPUT1_TERM, GENERIC_ROW}
 import org.apache.flink.table.planner.codegen.OperatorCodeGenerator.generateCollect
+import org.apache.flink.table.planner.plan.nodes.exec.InputProperty
 import org.apache.flink.table.planner.plan.nodes.exec.utils.ExecNodeUtil
 import org.apache.flink.table.runtime.operators.CodeGenOperatorFactory
 import org.apache.flink.table.runtime.types.LogicalTypeDataTypeConverter.fromDataTypeToLogicalType
@@ -69,7 +70,8 @@ object ScanUtil {
       descriptionFormatter: String => String,
       rowtimeExpr: Option[RexNode] = None,
       beforeConvert: String = "",
-      afterConvert: String = ""): Transformation[RowData] = {
+      afterConvert: String = "",
+      inputProperties: util.List[InputProperty]): Transformation[RowData] = {
     // conversion
     val convertName = "SourceConversion"
     // type convert
@@ -130,7 +132,9 @@ object ScanUtil {
       InternalTypeInfo.of(outputRowType),
       input.getParallelism,
       0,
-      false)
+      false,
+      inputProperties
+    )
   }
 
   /** @param qualifiedName qualified name for table */

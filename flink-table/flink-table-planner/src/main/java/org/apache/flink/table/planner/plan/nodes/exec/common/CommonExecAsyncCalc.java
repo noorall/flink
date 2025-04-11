@@ -130,7 +130,8 @@ public abstract class CommonExecAsyncCalc extends ExecNodeBase<RowData>
                 factory,
                 asyncOperatorResultTypeInfo,
                 inputTransform.getParallelism(),
-                false);
+                false,
+                getInputProperties());
     }
 
     private OneInputStreamOperatorFactory<RowData, RowData> getAsyncFunctionOperator(

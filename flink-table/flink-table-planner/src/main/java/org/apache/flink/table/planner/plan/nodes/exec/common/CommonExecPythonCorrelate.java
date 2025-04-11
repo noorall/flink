@@ -147,7 +147,8 @@ public abstract class CommonExecPythonCorrelate extends ExecNodeBase<RowData>
                 pythonOperator,
                 pythonOperatorOutputRowType,
                 inputTransform.getParallelism(),
-                false);
+                false,
+                getInputProperties());
     }
 
     private Tuple2<int[], PythonFunctionInfo> extractPythonTableFunctionInfo(

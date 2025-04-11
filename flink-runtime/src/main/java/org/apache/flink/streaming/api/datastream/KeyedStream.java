@@ -727,7 +727,8 @@ public class KeyedStream<T, KEY> extends DataStream<T> {
                         clean(reducer),
                         keySelector,
                         getKeyType(),
-                        false);
+                        false,
+                        List.of());
         if (isEnableAsyncState) {
             reduce.enableAsyncState();
         }

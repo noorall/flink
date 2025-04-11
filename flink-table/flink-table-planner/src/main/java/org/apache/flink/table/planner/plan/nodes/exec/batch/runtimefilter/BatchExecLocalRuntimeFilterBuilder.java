@@ -102,6 +102,7 @@ public class BatchExecLocalRuntimeFilterBuilder extends ExecNodeBase<RowData>
                 InternalTypeInfo.of(getOutputType()),
                 inputTransform.getParallelism(),
                 0,
-                false);
+                false,
+                getInputProperties());
     }
 }

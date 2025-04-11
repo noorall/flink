@@ -57,7 +57,7 @@ public class DataStreamV2SinkTransformation<InputT, OutputT>
             String name,
             int parallelism,
             boolean parallelismConfigured) {
-        super(name, outputType, parallelism, parallelismConfigured);
+        super(name, outputType, parallelism, parallelismConfigured, List.of());
         this.inputStream = checkNotNull(inputStream);
         this.sink = checkNotNull(sink);
         this.input = inputStream.getTransformation();

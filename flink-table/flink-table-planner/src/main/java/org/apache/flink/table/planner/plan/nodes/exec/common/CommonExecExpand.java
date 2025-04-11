@@ -101,6 +101,7 @@ public abstract class CommonExecExpand extends ExecNodeBase<RowData>
                 operatorFactory,
                 InternalTypeInfo.of(getOutputType()),
                 inputTransform.getParallelism(),
-                false);
+                false,
+                getInputProperties());
     }
 }

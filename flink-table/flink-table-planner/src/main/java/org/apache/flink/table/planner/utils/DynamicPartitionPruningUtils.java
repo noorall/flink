@@ -486,7 +486,7 @@ public class DynamicPartitionPruningUtils {
             } else if (provider instanceof TransformationScanProvider) {
                 Transformation<?> transformation =
                         ((TransformationScanProvider) provider)
-                                .createTransformation(name -> Optional.empty());
+                                .createTransformation(name -> Optional.empty(), List.of());
                 return transformation instanceof SourceTransformation;
             } else if (provider instanceof DataStreamScanProvider) {
                 // Suppose DataStreamScanProvider of sources that support dynamic filtering will use

@@ -26,6 +26,7 @@ import org.apache.flink.api.dag.Transformation;
 import org.apache.flink.streaming.api.datastream.CustomSinkOperatorUidHashes;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.operators.ChainingStrategy;
+import org.apache.flink.table.planner.plan.nodes.exec.InputProperty;
 
 import org.apache.flink.shaded.guava33.com.google.common.collect.Lists;
 
@@ -59,8 +60,9 @@ public class SinkTransformation<InputT, OutputT> extends TransformationWithLinea
             String name,
             int parallelism,
             boolean parallelismConfigured,
-            CustomSinkOperatorUidHashes customSinkOperatorUidHashes) {
-        super(name, outputType, parallelism, parallelismConfigured);
+            CustomSinkOperatorUidHashes customSinkOperatorUidHashes,
+            List<InputProperty> inputProperties) {
+        super(name, outputType, parallelism, parallelismConfigured, inputProperties);
         this.inputStream = checkNotNull(inputStream);
         this.sink = checkNotNull(sink);
         this.input = inputStream.getTransformation();

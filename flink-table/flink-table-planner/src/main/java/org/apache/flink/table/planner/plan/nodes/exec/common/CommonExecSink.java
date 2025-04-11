@@ -317,7 +317,8 @@ public abstract class CommonExecSink extends ExecNodeBase<Object>
                     constraintEnforcer,
                     getInputTypeInfo(),
                     inputTransform.getParallelism(),
-                    false);
+                    false,
+                    getInputProperties());
         } else {
             // there are no not-null fields, just skip adding the enforcer operator
             return inputTransform;
@@ -464,7 +465,8 @@ public abstract class CommonExecSink extends ExecNodeBase<Object>
                 new RowKindSetter(rowKind),
                 inputTransform.getOutputType(),
                 inputTransform.getParallelism(),
-                false);
+                false,
+                getInputProperties());
     }
 
     private Transformation<?> applySinkProvider(
@@ -504,6 +506,11 @@ public abstract class CommonExecSink extends ExecNodeBase<Object>
                             @Override
                             public Optional<String> generateUid(String name) {
                                 return createProviderContext(config).generateUid(name);
+                            }
+
+                            @Override
+                            public List<InputProperty> getInputProperties() {
+                                return CommonExecSink.this.getInputProperties();
                             }
                         });
             } else if (runtimeProvider instanceof SinkFunctionProvider) {
@@ -577,7 +584,8 @@ public abstract class CommonExecSink extends ExecNodeBase<Object>
                         transformationMetadata.getName(),
                         SimpleOperatorFactory.of(operator),
                         sinkParallelism,
-                        sinkParallelismConfigured);
+                        sinkParallelismConfigured,
+                        getInputProperties());
         transformationMetadata.fill(transformation);
         return transformation;
     }
@@ -603,7 +611,8 @@ public abstract class CommonExecSink extends ExecNodeBase<Object>
                 new StreamRecordTimestampInserter(rowtimeFieldIndex),
                 inputTransform.getOutputType(),
                 sinkParallelism,
-                sinkParallelismConfigured);
+                sinkParallelismConfigured,
+                getInputProperties());
     }
 
     private InternalTypeInfo<RowData> getInputTypeInfo() {

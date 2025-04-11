@@ -255,7 +255,8 @@ public class StreamExecProcessTableFunction extends ExecNodeBase<RowData>
                         operatorFactory,
                         InternalTypeInfo.of(getOutputType()),
                         inputTransform.getParallelism(),
-                        false);
+                        false,
+                        getInputProperties());
 
         // For one input (but non-constant) functions with set semantics
         if (singleTableSemantics != null && singleTableSemantics.hasSetSemantics()) {

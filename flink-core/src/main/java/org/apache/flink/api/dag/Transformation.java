@@ -219,14 +219,6 @@ public abstract class Transformation<T> {
             String name,
             TypeInformation<T> outputType,
             int parallelism,
-            boolean parallelismConfigured) {
-        this(name, outputType, parallelism, parallelismConfigured, List.of());
-    }
-
-    public Transformation(
-            String name,
-            TypeInformation<T> outputType,
-            int parallelism,
             boolean parallelismConfigured,
             List<InputProperty> inputProperties) {
         this.id = getNewNodeId();

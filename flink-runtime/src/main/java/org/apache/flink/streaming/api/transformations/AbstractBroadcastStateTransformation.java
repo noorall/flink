@@ -23,6 +23,7 @@ import org.apache.flink.api.common.state.MapStateDescriptor;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.dag.Transformation;
 import org.apache.flink.streaming.api.operators.ChainingStrategy;
+import org.apache.flink.table.planner.plan.nodes.exec.InputProperty;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -76,8 +77,9 @@ public class AbstractBroadcastStateTransformation<IN1, IN2, OUT>
             final List<MapStateDescriptor<?, ?>> broadcastStateDescriptors,
             final TypeInformation<OUT> outTypeInfo,
             final int parallelism,
-            final boolean parallelismConfigured) {
-        super(name, outTypeInfo, parallelism, parallelismConfigured);
+            final boolean parallelismConfigured,
+            List<InputProperty> inputProperties) {
+        super(name, outTypeInfo, parallelism, parallelismConfigured, inputProperties);
         this.regularInput = checkNotNull(regularInput);
         this.broadcastInput = checkNotNull(broadcastInput);
         this.broadcastStateDescriptors = broadcastStateDescriptors;

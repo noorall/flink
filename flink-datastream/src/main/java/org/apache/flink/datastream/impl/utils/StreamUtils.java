@@ -72,6 +72,7 @@ import org.apache.flink.util.OutputTag;
 import org.apache.flink.util.TaggedUnion;
 import org.apache.flink.util.Utils;
 
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -290,7 +291,8 @@ public final class StreamUtils {
                         SimpleUdfStreamOperatorFactory.of(operator),
                         outTypeInformation,
                         inputStream.getEnvironment().getParallelism(),
-                        false);
+                        false,
+                        List.of());
 
         return resultTransform;
     }
@@ -329,7 +331,8 @@ public final class StreamUtils {
                         outTypeInformation,
                         // inputStream1 & 2 share the same env.
                         inputStream1.getEnvironment().getParallelism(),
-                        false);
+                        false,
+                        List.of());
 
         TypeInformation<?> keyType = null;
         if (inputStream1 instanceof KeyedPartitionStreamImpl) {
@@ -399,7 +402,8 @@ public final class StreamUtils {
                         outTypeInformation,
                         // inputStream1 & 2 share the same env.
                         inputStream1.getParallelism(),
-                        false);
+                        false,
+                        List.of());
         transform.setStateKeySelectors(keySelector1, keySelector2);
         transform.setStateKeyType(keyType1);
         return transform;
@@ -421,7 +425,8 @@ public final class StreamUtils {
                         operatorFactory,
                         outTypeInfo,
                         inputStream.getEnvironment().getParallelism(),
-                        false);
+                        false,
+                        List.of());
 
         NonKeyedPartitionStreamImpl<R> returnStream =
                 new NonKeyedPartitionStreamImpl<>(inputStream.getEnvironment(), resultTransform);

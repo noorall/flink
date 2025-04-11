@@ -350,7 +350,8 @@ abstract class JobGraphGeneratorTestBase {
                         new UnusedOperatorFactory(),
                         Types.LONG,
                         env.getParallelism(),
-                        false);
+                        false,
+                        List.of());
         DataStreamSource<Long> source1 =
                 env.fromSource(
                         new NumberSequenceSource(1, 2),

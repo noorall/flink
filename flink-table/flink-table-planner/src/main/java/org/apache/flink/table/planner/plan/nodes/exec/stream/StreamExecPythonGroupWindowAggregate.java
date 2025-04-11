@@ -421,7 +421,8 @@ public class StreamExecPythonGroupWindowAggregate extends StreamExecAggregateBas
                 pythonOperator,
                 InternalTypeInfo.of(outputRowType),
                 inputTransform.getParallelism(),
-                false);
+                false,
+                getInputProperties());
     }
 
     private OneInputTransformation<RowData, RowData>
@@ -466,7 +467,8 @@ public class StreamExecPythonGroupWindowAggregate extends StreamExecAggregateBas
                 pythonOperator,
                 InternalTypeInfo.of(outputRowType),
                 inputTransform.getParallelism(),
-                false);
+                false,
+                getInputProperties());
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})

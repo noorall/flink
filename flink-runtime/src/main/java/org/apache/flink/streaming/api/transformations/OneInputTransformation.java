@@ -28,6 +28,7 @@ import org.apache.flink.streaming.api.operators.OneInputStreamOperator;
 import org.apache.flink.streaming.api.operators.SimpleOperatorFactory;
 import org.apache.flink.streaming.api.operators.StreamOperatorFactory;
 import org.apache.flink.streaming.runtime.operators.asyncprocessing.AsyncStateProcessingOperator;
+import org.apache.flink.table.planner.plan.nodes.exec.InputProperty;
 
 import org.apache.flink.shaded.guava33.com.google.common.collect.Lists;
 
@@ -63,6 +64,7 @@ public class OneInputTransformation<IN, OUT> extends PhysicalTransformation<OUT>
      * @param outputType The type of the elements produced by this {@code OneInputTransformation}
      * @param parallelism The parallelism of this {@code OneInputTransformation}
      */
+    @VisibleForTesting
     public OneInputTransformation(
             Transformation<IN> input,
             String name,
@@ -78,14 +80,16 @@ public class OneInputTransformation<IN, OUT> extends PhysicalTransformation<OUT>
             OneInputStreamOperator<IN, OUT> operator,
             TypeInformation<OUT> outputType,
             int parallelism,
-            boolean parallelismConfigured) {
+            boolean parallelismConfigured,
+            List<InputProperty> inputProperties) {
         this(
                 input,
                 name,
                 SimpleOperatorFactory.of(operator),
                 outputType,
                 parallelism,
-                parallelismConfigured);
+                parallelismConfigured,
+                inputProperties);
     }
 
     public OneInputTransformation(
@@ -117,8 +121,9 @@ public class OneInputTransformation<IN, OUT> extends PhysicalTransformation<OUT>
             StreamOperatorFactory<OUT> operatorFactory,
             TypeInformation<OUT> outputType,
             int parallelism,
-            boolean parallelismConfigured) {
-        super(name, outputType, parallelism, parallelismConfigured);
+            boolean parallelismConfigured,
+            List<InputProperty> inputProperties) {
+        super(name, outputType, parallelism, parallelismConfigured, inputProperties);
         this.input = input;
         this.operatorFactory = operatorFactory;
     }

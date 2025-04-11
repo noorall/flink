@@ -114,7 +114,8 @@ final class ExternalDynamicSink implements DynamicTableSink, SupportsWritingMeta
                                     consumeRowtimeMetadata),
                             ExternalTypeInfo.of(physicalDataType),
                             input.getParallelism(),
-                            false);
+                            false,
+                            transformationContext.getInputProperties());
                 };
     }
 

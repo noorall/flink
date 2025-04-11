@@ -100,7 +100,8 @@ public abstract class CommonExecWindowTableFunction extends ExecNodeBase<RowData
                 windowTableFunctionOperator,
                 InternalTypeInfo.of(getOutputType()),
                 inputTransform.getParallelism(),
-                false);
+                false,
+                getInputProperties());
     }
 
     private WindowTableFunctionOperatorBase createAlignedWindowTableFunctionOperator(

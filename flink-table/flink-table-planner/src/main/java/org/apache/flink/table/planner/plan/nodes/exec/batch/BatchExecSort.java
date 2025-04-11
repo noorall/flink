@@ -136,6 +136,7 @@ public class BatchExecSort extends ExecNodeBase<RowData>
                 InternalTypeInfo.of((RowType) getOutputType()),
                 inputTransform.getParallelism(),
                 sortMemory,
-                false);
+                false,
+                getInputProperties());
     }
 }

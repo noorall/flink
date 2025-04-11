@@ -34,6 +34,7 @@ import org.apache.flink.streaming.api.operators.StreamOperator;
 import org.apache.flink.streaming.api.operators.StreamOperatorFactory;
 import org.apache.flink.streaming.api.operators.StreamSink;
 import org.apache.flink.streaming.api.operators.UserFunctionProvider;
+import org.apache.flink.table.planner.plan.nodes.exec.InputProperty;
 
 import org.apache.flink.shaded.guava33.com.google.common.collect.Lists;
 
@@ -73,8 +74,15 @@ public class LegacySinkTransformation<T> extends TransformationWithLineage<T> {
             String name,
             StreamSink<T> operator,
             int parallelism,
-            boolean parallelismConfigured) {
-        this(input, name, SimpleOperatorFactory.of(operator), parallelism, parallelismConfigured);
+            boolean parallelismConfigured,
+            List<InputProperty> inputProperties) {
+        this(
+                input,
+                name,
+                SimpleOperatorFactory.of(operator),
+                parallelism,
+                parallelismConfigured,
+                inputProperties);
     }
 
     public LegacySinkTransformation(
@@ -92,8 +100,9 @@ public class LegacySinkTransformation<T> extends TransformationWithLineage<T> {
             String name,
             StreamOperatorFactory<Object> operatorFactory,
             int parallelism,
-            boolean parallelismConfigured) {
-        super(name, input.getOutputType(), parallelism, parallelismConfigured);
+            boolean parallelismConfigured,
+            List<InputProperty> inputProperties) {
+        super(name, input.getOutputType(), parallelism, parallelismConfigured, inputProperties);
         this.input = input;
         this.operatorFactory = operatorFactory;
     }

@@ -287,7 +287,8 @@ public class StreamExecGlobalGroupAggregate extends StreamExecAggregateBase {
                         operator,
                         InternalTypeInfo.of(getOutputType()),
                         inputTransform.getParallelism(),
-                        false);
+                        false,
+                        getInputProperties());
 
         // set KeyType and Selector for state
         final RowDataKeySelector selector =

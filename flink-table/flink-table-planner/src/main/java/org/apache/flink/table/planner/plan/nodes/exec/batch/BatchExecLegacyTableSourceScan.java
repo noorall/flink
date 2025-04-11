@@ -111,7 +111,8 @@ public class BatchExecLegacyTableSourceScan extends CommonExecLegacyTableSourceS
                     (description) -> createFormattedTransformationDescription(description, config),
                     JavaScalaConversionUtil.toScala(Optional.ofNullable(rowtimeExpression)),
                     "",
-                    "");
+                    "",
+                    getInputProperties());
 
         } else {
             return (Transformation<RowData>) sourceTransform;
