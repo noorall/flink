@@ -30,6 +30,7 @@ import org.apache.flink.runtime.jobgraph.forwardgroup.ForwardGroupComputeUtil;
 import org.apache.flink.runtime.jobgraph.forwardgroup.StreamNodeForwardGroup;
 import org.apache.flink.runtime.jobgraph.jsonplan.JsonPlanGenerator;
 import org.apache.flink.runtime.jobmanager.scheduler.SlotSharingGroup;
+import org.apache.flink.streaming.api.graph.multinput.MultipleInputNodeCreationProcessor;
 import org.apache.flink.streaming.api.graph.util.JobVertexBuildContext;
 import org.apache.flink.streaming.api.graph.util.OperatorChainInfo;
 import org.apache.flink.streaming.api.transformations.StreamExchangeMode;
@@ -38,6 +39,9 @@ import org.apache.flink.streaming.runtime.partitioner.ForwardForUnspecifiedParti
 import org.apache.flink.streaming.runtime.partitioner.ForwardPartitioner;
 import org.apache.flink.streaming.runtime.partitioner.StreamPartitioner;
 import org.apache.flink.util.Preconditions;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -57,6 +61,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
+import static org.apache.flink.configuration.PipelineOptions.MULTI_INPUT_OPERATOR_CHAINING;
 import static org.apache.flink.streaming.api.graph.StreamingJobGraphGenerator.addVertexIndexPrefixInVertexName;
 import static org.apache.flink.streaming.api.graph.StreamingJobGraphGenerator.connect;
 import static org.apache.flink.streaming.api.graph.StreamingJobGraphGenerator.createAndInitializeJobGraph;
@@ -79,6 +84,8 @@ import static org.apache.flink.streaming.api.graph.StreamingJobGraphGenerator.va
 public class AdaptiveGraphManager
         implements AdaptiveGraphGenerator, StreamGraphContext.StreamGraphUpdateListener {
 
+    private static final Logger LOG = LoggerFactory.getLogger(AdaptiveGraphManager.class);
+
     private final StreamGraph streamGraph;
 
     private final JobGraph jobGraph;
@@ -99,6 +106,7 @@ public class AdaptiveGraphManager
 
     // Records the ids of stream nodes of which the job vertices are already created.
     private final Map<Integer, Integer> frozenNodeToStartNodeMap;
+    private final Set<StreamNode> frozenNodes;
 
     // When the downstream vertex is not created, we need to cache the output.
     private final Map<Integer, Map<StreamEdge, NonChainedOutput>> intermediateOutputsCaches;
@@ -121,6 +129,59 @@ public class AdaptiveGraphManager
     // Records the chain info that is not ready to create the job vertex, the key is the start node
     // in this chain.
     private final Map<Integer, OperatorChainInfo> pendingChainEntryPoints;
+    private final ClassLoader userClassloader;
+
+    private void updatePendingChainEntryPoints(
+            MultipleInputNodeCreationProcessor.UpdatedResult updatedResult) {
+        if (updatedResult.isUpdated()) {
+            Set<StreamNode> needTriggerChainEntryPoints = new HashSet<>();
+            Map<Integer, Collection<Integer>> map = updatedResult.getNewNodeIdToOriginalNodes();
+            map.forEach(
+                    (newNodeId, beRemovedNodeIds) -> {
+                        for (int beRemovedNodeId : beRemovedNodeIds) {
+                            buildNeedTriggerChainEntryPoints(
+                                    newNodeId, beRemovedNodeId, needTriggerChainEntryPoints);
+                        }
+                    });
+
+            buildChainEntryPoints(
+                    needTriggerChainEntryPoints,
+                    new JobVertexBuildContext(
+                            jobGraph,
+                            streamGraph,
+                            hasHybridResultPartition,
+                            hashes,
+                            legacyHashes,
+                            defaultSlotSharingGroup));
+        }
+    }
+
+    private void buildNeedTriggerChainEntryPoints(
+            Integer newNodeId, int beRemovedNodeId, Set<StreamNode> needTriggerChainEntryPoints) {
+        if (pendingChainEntryPoints.containsKey(beRemovedNodeId)) {
+            OperatorChainInfo operatorChainInfo = pendingChainEntryPoints.get(beRemovedNodeId);
+            // the info will only contain start node id and chained source if it's a chainable
+            // source
+
+            // note this source will not be removed, so here we could directly check the
+            // start node id
+            for (Map<Integer, byte[]> legacyHash : legacyHashes) {
+                legacyHash.remove(beRemovedNodeId);
+            }
+            hashes.remove(beRemovedNodeId);
+
+            pendingChainEntryPoints.remove(beRemovedNodeId);
+
+            if (operatorChainInfo.getChainedSources().isEmpty()) {
+                needTriggerChainEntryPoints.add(streamGraph.getStreamNode(newNodeId));
+            } else {
+                needTriggerChainEntryPoints.addAll(
+                        operatorChainInfo.getChainedSources().keySet().stream()
+                                .map(streamGraph::getStreamNode)
+                                .collect(Collectors.toList()));
+            }
+        }
+    }
 
     // The value is the stream node ids belonging to that job vertex.
     private final Map<JobVertexID, Integer> jobVertexToStartNodeMap;
@@ -161,6 +222,7 @@ public class AdaptiveGraphManager
         this.pendingChainEntryPoints = new TreeMap<>();
 
         this.frozenNodeToStartNodeMap = new HashMap<>();
+        this.frozenNodes = new HashSet<>();
         this.intermediateOutputsCaches = new HashMap<>();
         this.intermediateDataSetIdToProducerMap = new HashMap<>();
         this.intermediateDataSetIdToOutputEdgesMap = new HashMap<>();
@@ -182,15 +244,18 @@ public class AdaptiveGraphManager
                         streamGraph,
                         steamNodeIdToForwardGroupMap,
                         frozenNodeToStartNodeMap,
+                        frozenNodes,
                         intermediateOutputsCaches,
                         consumerEdgeIdToIntermediateDataSetMap,
                         finishedStreamNodeIds,
                         userClassloader,
-                        this);
+                        this,
+                        this::updatePendingChainEntryPoints);
 
         this.jobGraph = createAndInitializeJobGraph(streamGraph, streamGraph.getJobID());
 
         this.defaultSlotSharingGroup = new SlotSharingGroup();
+        this.userClassloader = userClassloader;
 
         initialization();
     }
@@ -294,6 +359,8 @@ public class AdaptiveGraphManager
         }
         if (jobGraph.isDynamic()) {
             setVertexParallelismsForDynamicGraphIfNecessary();
+
+            createMultiInputChain();
         }
         createJobVerticesAndUpdateGraph(sourceNodes);
     }
@@ -455,6 +522,7 @@ public class AdaptiveGraphManager
                             node -> {
                                 frozenNodeToStartNodeMap.put(
                                         node.getId(), chainInfo.getStartNodeId());
+                                frozenNodes.add(node);
                                 jobVertexToChainedStreamNodeIdsMap
                                         .computeIfAbsent(
                                                 jobVertex.getID(), key -> new ArrayList<>())
@@ -501,9 +569,21 @@ public class AdaptiveGraphManager
 
     private Map<Integer, OperatorChainInfo> buildAndGetChainEntryPoints(
             List<StreamNode> streamNodes, JobVertexBuildContext jobVertexBuildContext) {
+        buildChainEntryPoints(streamNodes, jobVertexBuildContext);
+        return getChainEntryPointsReadyForJobVertex();
+    }
+
+    private void buildChainEntryPoints(
+            Collection<StreamNode> streamNodes, JobVertexBuildContext jobVertexBuildContext) {
         Collection<Integer> sourceNodeIds = streamGraph.getSourceIDs();
         for (StreamNode streamNode : streamNodes) {
             int streamNodeId = streamNode.getId();
+            LOG.info(
+                    "May create source chain for stream node {}, sourceNodeIds.contains(streamNodeId) {} , isChainableSource(streamNode, streamGraph) {}",
+                    streamNode,
+                    sourceNodeIds.contains(streamNodeId),
+                    isChainableSource(streamNode, streamGraph));
+            LOG.info("--------------------------------------------------------");
             if (sourceNodeIds.contains(streamNodeId)
                     && isChainableSource(streamNode, streamGraph)) {
                 generateHashesByStreamNodeId(streamNodeId);
@@ -513,7 +593,6 @@ public class AdaptiveGraphManager
                         streamNodeId, ignored -> new OperatorChainInfo(streamNodeId));
             }
         }
-        return getChainEntryPointsReadyForJobVertex();
     }
 
     private Map<Integer, OperatorChainInfo> getChainEntryPointsReadyForJobVertex() {
@@ -602,6 +681,10 @@ public class AdaptiveGraphManager
                             steamNodeIdToForwardGroupMap.get(streamNode.getId());
                     // set parallelism for vertices in forward group.
                     if (forwardGroup != null && forwardGroup.isParallelismDecided()) {
+                        LOG.info(
+                                "Set parallelism for stream node {} to {} according to forward group",
+                                streamNode,
+                                forwardGroup.getParallelism());
                         streamNode.setParallelism(forwardGroup.getParallelism(), true);
                     }
                     if (forwardGroup != null && forwardGroup.isMaxParallelismDecided()) {
@@ -618,6 +701,7 @@ public class AdaptiveGraphManager
                             && isChainableSource(
                                     streamGraph.getStreamNode(edge.getSourceId()), streamGraph))
                     || isChainable(edge, streamGraph)) {
+                LOG.info("Set edge {} to forward", edge);
                 edge.setPartitioner(new ForwardPartitioner<>());
 
                 // ForwardForConsecutiveHashPartitioner may use BATCH exchange mode, which prevents
@@ -633,7 +717,14 @@ public class AdaptiveGraphManager
                 if (partitioner instanceof ForwardForUnspecifiedPartitioner) {
                     edge.setIntraInputKeyCorrelated(false);
                 }
+            } else {
+                LOG.info(
+                        "Edge {} with partitioner {} is not chainable, skip converting partitioner to forward",
+                        edge,
+                        partitioner);
             }
+        } else {
+            LOG.info("Edge {} already with partitioner {}", edge, partitioner);
         }
     }
 
@@ -710,5 +801,20 @@ public class AdaptiveGraphManager
     @Override
     public void onStreamGraphUpdated() {
         generateStreamGraphJson();
+    }
+
+    public void createMultiInputChain() {
+        if (enableMultiInputChain()) {
+            LOG.info("Attempt to create multi-input chain.");
+            if (MultipleInputNodeCreationProcessor.process(
+                            userClassloader, streamGraph, frozenNodes, steamNodeIdToForwardGroupMap)
+                    .isUpdated()) {
+                LOG.info("Successfully created multi-input chain.");
+            }
+        }
+    }
+
+    private boolean enableMultiInputChain() {
+        return streamGraph.getJobConfiguration().get(MULTI_INPUT_OPERATOR_CHAINING);
     }
 }

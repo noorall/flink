@@ -24,6 +24,7 @@ import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.annotation.JsonCre
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.annotation.JsonProperty;
 
+import java.io.Serializable;
 import java.util.Arrays;
 import java.util.Objects;
 
@@ -37,7 +38,9 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
  */
 @Internal
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class InputProperty {
+public class InputProperty implements Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     /** The input does not require any specific data distribution. */
     public static final RequiredDistribution ANY_DISTRIBUTION =
@@ -183,7 +186,8 @@ public class InputProperty {
     }
 
     /** The required input data distribution for records when they are read in. */
-    public abstract static class RequiredDistribution {
+    public abstract static class RequiredDistribution implements Serializable {
+        private static final long serialVersionUID = 1L;
         private final DistributionType type;
 
         protected RequiredDistribution(DistributionType type) {

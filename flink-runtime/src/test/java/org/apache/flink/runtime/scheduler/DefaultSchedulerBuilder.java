@@ -429,7 +429,7 @@ public class DefaultSchedulerBuilder {
                         consumedResults.isEmpty()
                                 ? Collections.emptyMap()
                                 : VertexInputInfoComputationUtils.computeVertexInputInfos(
-                                        parallelism, consumedResults, true));
+                                        parallelism, consumedResults, true, null));
             }
 
             @Override

@@ -20,10 +20,10 @@ package org.apache.flink.streaming.api.graph;
 
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.annotation.VisibleForTesting;
-import org.apache.flink.runtime.jobgraph.DistributionPattern;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSet;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 import org.apache.flink.runtime.jobgraph.forwardgroup.StreamNodeForwardGroup;
+import org.apache.flink.streaming.api.graph.multinput.MultipleInputNodeCreationProcessor;
 import org.apache.flink.streaming.api.graph.util.ImmutableStreamEdge;
 import org.apache.flink.streaming.api.graph.util.ImmutableStreamGraph;
 import org.apache.flink.streaming.api.graph.util.ImmutableStreamNode;
@@ -41,12 +41,15 @@ import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
+import static org.apache.flink.configuration.PipelineOptions.MULTI_INPUT_OPERATOR_CHAINING;
 import static org.apache.flink.runtime.jobgraph.forwardgroup.ForwardGroupComputeUtil.canTargetMergeIntoSourceForwardGroup;
 import static org.apache.flink.util.Preconditions.checkNotNull;
 import static org.apache.flink.util.Preconditions.checkState;
@@ -58,7 +61,9 @@ public class DefaultStreamGraphContext implements StreamGraphContext {
     private static final Logger LOG = LoggerFactory.getLogger(DefaultStreamGraphContext.class);
 
     private final StreamGraph streamGraph;
-    private final ImmutableStreamGraph immutableStreamGraph;
+    private final Consumer<MultipleInputNodeCreationProcessor.UpdatedResult>
+            notifyStreamGraphTopologyUpdated;
+    private ImmutableStreamGraph immutableStreamGraph;
 
     // The attributes below are reused from AdaptiveGraphManager as AdaptiveGraphManager also needs
     // to use the modified information to create the job vertex.
@@ -81,6 +86,8 @@ public class DefaultStreamGraphContext implements StreamGraphContext {
     private final Set<Integer> finishedStreamNodeIds;
 
     @Nullable private final StreamGraphUpdateListener streamGraphUpdateListener;
+    private final Set<StreamNode> frozenNodes;
+    private final ClassLoader userClassloader;
 
     @VisibleForTesting
     public DefaultStreamGraphContext(
@@ -95,36 +102,49 @@ public class DefaultStreamGraphContext implements StreamGraphContext {
                 streamGraph,
                 steamNodeIdToForwardGroupMap,
                 frozenNodeToStartNodeMap,
+                Set.of(),
                 opIntermediateOutputsCaches,
                 consumerEdgeIdToIntermediateDataSetMap,
                 finishedStreamNodeIds,
                 userClassloader,
-                null);
+                null,
+                ignored -> {});
     }
 
     public DefaultStreamGraphContext(
             StreamGraph streamGraph,
             Map<Integer, StreamNodeForwardGroup> steamNodeIdToForwardGroupMap,
             Map<Integer, Integer> frozenNodeToStartNodeMap,
+            Set<StreamNode> frozenNodes,
             Map<Integer, Map<StreamEdge, NonChainedOutput>> opIntermediateOutputsCaches,
             Map<String, IntermediateDataSet> consumerEdgeIdToIntermediateDataSetMap,
             Set<Integer> finishedStreamNodeIds,
             ClassLoader userClassloader,
-            @Nullable StreamGraphUpdateListener streamGraphUpdateListener) {
+            @Nullable StreamGraphUpdateListener streamGraphUpdateListener,
+            Consumer<MultipleInputNodeCreationProcessor.UpdatedResult>
+                    notifyStreamGraphTopologyUpdated) {
         this.streamGraph = checkNotNull(streamGraph);
         this.steamNodeIdToForwardGroupMap = checkNotNull(steamNodeIdToForwardGroupMap);
         this.frozenNodeToStartNodeMap = checkNotNull(frozenNodeToStartNodeMap);
         this.opIntermediateOutputsCaches = checkNotNull(opIntermediateOutputsCaches);
         this.immutableStreamGraph = new ImmutableStreamGraph(this.streamGraph, userClassloader);
+        this.userClassloader = checkNotNull(userClassloader);
         this.consumerEdgeIdToIntermediateDataSetMap =
                 checkNotNull(consumerEdgeIdToIntermediateDataSetMap);
         this.finishedStreamNodeIds = finishedStreamNodeIds;
         this.streamGraphUpdateListener = streamGraphUpdateListener;
+        this.frozenNodes = checkNotNull(frozenNodes);
+        this.notifyStreamGraphTopologyUpdated = checkNotNull(notifyStreamGraphTopologyUpdated);
     }
 
     @Override
     public ImmutableStreamGraph getStreamGraph() {
         return immutableStreamGraph;
+    }
+
+    @Override
+    public StreamGraph getStreamGraphInternal() {
+        return streamGraph;
     }
 
     @Override
@@ -224,25 +244,27 @@ public class DefaultStreamGraphContext implements StreamGraphContext {
         StreamEdge targetEdge = getStreamEdge(sourceNodeId, targetNodeId, requestInfo.getEdgeId());
 
         // Modification to output partitioner is not allowed when the subscribing output is reused.
-        if (requestInfo.getOutputPartitioner() != null) {
-            Map<StreamEdge, NonChainedOutput> opIntermediateOutputs =
-                    opIntermediateOutputsCaches.get(sourceNodeId);
-            NonChainedOutput output =
-                    opIntermediateOutputs != null ? opIntermediateOutputs.get(targetEdge) : null;
-            if (output != null) {
-                Set<StreamEdge> consumerStreamEdges =
-                        opIntermediateOutputs.entrySet().stream()
-                                .filter(entry -> entry.getValue().equals(output))
-                                .map(Map.Entry::getKey)
-                                .collect(Collectors.toSet());
-                if (consumerStreamEdges.size() != 1) {
-                    LOG.info(
-                            "Skip modifying edge {} because the subscribing output is reused.",
-                            targetEdge);
-                    return false;
-                }
-            }
-        }
+        //        if (requestInfo.getOutputPartitioner() != null) {
+        //            Map<StreamEdge, NonChainedOutput> opIntermediateOutputs =
+        //                    opIntermediateOutputsCaches.get(sourceNodeId);
+        //            NonChainedOutput output =
+        //                    opIntermediateOutputs != null ? opIntermediateOutputs.get(targetEdge)
+        // : null;
+        //            if (output != null) {
+        //                Set<StreamEdge> consumerStreamEdges =
+        //                        opIntermediateOutputs.entrySet().stream()
+        //                                .filter(entry -> entry.getValue().equals(output))
+        //                                .map(Map.Entry::getKey)
+        //                                .collect(Collectors.toSet());
+        //                if (consumerStreamEdges.size() != 1) {
+        //                    LOG.info(
+        //                            "Skip modifying edge {} because the subscribing output is
+        // reused.",
+        //                            targetEdge);
+        //                    return false;
+        //                }
+        //            }
+        //        }
 
         if (frozenNodeToStartNodeMap.containsKey(targetNodeId)) {
             LOG.info(
@@ -299,20 +321,7 @@ public class DefaultStreamGraphContext implements StreamGraphContext {
         }
 
         Optional.ofNullable(consumerEdgeIdToIntermediateDataSetMap.get(targetEdge.getEdgeId()))
-                .ifPresent(
-                        dataSet -> {
-                            DistributionPattern distributionPattern =
-                                    targetEdge.getPartitioner().isPointwise()
-                                            ? DistributionPattern.POINTWISE
-                                            : DistributionPattern.ALL_TO_ALL;
-                            dataSet.updateOutputPattern(
-                                    distributionPattern,
-                                    targetEdge.getPartitioner().isBroadcast(),
-                                    targetEdge
-                                            .getPartitioner()
-                                            .getClass()
-                                            .equals(ForwardPartitioner.class));
-                        });
+                .ifPresent(dataSet -> dataSet.updateOutputPattern(targetEdge));
 
         LOG.info(
                 "The original partitioner of the edge {} is: {} , requested change to: {} , and finally modified to: {}.",
@@ -339,6 +348,9 @@ public class DefaultStreamGraphContext implements StreamGraphContext {
             checkState(mergeForwardGroups(sourceNodeId, targetNodeId));
         } else if (targetEdge.getPartitioner() instanceof ForwardForUnspecifiedPartitioner) {
             targetEdge.setPartitioner(new RescalePartitioner<>());
+            if (streamGraph.getJobConfiguration().get(MULTI_INPUT_OPERATOR_CHAINING)) {
+                mayBeChainInMultiInput.add(targetEdge);
+            }
         } else if (targetEdge.getPartitioner() instanceof ForwardForConsecutiveHashPartitioner) {
             targetEdge.setPartitioner(
                     ((ForwardForConsecutiveHashPartitioner<?>) targetEdge.getPartitioner())
@@ -348,6 +360,8 @@ public class DefaultStreamGraphContext implements StreamGraphContext {
             checkState(mergeForwardGroups(sourceNodeId, targetNodeId));
         }
     }
+
+    private final List<StreamEdge> mayBeChainInMultiInput = new ArrayList<>();
 
     private boolean canConvertToForwardPartitioner(StreamEdge targetEdge) {
         Integer sourceNodeId = targetEdge.getSourceId();
@@ -365,6 +379,42 @@ public class DefaultStreamGraphContext implements StreamGraphContext {
         } else {
             return false;
         }
+    }
+
+    @Override
+    public void replaceMultiInput(Consumer<StreamNode> innerNodesConsumer) {
+        if (mayBeChainInMultiInput.isEmpty()) {
+            return;
+        }
+
+        for (StreamEdge targetEdge : mayBeChainInMultiInput) {
+            checkState(targetEdge.getPartitioner() instanceof RescalePartitioner);
+            if (canTargetMergeIntoSourceForwardGroup(
+                    steamNodeIdToForwardGroupMap.get(targetEdge.getSourceId()),
+                    steamNodeIdToForwardGroupMap.get(targetEdge.getTargetId()))) {
+                targetEdge.setPartitioner(new ForwardPartitioner<>());
+                LOG.info("Temporary convert edge {} to ForwardPartitioner.", targetEdge);
+            }
+        }
+
+        MultipleInputNodeCreationProcessor.UpdatedResult result =
+                MultipleInputNodeCreationProcessor.process(
+                        userClassloader, streamGraph, frozenNodes, steamNodeIdToForwardGroupMap);
+        if (result.isUpdated()) {
+            LOG.info("Success replace multi input");
+            notifyStreamGraphTopologyUpdated.accept(result);
+            this.immutableStreamGraph = new ImmutableStreamGraph(streamGraph, userClassloader);
+        }
+
+        // 1. we should revert partitioner to rescale partitioner except the edges are included in
+        // multi input nodes
+        mayBeChainInMultiInput.stream()
+                .filter(edge -> !result.getInnerEdges().contains(edge))
+                .forEach(edge -> edge.setPartitioner(new RescalePartitioner<>()));
+        mayBeChainInMultiInput.clear();
+
+        // 2. we should generate all adaptive join operator which are included in multi input
+        result.getInnerNodes().forEach(innerNodesConsumer);
     }
 
     private boolean mergeForwardGroups(Integer sourceNodeId, Integer targetNodeId) {

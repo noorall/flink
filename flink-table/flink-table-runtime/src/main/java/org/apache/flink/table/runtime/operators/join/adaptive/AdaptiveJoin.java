@@ -61,4 +61,8 @@ public interface AdaptiveJoin extends Serializable {
      * @return whether the inputs should be reordered.
      */
     boolean shouldReorderInputs();
+
+    boolean leftIsBuild();
+
+    boolean originalLeftIsBuild();
 }

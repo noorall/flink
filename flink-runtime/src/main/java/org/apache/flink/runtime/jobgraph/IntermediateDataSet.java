@@ -19,9 +19,16 @@
 package org.apache.flink.runtime.jobgraph;
 
 import org.apache.flink.runtime.io.network.partition.ResultPartitionType;
+import org.apache.flink.streaming.api.graph.StreamEdge;
+import org.apache.flink.streaming.runtime.partitioner.ForwardPartitioner;
+import org.apache.flink.streaming.runtime.partitioner.StreamPartitioner;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
 import static org.apache.flink.util.Preconditions.checkState;
@@ -42,6 +49,8 @@ public class IntermediateDataSet implements java.io.Serializable {
 
     // All consumers must have the same partitioner and parallelism
     private final List<JobEdge> consumers = new ArrayList<>();
+
+    private final Map<JobVertexID, JobEdge> edges = new HashMap<>();
 
     // The type of partition to use at runtime
     private final ResultPartitionType resultType;
@@ -86,12 +95,30 @@ public class IntermediateDataSet implements java.io.Serializable {
         return isBroadcast;
     }
 
+    public boolean isBroadcast(JobVertexID consumerId) {
+        return edges.get(consumerId).isBroadcast();
+    }
+
     public boolean isForward() {
         return isForward;
     }
 
+    public boolean isForward(JobVertexID consumerId) {
+        return edges.get(consumerId).isForward();
+    }
+
     public DistributionPattern getDistributionPattern() {
         return distributionPattern;
+    }
+
+    public DistributionPattern getDistributionPattern(JobVertexID consumerId) {
+        return edges.get(consumerId).getDistributionPattern();
+    }
+
+    private Set<DistributionPattern> patternsCache = new HashSet<>();
+
+    public Set<DistributionPattern> getConsumingDistributionPatterns() {
+        return patternsCache;
     }
 
     public ResultPartitionType getResultType() {
@@ -108,14 +135,19 @@ public class IntermediateDataSet implements java.io.Serializable {
             distributionPattern = edge.getDistributionPattern();
             isBroadcast = edge.isBroadcast();
             isForward = edge.isForward();
-        } else {
-            checkState(
-                    distributionPattern == edge.getDistributionPattern(),
-                    "Incompatible distribution pattern.");
-            checkState(isBroadcast == edge.isBroadcast(), "Incompatible broadcast type.");
-            checkState(isForward == edge.isForward(), "Incompatible forward type.");
+            patternsCache.add(distributionPattern);
         }
+        checkState(
+                patternsCache.contains(edge.getDistributionPattern()),
+                this
+                        + " has "
+                        + patternsCache
+                        + " not contains edge "
+                        + edge
+                        + " with pattern "
+                        + edge.getDistributionPattern());
         consumers.add(edge);
+        edges.put(edge.getTarget().getID(), edge);
     }
 
     public void configure(
@@ -125,6 +157,7 @@ public class IntermediateDataSet implements java.io.Serializable {
             this.distributionPattern = distributionPattern;
             this.isBroadcast = isBroadcast;
             this.isForward = isForward;
+            patternsCache.add(distributionPattern);
         } else {
             checkState(
                     this.distributionPattern == distributionPattern,
@@ -134,17 +167,37 @@ public class IntermediateDataSet implements java.io.Serializable {
         }
     }
 
-    public void updateOutputPattern(
-            DistributionPattern distributionPattern, boolean isBroadcast, boolean isForward) {
-        checkState(consumers.isEmpty(), "The output job edges have already been added.");
-        checkState(
-                numJobEdgesToCreate == 1,
-                "Modification is not allowed when the subscribing output is reused.");
+    public void updateOutputPattern(StreamEdge streamEdge) {
+        // checkState(consumers.isEmpty(), "The output job edges have already been added.");
 
-        this.distributionPattern = distributionPattern;
-        this.isBroadcast = isBroadcast;
-        this.isForward = isForward;
+        updatedStreamEdges.add(streamEdge);
+        DistributionPattern pattern =
+                streamEdge.getPartitioner().isPointwise()
+                        ? DistributionPattern.POINTWISE
+                        : DistributionPattern.ALL_TO_ALL;
+        patternsCache.add(pattern);
+
+        if (updatedStreamEdges.size() == numJobEdgesToCreate) {
+
+            Set<StreamPartitioner> partitioners = new HashSet<>();
+            updatedStreamEdges.stream().map(StreamEdge::getPartitioner).forEach(partitioners::add);
+
+            if (partitioners.size() == 1) {
+                StreamPartitioner partitioner = partitioners.iterator().next();
+                distributionPattern =
+                        partitioner.isPointwise()
+                                ? DistributionPattern.POINTWISE
+                                : DistributionPattern.ALL_TO_ALL;
+                isBroadcast = partitioner.isBroadcast();
+                isForward = partitioner.getClass().equals(ForwardPartitioner.class);
+
+                patternsCache.clear();
+                patternsCache.add(distributionPattern);
+            }
+        }
     }
+
+    private final List<StreamEdge> updatedStreamEdges = new ArrayList<>();
 
     public void increaseNumJobEdgesToCreate() {
         this.numJobEdgesToCreate++;
@@ -155,5 +208,15 @@ public class IntermediateDataSet implements java.io.Serializable {
     @Override
     public String toString() {
         return "Intermediate Data Set (" + id + ")";
+    }
+
+    public Set<JobVertexID> getConsumingBroadcastVertices() {
+        Set<JobVertexID> broadcastConsumerJobVertices = new HashSet<>();
+        consumers.stream()
+                .filter(JobEdge::isBroadcast)
+                .map(JobEdge::getTarget)
+                .map(JobVertex::getID)
+                .forEach(broadcastConsumerJobVertices::add);
+        return broadcastConsumerJobVertices;
     }
 }

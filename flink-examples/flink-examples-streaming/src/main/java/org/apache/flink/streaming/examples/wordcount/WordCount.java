@@ -179,6 +179,72 @@ public class WordCount {
         env.execute("WordCount");
     }
 
+    // public static void main(String[] args) throws Exception {
+    //        final CLI params = CLI.fromArgs(args);
+    //
+    //        // Create the execution environment. This is the main entrypoint
+    //        // to building a Flink application.
+    //        final StreamExecutionEnvironment env =
+    // StreamExecutionEnvironment.getExecutionEnvironment();
+    //        env.setRuntimeMode(RuntimeExecutionMode.BATCH);
+    //        DataStreamSource<String> sourc1 = env.fromData("a", "b", "c");
+    //        DataStreamSource<String> sourc3 = env.fromData("d", "e");
+    //        DataStreamSource<String> sourc5 = env.fromData("f");
+    //        DataStreamSource<Integer> sourc2 = env.fromData(6, 7, 8, 9);
+    //        DataStreamSource<Integer> sourc4 = env.fromData(1, 2, 3, 4, 5);
+    //        InputProperty build =
+    //                InputProperty.builder()
+    //                        .requiredDistribution(InputProperty.BROADCAST_DISTRIBUTION)
+    //                        .damBehavior(InputProperty.DamBehavior.BLOCKING)
+    //                        .priority(0)
+    //                        .build();
+    //        InputProperty probe =
+    //                InputProperty.builder()
+    //                        .requiredDistribution(InputProperty.ANY_DISTRIBUTION)
+    //                        .damBehavior(InputProperty.DamBehavior.BLOCKING)
+    //                        .priority(1)
+    //                        .build();
+    //        env.setParallelism(1);
+    //
+    //        sourc1.union(sourc3)
+    //                .map(i -> i)
+    //                .addInputProperties(InputProperty.DEFAULT)
+    //                .union(sourc5)
+    //                .forward() // input 1
+    //                .connect(
+    //                        sourc2.map(i -> i * 2)
+    //                                .addInputProperties(InputProperty.DEFAULT)
+    //                                .union(sourc4)
+    //                                .broadcast()) // input2
+    //                .transform(
+    //                        "operator", BasicTypeInfo.STRING_TYPE_INFO, new
+    // TwoInputIdentityOperator())
+    //                .addInputProperties(build)
+    //                .addInputProperties(probe)
+    //                .print()
+    //                .addInputProperties(
+    //                        InputProperty.builder()
+    //                                .damBehavior(InputProperty.DamBehavior.BLOCKING)
+    //                                .build());
+    //        // Apache Flink applications are composed lazily. Calling execute
+    //        // submits the Job and begins processing.
+    //        env.execute("WordCount");
+    //        // the expected output is a, b, c, d, e, f, 1, 2, 3, 4, 5, 12, 14, 16, 18
+    //    }
+    //
+    //    private static class TwoInputIdentityOperator extends AbstractStreamOperator<String>
+    //            implements TwoInputStreamOperator<String, Integer, String> {
+    //        @Override
+    //        public void processElement1(StreamRecord<String> element) throws Exception {
+    //            output.collect(element);
+    //        }
+    //
+    //        @Override
+    //        public void processElement2(StreamRecord<Integer> element) throws Exception {
+    //            output.collect(new StreamRecord<>(element.getValue().toString()));
+    //        }
+    //    }
+
     // *************************************************************************
     // USER FUNCTIONS
     // *************************************************************************

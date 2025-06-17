@@ -20,7 +20,9 @@ package org.apache.flink.runtime.scheduler.adaptivebatch;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
+import org.apache.flink.streaming.api.graph.StreamGraph;
 import org.apache.flink.streaming.api.graph.StreamGraphContext;
+import org.apache.flink.streaming.api.graph.StreamNode;
 import org.apache.flink.streaming.api.graph.util.ImmutableStreamGraph;
 import org.apache.flink.streaming.api.graph.util.ImmutableStreamNode;
 import org.apache.flink.streaming.api.graph.util.StreamEdgeUpdateRequestInfo;
@@ -36,6 +38,7 @@ import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -69,6 +72,14 @@ class StreamGraphOptimizerTest {
                     public ImmutableStreamGraph getStreamGraph() {
                         return null;
                     }
+
+                    @Override
+                    public StreamGraph getStreamGraphInternal() {
+                        return null;
+                    }
+
+                    @Override
+                    public void replaceMultiInput(Consumer<StreamNode> innerNodesConsumer) {}
 
                     @Override
                     public @Nullable StreamOperatorFactory<?> getOperatorFactory(

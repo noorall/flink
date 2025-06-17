@@ -20,9 +20,11 @@ package org.apache.flink.table.runtime.strategy;
 
 import org.apache.flink.runtime.scheduler.adaptivebatch.OperatorsFinished;
 import org.apache.flink.runtime.scheduler.adaptivebatch.StreamGraphOptimizationStrategy;
+import org.apache.flink.streaming.api.graph.StreamEdge;
+import org.apache.flink.streaming.api.graph.StreamGraph;
 import org.apache.flink.streaming.api.graph.StreamGraphContext;
+import org.apache.flink.streaming.api.graph.StreamNode;
 import org.apache.flink.streaming.api.graph.util.ImmutableStreamEdge;
-import org.apache.flink.streaming.api.graph.util.ImmutableStreamGraph;
 import org.apache.flink.streaming.api.graph.util.ImmutableStreamNode;
 import org.apache.flink.streaming.runtime.partitioner.BroadcastPartitioner;
 import org.apache.flink.streaming.runtime.partitioner.CustomPartitionerWrapper;
@@ -35,11 +37,12 @@ import org.apache.flink.table.runtime.operators.join.adaptive.AdaptiveJoin;
 import org.apache.flink.table.runtime.partitioner.BinaryHashPartitioner;
 import org.apache.flink.table.runtime.partitioner.RowDataCustomStreamPartitioner;
 
-import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
@@ -69,34 +72,43 @@ public abstract class BaseAdaptiveJoinOperatorOptimizationStrategy
     private static final Set<Class<?>> PARTITIONERS_CAN_CORRECT_KEY_GROUP_FORCED =
             Set.of(ForwardForConsecutiveHashPartitioner.class);
 
-    protected void visitDownstreamAdaptiveJoinNode(
+    protected boolean visitDownstreamAdaptiveJoinNode(
             OperatorsFinished operatorsFinished, StreamGraphContext context) {
-        ImmutableStreamGraph streamGraph = context.getStreamGraph();
+        StreamGraph streamGraph = context.getStreamGraphInternal();
         List<Integer> finishedStreamNodeIds = operatorsFinished.getFinishedStreamNodeIds();
-        Map<ImmutableStreamNode, List<ImmutableStreamEdge>> joinNodesWithInEdges = new HashMap<>();
+        Map<StreamNode, Set<StreamEdge>> joinNodesWithInEdges = new HashMap<>();
         for (Integer finishedStreamNodeId : finishedStreamNodeIds) {
-            for (ImmutableStreamEdge streamEdge :
+            for (StreamEdge streamEdge :
                     streamGraph.getStreamNode(finishedStreamNodeId).getOutEdges()) {
-                ImmutableStreamNode downstreamNode =
-                        streamGraph.getStreamNode(streamEdge.getTargetId());
+                StreamNode downstreamNode = streamGraph.getStreamNode(streamEdge.getTargetId());
                 if (downstreamNode.getOperatorFactory() instanceof AdaptiveJoin) {
                     joinNodesWithInEdges
-                            .computeIfAbsent(downstreamNode, k -> new ArrayList<>())
+                            .computeIfAbsent(downstreamNode, k -> new HashSet<>())
                             .add(streamEdge);
                 }
             }
         }
-        for (ImmutableStreamNode joinNode : joinNodesWithInEdges.keySet()) {
-            tryOptimizeAdaptiveJoin(
-                    operatorsFinished,
-                    context,
-                    joinNode,
-                    joinNodesWithInEdges.get(joinNode),
-                    (AdaptiveJoin) joinNode.getOperatorFactory());
+        boolean optimized = false;
+        for (StreamNode joinNode : joinNodesWithInEdges.keySet()) {
+            if (streamGraph.getStreamNode(joinNode.getId()) == null) {
+                continue;
+            }
+
+            optimized |=
+                    tryOptimizeAdaptiveJoin(
+                            operatorsFinished,
+                            context,
+                            new ImmutableStreamNode(joinNode),
+                            joinNodesWithInEdges.get(joinNode).stream()
+                                    .map(ImmutableStreamEdge::new)
+                                    .collect(Collectors.toList()),
+                            (AdaptiveJoin) joinNode.getOperatorFactory());
         }
+
+        return optimized;
     }
 
-    abstract void tryOptimizeAdaptiveJoin(
+    abstract boolean tryOptimizeAdaptiveJoin(
             OperatorsFinished operatorsFinished,
             StreamGraphContext context,
             ImmutableStreamNode adaptiveJoinNode,
@@ -113,7 +125,10 @@ public abstract class BaseAdaptiveJoinOperatorOptimizationStrategy
                                                     context.getOutputPartitioner(
                                                             edge.getEdgeId(),
                                                             edge.getSourceId(),
-                                                            edge.getTargetId()))
+                                                            edge.getTargetId()),
+                                                    "The edge "
+                                                            + edge
+                                                            + " source or target is not found")
                                             .getClass();
                             return !edge.isIntraInputKeyCorrelated()
                                     || PARTITIONERS_CAN_CORRECT_KEY_GROUP_AUTOMATIC.contains(

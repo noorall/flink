@@ -22,6 +22,7 @@ import org.apache.flink.runtime.JobException;
 import org.apache.flink.runtime.jobgraph.DistributionPattern;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 import org.apache.flink.runtime.jobgraph.JobEdge;
+import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -50,16 +51,20 @@ public class VertexInputInfoComputationUtils {
                         "Cannot connect this job graph to the previous graph. No previous intermediate result found for ID "
                                 + edge.getSourceId());
             }
-            intermediateResultInfos.add(new IntermediateResultWrapper(ires));
+            intermediateResultInfos.add(new IntermediateResultWrapper(ires, ejv.getJobVertexId()));
         }
         return computeVertexInputInfos(
-                ejv.getParallelism(), intermediateResultInfos, ejv.getGraph().isDynamic());
+                ejv.getParallelism(),
+                intermediateResultInfos,
+                ejv.getGraph().isDynamic(),
+                ejv.getJobVertexId());
     }
 
     public static Map<IntermediateDataSetID, JobVertexInputInfo> computeVertexInputInfos(
             int parallelism,
             List<? extends IntermediateResultInfo> inputs,
-            boolean isDynamicGraph) {
+            boolean isDynamicGraph,
+            JobVertexID consumerId) {
 
         checkArgument(parallelism > 0);
         final Map<IntermediateDataSetID, JobVertexInputInfo> jobVertexInputInfos =
@@ -68,7 +73,7 @@ public class VertexInputInfoComputationUtils {
         for (IntermediateResultInfo input : inputs) {
             int sourceParallelism = input.getNumPartitions();
 
-            if (input.isPointwise()) {
+            if (input.isConsumingPointwise()) {
                 jobVertexInputInfos.putIfAbsent(
                         input.getResultId(),
                         computeVertexInputInfoForPointwise(
@@ -84,7 +89,7 @@ public class VertexInputInfoComputationUtils {
                                 parallelism,
                                 input::getNumSubpartitions,
                                 isDynamicGraph,
-                                input.isBroadcast(),
+                                input.isConsumingBroadcast(consumerId),
                                 input.isSingleSubpartitionContainsAllData()));
             }
         }
@@ -244,9 +249,11 @@ public class VertexInputInfoComputationUtils {
 
     private static class IntermediateResultWrapper implements IntermediateResultInfo {
         private final IntermediateResult intermediateResult;
+        private final JobVertexID consumerId;
 
-        IntermediateResultWrapper(IntermediateResult intermediateResult) {
+        IntermediateResultWrapper(IntermediateResult intermediateResult, JobVertexID consumerId) {
             this.intermediateResult = checkNotNull(intermediateResult);
+            this.consumerId = checkNotNull(consumerId);
         }
 
         @Override
@@ -255,8 +262,8 @@ public class VertexInputInfoComputationUtils {
         }
 
         @Override
-        public boolean isBroadcast() {
-            return intermediateResult.isBroadcast();
+        public boolean isConsumingBroadcast(JobVertexID consumerId) {
+            return intermediateResult.isConsumingBroadcast(consumerId);
         }
 
         @Override
@@ -265,8 +272,8 @@ public class VertexInputInfoComputationUtils {
         }
 
         @Override
-        public boolean isPointwise() {
-            return intermediateResult.getConsumingDistributionPattern()
+        public boolean isConsumingPointwise() {
+            return intermediateResult.getConsumingDistributionPattern(consumerId)
                     == DistributionPattern.POINTWISE;
         }
 

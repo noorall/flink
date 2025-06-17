@@ -610,7 +610,7 @@ class DefaultVertexParallelismAndInputInfosDeciderTest {
         }
 
         @Override
-        public boolean isBroadcast() {
+        public boolean isConsumingBroadcast(JobVertexID jobVertexId) {
             return isBroadcast;
         }
 
@@ -620,7 +620,7 @@ class DefaultVertexParallelismAndInputInfosDeciderTest {
         }
 
         @Override
-        public boolean isPointwise() {
+        public boolean isConsumingPointwise() {
             return false;
         }
 
@@ -671,6 +671,7 @@ class DefaultVertexParallelismAndInputInfosDeciderTest {
         boolean existInterInputsKeyCorrelation =
                 blockingResultInfo instanceof AllToAllBlockingResultInfo;
         return new BlockingInputInfo(
+                new JobVertexID(),
                 blockingResultInfo,
                 0,
                 existInterInputsKeyCorrelation,

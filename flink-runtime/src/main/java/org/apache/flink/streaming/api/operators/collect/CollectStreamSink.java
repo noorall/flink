@@ -21,6 +21,9 @@ import org.apache.flink.annotation.Internal;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.datastream.DataStreamSink;
 import org.apache.flink.streaming.api.transformations.LegacySinkTransformation;
+import org.apache.flink.table.planner.plan.nodes.exec.InputProperty;
+
+import java.util.Collections;
 
 /**
  * A {@link DataStreamSink} which is used to collect results of a data stream. It completely
@@ -31,6 +34,11 @@ public class CollectStreamSink<T> extends DataStreamSink<T> {
     public CollectStreamSink(DataStream<T> inputStream, CollectSinkOperatorFactory<T> factory) {
         super(
                 new LegacySinkTransformation<T>(
-                        inputStream.getTransformation(), "Collect Stream Sink", factory, 1));
+                        inputStream.getTransformation(),
+                        "Collect Stream Sink",
+                        factory,
+                        1,
+                        true,
+                        Collections.singletonList(InputProperty.DEFAULT)));
     }
 }

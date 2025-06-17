@@ -36,6 +36,7 @@ import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.api.java.typeutils.MissingTypeInfo;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.ExecutionOptions;
 import org.apache.flink.configuration.ExternalizedCheckpointRetention;
 import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.configuration.StateChangelogOptions;
@@ -246,6 +247,12 @@ public class StreamGraph implements Pipeline, ExecutionPlan {
 
     StreamOperatorFactory<?> getHeadOperatorForNodeFromCache(StreamNode node) {
         return nodeToHeadOperatorCache.get(node);
+    }
+
+    private int maxNodeId = 0;
+
+    public int getMaxNodeId() {
+        return maxNodeId;
     }
 
     public CheckpointingMode getCheckpointingMode() {
@@ -633,7 +640,7 @@ public class StreamGraph implements Pipeline, ExecutionPlan {
             @Nullable String slotSharingGroup,
             @Nullable String coLocationGroup,
             StreamOperatorFactory<OUT> operatorFactory,
-            TypeInformation<IN> inTypeInfo,
+            @Nullable TypeInformation<IN> inTypeInfo,
             TypeInformation<OUT> outTypeInfo,
             String operatorName,
             Class<? extends TaskInvokable> invokableClass,
@@ -646,6 +653,8 @@ public class StreamGraph implements Pipeline, ExecutionPlan {
                 invokableClass,
                 operatorFactory,
                 operatorName,
+                inTypeInfo == null ? null : List.of(inTypeInfo),
+                outTypeInfo,
                 inputProperties);
         setSerializers(vertexID, createSerializer(inTypeInfo), null, createSerializer(outTypeInfo));
 
@@ -683,6 +692,8 @@ public class StreamGraph implements Pipeline, ExecutionPlan {
                 vertexClass,
                 taskOperatorFactory,
                 operatorName,
+                List.of(in1TypeInfo, in2TypeInfo),
+                outTypeInfo,
                 inputProperties);
 
         TypeSerializer<OUT> outSerializer = createSerializer(outTypeInfo);
@@ -703,7 +714,7 @@ public class StreamGraph implements Pipeline, ExecutionPlan {
         }
     }
 
-    public <OUT> void addMultipleInputOperator(
+    public <OUT> StreamNode addMultipleInputOperator(
             Integer vertexID,
             String slotSharingGroup,
             @Nullable String coLocationGroup,
@@ -715,14 +726,18 @@ public class StreamGraph implements Pipeline, ExecutionPlan {
 
         Class<? extends TaskInvokable> vertexClass = MultipleInputStreamTask.class;
 
-        addNode(
-                vertexID,
-                slotSharingGroup,
-                coLocationGroup,
-                vertexClass,
-                operatorFactory,
-                operatorName,
-                inputProperties);
+        StreamNode streamNode =
+                addNode(
+                        vertexID,
+                        slotSharingGroup,
+                        coLocationGroup,
+                        vertexClass,
+                        operatorFactory,
+                        operatorName,
+                        inTypeInfos,
+                        outTypeInfo,
+                        inputProperties);
+        streamNode.setMultiInputNode(true);
 
         setSerializers(vertexID, inTypeInfos, createSerializer(outTypeInfo));
 
@@ -734,6 +749,8 @@ public class StreamGraph implements Pipeline, ExecutionPlan {
         if (LOG.isDebugEnabled()) {
             LOG.debug("CO-TASK: {}", vertexID);
         }
+
+        return streamNode;
     }
 
     protected StreamNode addNode(
@@ -743,6 +760,8 @@ public class StreamGraph implements Pipeline, ExecutionPlan {
             Class<? extends TaskInvokable> vertexClass,
             @Nullable StreamOperatorFactory<?> operatorFactory,
             String operatorName,
+            @Nullable List<TypeInformation<?>> inTypeInfos,
+            @Nullable TypeInformation<?> outTypeInfo,
             List<InputProperty> inputProperties) {
 
         if (streamNodes.containsKey(vertexID)) {
@@ -757,9 +776,12 @@ public class StreamGraph implements Pipeline, ExecutionPlan {
                         operatorFactory,
                         operatorName,
                         vertexClass,
+                        inTypeInfos,
+                        outTypeInfo,
                         inputProperties);
 
         streamNodes.put(vertexID, vertex);
+        maxNodeId = Math.max(maxNodeId, vertexID);
         isEmpty = false;
 
         return vertex;
@@ -801,6 +823,7 @@ public class StreamGraph implements Pipeline, ExecutionPlan {
         }
 
         virtualSideOutputNodes.put(virtualId, new Tuple2<>(originalId, outputTag));
+        maxNodeId = Math.max(maxNodeId, virtualId);
     }
 
     /**
@@ -826,6 +849,7 @@ public class StreamGraph implements Pipeline, ExecutionPlan {
         }
 
         virtualPartitionNodes.put(virtualId, new Tuple3<>(originalId, partitioner, exchangeMode));
+        maxNodeId = Math.max(maxNodeId, virtualId);
     }
 
     /** Determines the slot sharing group of an operation across virtual nodes. */
@@ -846,6 +870,24 @@ public class StreamGraph implements Pipeline, ExecutionPlan {
         addEdge(upStreamVertexID, downStreamVertexID, typeNumber, null);
     }
 
+    public StreamEdge addEdge(
+            Integer upStreamVertexID,
+            Integer downStreamVertexID,
+            int typeNumber,
+            StreamPartitioner<?> partitioner,
+            StreamExchangeMode exchangeMode,
+            IntermediateDataSetID intermediateDataSetId) {
+        return addEdgeInternal(
+                upStreamVertexID,
+                downStreamVertexID,
+                typeNumber,
+                partitioner,
+                new ArrayList<String>(),
+                null,
+                exchangeMode,
+                intermediateDataSetId);
+    }
+
     public void addEdge(
             Integer upStreamVertexID,
             Integer downStreamVertexID,
@@ -862,7 +904,7 @@ public class StreamGraph implements Pipeline, ExecutionPlan {
                 intermediateDataSetId);
     }
 
-    private void addEdgeInternal(
+    private StreamEdge addEdgeInternal(
             Integer upStreamVertexID,
             Integer downStreamVertexID,
             int typeNumber,
@@ -878,7 +920,7 @@ public class StreamGraph implements Pipeline, ExecutionPlan {
             if (outputTag == null) {
                 outputTag = virtualSideOutputNodes.get(virtualId).f1;
             }
-            addEdgeInternal(
+            return addEdgeInternal(
                     upStreamVertexID,
                     downStreamVertexID,
                     typeNumber,
@@ -894,7 +936,7 @@ public class StreamGraph implements Pipeline, ExecutionPlan {
                 partitioner = virtualPartitionNodes.get(virtualId).f1;
             }
             exchangeMode = virtualPartitionNodes.get(virtualId).f2;
-            addEdgeInternal(
+            return addEdgeInternal(
                     upStreamVertexID,
                     downStreamVertexID,
                     typeNumber,
@@ -904,7 +946,7 @@ public class StreamGraph implements Pipeline, ExecutionPlan {
                     exchangeMode,
                     intermediateDataSetId);
         } else {
-            createActualEdge(
+            return createActualEdge(
                     upStreamVertexID,
                     downStreamVertexID,
                     typeNumber,
@@ -915,7 +957,7 @@ public class StreamGraph implements Pipeline, ExecutionPlan {
         }
     }
 
-    private void createActualEdge(
+    private StreamEdge createActualEdge(
             Integer upStreamVertexID,
             Integer downStreamVertexID,
             int typeNumber,
@@ -935,6 +977,14 @@ public class StreamGraph implements Pipeline, ExecutionPlan {
         } else if (partitioner == null) {
             partitioner = new RebalancePartitioner<Object>();
         }
+
+        LOG.info(
+                "Create {} between {} and {}, the upstreamNode.getParallelism() is {} and downStream p {}",
+                partitioner,
+                upstreamNode,
+                downstreamNode,
+                upstreamNode.getParallelism(),
+                downstreamNode.getParallelism());
 
         if (partitioner instanceof ForwardPartitioner) {
             if (upstreamNode.getParallelism() != downstreamNode.getParallelism()) {
@@ -983,6 +1033,8 @@ public class StreamGraph implements Pipeline, ExecutionPlan {
 
         getStreamNode(edge.getSourceId()).addOutEdge(edge);
         getStreamNode(edge.getTargetId()).addInEdge(edge);
+
+        return edge;
     }
 
     public void setParallelism(Integer vertexID, int parallelism) {
@@ -1536,6 +1588,36 @@ public class StreamGraph implements Pipeline, ExecutionPlan {
     @Override
     public String toString() {
         return "StreamGraph(jobId: " + jobId + ")";
+    }
+
+    public Set<StreamEdge> removeStreamNodesAndAllInputOutputEdges(
+            Set<Integer> toBeRemovedStreamNodes) {
+        Set<StreamEdge> innerEdges = new HashSet<>();
+        for (Integer toBeRemovedStreamNode : toBeRemovedStreamNodes) {
+            StreamNode removed = streamNodes.remove(toBeRemovedStreamNode);
+
+            // remove input edge target
+            //            for (StreamEdge edge : removed.getInEdges()) {
+            //                StreamNode upStreamNode = this.getStreamNode(edge.getSourceId());
+            //                upStreamNode.removeOutEdge(edge);
+            //            }
+
+            // remove output edge source
+            for (StreamEdge edge : removed.getOutEdges()) {
+
+                if (toBeRemovedStreamNodes.contains(edge.getTargetId())) {
+                    innerEdges.add(edge);
+                    continue;
+                }
+                StreamNode downStreamNode = this.getStreamNode(edge.getTargetId());
+                downStreamNode.removeInEdge(edge);
+            }
+        }
+        return innerEdges;
+    }
+
+    public void enableBufferTimeout(boolean enabled) {
+        this.jobConfiguration.set(ExecutionOptions.BUFFER_TIMEOUT_ENABLED, enabled);
     }
 
     /**

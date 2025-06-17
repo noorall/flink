@@ -152,7 +152,7 @@ public class PartitionDescriptor implements Serializable {
                 partition.getNumberOfSubpartitions(),
                 result.getConnectionIndex(),
                 result.isSingleSubpartitionContainsAllData(),
-                result.getConsumingDistributionPattern() == DistributionPattern.ALL_TO_ALL,
+                result.getProducingDistributionPattern() == DistributionPattern.ALL_TO_ALL,
                 partition.isNumberOfPartitionConsumersUndefined());
     }
 }

@@ -22,6 +22,7 @@ import org.apache.flink.runtime.executiongraph.IndexRange;
 import org.apache.flink.runtime.executiongraph.JobVertexInputInfo;
 import org.apache.flink.runtime.executiongraph.VertexInputInfoComputationUtils;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
+import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.scheduler.adaptivebatch.BlockingInputInfo;
 
 import org.slf4j.Logger;
@@ -82,7 +83,8 @@ public class PointwiseVertexInputInfoComputer {
             int parallelism,
             int minParallelism,
             int maxParallelism,
-            long dataVolumePerTask) {
+            long dataVolumePerTask,
+            JobVertexID consumerId) {
         Map<Integer, List<SubpartitionSlice>> subpartitionSlicesByInputIndex =
                 createSubpartitionSlicesByInputIndex(inputInfos, maxParallelism);
 
@@ -106,7 +108,7 @@ public class PointwiseVertexInputInfoComputer {
             // This computer is only used in the adaptive batch scenario, where isDynamicGraph
             // should always be true.
             return VertexInputInfoComputationUtils.computeVertexInputInfos(
-                    parallelism, inputInfos, true);
+                    parallelism, inputInfos, true, consumerId);
         }
 
         List<IndexRange> subpartitionSliceRanges = optionalSubpartitionSliceRanges.get();

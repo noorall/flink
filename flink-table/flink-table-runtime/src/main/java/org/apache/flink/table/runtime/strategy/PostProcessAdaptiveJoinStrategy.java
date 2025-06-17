@@ -49,13 +49,11 @@ public class PostProcessAdaptiveJoinStrategy extends BaseAdaptiveJoinOperatorOpt
     @Override
     public boolean onOperatorsFinished(
             OperatorsFinished operatorsFinished, StreamGraphContext context) {
-        visitDownstreamAdaptiveJoinNode(operatorsFinished, context);
-
-        return true;
+        return visitDownstreamAdaptiveJoinNode(operatorsFinished, context);
     }
 
     @Override
-    protected void tryOptimizeAdaptiveJoin(
+    protected boolean tryOptimizeAdaptiveJoin(
             OperatorsFinished operatorsFinished,
             StreamGraphContext context,
             ImmutableStreamNode adaptiveJoinNode,
@@ -86,6 +84,7 @@ public class PostProcessAdaptiveJoinStrategy extends BaseAdaptiveJoinOperatorOpt
             ClassLoader userClassLoader = context.getStreamGraph().getUserClassLoader();
             adaptiveJoin.genOperatorFactory(userClassLoader, config);
         }
+        return false;
     }
 
     private static List<StreamEdgeUpdateRequestInfo>

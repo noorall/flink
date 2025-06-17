@@ -18,6 +18,7 @@
 package org.apache.flink.streaming.api.graph;
 
 import org.apache.flink.annotation.Internal;
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 import org.apache.flink.streaming.api.transformations.StreamExchangeMode;
 import org.apache.flink.streaming.runtime.partitioner.ForwardForUnspecifiedPartitioner;
@@ -46,7 +47,7 @@ public class StreamEdge implements Serializable {
     private final String edgeId;
 
     private final int sourceId;
-    private final int targetId;
+    private int targetId;
 
     /**
      * Note that this field doesn't have to be unique among all {@link StreamEdge}s. It's enough if
@@ -94,6 +95,7 @@ public class StreamEdge implements Serializable {
      */
     private boolean intraInputKeyCorrelated;
 
+    @VisibleForTesting
     public StreamEdge(
             StreamNode sourceVertex,
             StreamNode targetVertex,
@@ -298,5 +300,10 @@ public class StreamEdge implements Serializable {
 
     public void setIntraInputKeyCorrelated(boolean intraInputKeyCorrelated) {
         this.intraInputKeyCorrelated = intraInputKeyCorrelated;
+    }
+
+    public void setNewTargetWithTypeNumber(int transformationId, int typeNumber) {
+        this.targetId = transformationId;
+        this.typeNumber = typeNumber;
     }
 }

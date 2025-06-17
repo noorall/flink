@@ -64,28 +64,6 @@ public class VertexInputInfoComputerTestUtil {
                 subpartitionBytesByPartitionIndex.put(j, subpartitionBytes);
             }
             BlockingResultInfo resultInfo;
-            if (isPointwise) {
-                resultInfo =
-                        new PointwiseBlockingResultInfo(
-                                new IntermediateDataSetID(),
-                                numPartitions,
-                                numSubpartitions,
-                                subpartitionBytesByPartitionIndex);
-            } else {
-                resultInfo =
-                        new AllToAllBlockingResultInfo(
-                                new IntermediateDataSetID(),
-                                numPartitions,
-                                numSubpartitions,
-                                false,
-                                subpartitionBytesByPartitionIndex);
-            }
-            blockingInputInfos.add(
-                    new BlockingInputInfo(
-                            resultInfo,
-                            typeNumber,
-                            existInterInputsKeyCorrelation,
-                            existIntraInputKeyCorrelation));
         }
         return blockingInputInfos;
     }

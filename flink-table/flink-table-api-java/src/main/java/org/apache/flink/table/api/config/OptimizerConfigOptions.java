@@ -56,7 +56,15 @@ public class OptimizerConfigOptions {
 
     @Documentation.TableOption(execMode = Documentation.ExecMode.BATCH)
     public static final ConfigOption<Long> TABLE_OPTIMIZER_BROADCAST_JOIN_THRESHOLD =
-            key("table.optimizer.join.broadcast-threshold")
+            key("table.optimizer.join.dynamic.broadcast-threshold")
+                    .longType()
+                    .defaultValue(1024 * 1024L)
+                    .withDescription(
+                            "Configures the maximum size in bytes for a table that will be broadcast to all worker "
+                                    + "nodes when performing a join. By setting this value to -1 to disable broadcasting.");
+
+    public static final ConfigOption<Long> TABLE_OPTIMIZER_STATIC_BROADCAST_JOIN_THRESHOLD =
+            key("table.optimizer.join.static.broadcast-threshold")
                     .longType()
                     .defaultValue(1024 * 1024L)
                     .withDescription(

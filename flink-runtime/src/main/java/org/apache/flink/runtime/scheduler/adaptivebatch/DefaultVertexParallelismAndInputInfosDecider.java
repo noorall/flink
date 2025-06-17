@@ -192,7 +192,7 @@ public class DefaultVertexParallelismAndInputInfosDecider
 
         consumedResults.forEach(
                 inputInfo -> {
-                    if (inputInfo.isPointwise()) {
+                    if (inputInfo.isConsumingPointwise()) {
                         pointwiseInputs.add(inputInfo);
                     } else {
                         allToAllInputs.add(inputInfo);
@@ -222,7 +222,8 @@ public class DefaultVertexParallelismAndInputInfosDecider
                             minParallelism,
                             maxParallelism,
                             calculateDataVolumePerTaskForInputsGroup(
-                                    dataVolumePerTask, pointwiseInputs, consumedResults)));
+                                    dataVolumePerTask, pointwiseInputs, consumedResults),
+                            jobVertexId));
             // We need to reset the minimum and maximum parallelism to limit the flexibility of
             // parallelism derivation to make final parallelisms of all inputs are consistent
             if (!allToAllInputs.isEmpty()) {

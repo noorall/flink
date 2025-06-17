@@ -65,12 +65,15 @@ public class StreamGraphOptimizer {
      *
      * @param operatorsFinished the object containing information about finished operators.
      * @param context the StreamGraphContext providing methods to modify the StreamGraph.
+     * @return {@code true} if the StreamGraph was successfully optimized; {@code false} otherwise.
      */
-    public void onOperatorsFinished(OperatorsFinished operatorsFinished, StreamGraphContext context)
-            throws Exception {
+    public boolean onOperatorsFinished(
+            OperatorsFinished operatorsFinished, StreamGraphContext context) throws Exception {
+        boolean optimized = false;
         for (StreamGraphOptimizationStrategy strategy : optimizationStrategies) {
-            strategy.onOperatorsFinished(operatorsFinished, context);
+            optimized |= strategy.onOperatorsFinished(operatorsFinished, context);
         }
+        return optimized;
     }
 
     private List<StreamGraphOptimizationStrategy> loadOptimizationStrategies(

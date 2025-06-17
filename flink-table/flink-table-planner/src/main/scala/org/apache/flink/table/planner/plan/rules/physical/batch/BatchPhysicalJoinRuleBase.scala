@@ -209,7 +209,7 @@ trait BatchPhysicalJoinRuleBase {
       }
 
       val threshold =
-        tableConfig.get(OptimizerConfigOptions.TABLE_OPTIMIZER_BROADCAST_JOIN_THRESHOLD)
+        tableConfig.get(OptimizerConfigOptions.TABLE_OPTIMIZER_STATIC_BROADCAST_JOIN_THRESHOLD)
 
       val rightSizeSmallerThanThreshold = rightSize <= threshold
       val leftSizeSmallerThanThreshold = leftSize <= threshold

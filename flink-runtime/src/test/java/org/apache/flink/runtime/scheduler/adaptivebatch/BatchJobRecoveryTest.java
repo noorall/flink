@@ -904,9 +904,7 @@ public class BatchJobRecoveryTest {
                                 })
                         .map(
                                 partition -> {
-                                    BlockingResultInfo resultInfo =
-                                            scheduler.getBlockingResultInfo(
-                                                    partition.getIntermediateResult().getId());
+                                    BlockingResultInfo resultInfo = null;
                                     IntermediateResultPartitionID partitionId =
                                             partition.getPartitionId();
                                     final Execution producer =

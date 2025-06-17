@@ -71,13 +71,11 @@ public class AdaptiveBroadcastJoinOptimizationStrategy
     @Override
     public boolean onOperatorsFinished(
             OperatorsFinished operatorsFinished, StreamGraphContext context) {
-        visitDownstreamAdaptiveJoinNode(operatorsFinished, context);
-
-        return true;
+        return visitDownstreamAdaptiveJoinNode(operatorsFinished, context);
     }
 
     @Override
-    protected void tryOptimizeAdaptiveJoin(
+    protected boolean tryOptimizeAdaptiveJoin(
             OperatorsFinished operatorsFinished,
             StreamGraphContext context,
             ImmutableStreamNode adaptiveJoinNode,
@@ -85,7 +83,7 @@ public class AdaptiveBroadcastJoinOptimizationStrategy
             AdaptiveJoin adaptiveJoin) {
         if (!canPerformOptimization(adaptiveJoinNode, context)
                 || optimizedAdaptiveJoinNodes.contains(adaptiveJoinNode.getId())) {
-            return;
+            return false;
         }
         for (ImmutableStreamEdge upstreamEdge : upstreamStreamEdges) {
             IntermediateDataSetID relatedDataSetId =
@@ -125,7 +123,7 @@ public class AdaptiveBroadcastJoinOptimizationStrategy
             if (checkInputSideCanBeBroadcast(joinType, leftIsBuild, leftInputSize)
                     && tryBroadcastOptimization(
                             adaptiveJoinNode, context, adaptiveJoin, leftIsBuild, leftInputSize)) {
-                return;
+                return true;
             }
         }
         if (context.checkUpstreamNodesFinished(adaptiveJoinNode, RIGHT_INPUT_TYPE_NUMBER)) {
@@ -141,7 +139,7 @@ public class AdaptiveBroadcastJoinOptimizationStrategy
             if (checkInputSideCanBeBroadcast(joinType, leftIsBuild, rightInputSize)
                     && tryBroadcastOptimization(
                             adaptiveJoinNode, context, adaptiveJoin, leftIsBuild, rightInputSize)) {
-                return;
+                return true;
             }
         }
 
@@ -163,6 +161,8 @@ public class AdaptiveBroadcastJoinOptimizationStrategy
             optimizedAdaptiveJoinNodes.add(adaptiveJoinNode.getId());
             aggregatedInputBytesByTypeNumberAndNodeId.remove(adaptiveJoinNode.getId());
         }
+
+        return false;
     }
 
     private boolean tryBroadcastOptimization(
@@ -184,6 +184,16 @@ public class AdaptiveBroadcastJoinOptimizationStrategy
             adaptiveJoin.markAsBroadcastJoin(true, leftIsBuild);
             optimizedAdaptiveJoinNodes.add(adaptiveJoinNode.getId());
             aggregatedInputBytesByTypeNumberAndNodeId.remove(adaptiveJoinNode.getId());
+            context.replaceMultiInput(
+                    node -> {
+                        if (node.getOperatorFactory() instanceof AdaptiveJoin) {
+                            AdaptiveJoin adaptiveJoinOperator =
+                                    (AdaptiveJoin) node.getOperatorFactory();
+                            adaptiveJoinOperator.genOperatorFactory(
+                                    context.getStreamGraph().getUserClassLoader(),
+                                    context.getStreamGraph().getConfiguration());
+                        }
+                    });
             return true;
         } else {
             LOG.info(

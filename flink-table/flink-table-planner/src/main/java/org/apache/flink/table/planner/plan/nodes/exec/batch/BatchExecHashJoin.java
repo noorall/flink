@@ -53,7 +53,9 @@ import org.apache.flink.table.types.logical.RowType;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.annotation.JsonCreator;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.annotation.JsonProperty;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.IntStream;
 
@@ -225,12 +227,14 @@ public class BatchExecHashJoin extends ExecNodeBase<RowData>
 
         Transformation<RowData> buildTransform;
         Transformation<RowData> probeTransform;
+        List<InputProperty> inputProperties = new ArrayList<>(getInputProperties());
         if (leftIsBuild) {
             buildTransform = leftInputTransform;
             probeTransform = rightInputTransform;
         } else {
             buildTransform = rightInputTransform;
             probeTransform = leftInputTransform;
+            Collections.reverse(inputProperties);
         }
 
         return ExecNodeUtil.createTwoInputTransformation(
@@ -242,7 +246,7 @@ public class BatchExecHashJoin extends ExecNodeBase<RowData>
                 probeTransform.getParallelism(),
                 managedMemory,
                 false,
-                getInputProperties());
+                inputProperties);
     }
 
     @Override

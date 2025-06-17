@@ -18,6 +18,7 @@
 
 package org.apache.flink.table.runtime.operators.multipleinput.output;
 
+import org.apache.flink.annotation.Internal;
 import org.apache.flink.runtime.event.WatermarkEvent;
 import org.apache.flink.streaming.api.operators.OneInputStreamOperator;
 import org.apache.flink.streaming.api.operators.Output;
@@ -33,6 +34,7 @@ import org.apache.flink.util.OutputTag;
  * An {@link Output} that can be used to emit elements and other messages for {@link
  * OneInputStreamOperator}.
  */
+@Internal
 public class OneInputStreamOperatorOutput extends OutputBase {
 
     private final OneInputStreamOperator<RowData, RowData> operator;

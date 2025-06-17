@@ -151,7 +151,7 @@ public class IntermediateResultPartition {
     }
 
     private int computeNumberOfSubpartitionsForDynamicGraph() {
-        if (totalResult.isSingleSubpartitionContainsAllData() || totalResult.isForward()) {
+        if (totalResult.isSingleSubpartitionContainsAllData() || totalResult.isProducingForward()) {
             // for dynamic graph and broadcast result, and forward result, we only produced one
             // subpartition, and all the downstream vertices should consume this subpartition.
             return 1;
@@ -163,7 +163,7 @@ public class IntermediateResultPartition {
     private int computeNumberOfMaxPossiblePartitionConsumers() {
         isNumberOfPartitionConsumersUndefined = true;
         final DistributionPattern distributionPattern =
-                getIntermediateResult().getConsumingDistributionPattern();
+                getIntermediateResult().getProducingDistributionPattern();
 
         // decide the max possible consumer job vertex parallelism
         int maxConsumerJobVertexParallelism = getIntermediateResult().getConsumersParallelism();

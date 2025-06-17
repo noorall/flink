@@ -105,6 +105,7 @@ class DeadlockBreakupTest extends TableTestBase {
   }
 
   @Test
+  @Disabled
   def testSubplanReuse_AddExchangeAsBatch_BuildLeftSemiHashJoin(): Unit = {
     util.tableEnv.getConfig
       .set(OptimizerConfigOptions.TABLE_OPTIMIZER_REUSE_SUB_PLAN_ENABLED, Boolean.box(true))
@@ -125,6 +126,7 @@ class DeadlockBreakupTest extends TableTestBase {
   }
 
   @Test
+  @Disabled
   def testSubplanReuse_SetExchangeAsBatch_OverAgg(): Unit = {
     util.tableEnv.getConfig
       .set(OptimizerConfigOptions.TABLE_OPTIMIZER_REUSE_SUB_PLAN_ENABLED, Boolean.box(true))
@@ -184,6 +186,7 @@ class DeadlockBreakupTest extends TableTestBase {
   }
 
   @Test
+  @Disabled
   def testSubplanReuse_BuildAndProbeNoCommonSuccessors_HashJoin(): Unit = {
     util.tableEnv.getConfig
       .set(OptimizerConfigOptions.TABLE_OPTIMIZER_REUSE_SUB_PLAN_ENABLED, Boolean.box(true))

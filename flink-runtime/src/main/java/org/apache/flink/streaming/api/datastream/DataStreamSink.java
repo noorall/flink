@@ -33,7 +33,9 @@ import org.apache.flink.streaming.api.operators.StreamSink;
 import org.apache.flink.streaming.api.transformations.LegacySinkTransformation;
 import org.apache.flink.streaming.api.transformations.PhysicalTransformation;
 import org.apache.flink.streaming.api.transformations.SinkTransformation;
+import org.apache.flink.table.planner.plan.nodes.exec.InputProperty;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
@@ -64,7 +66,7 @@ public class DataStreamSink<T> {
                         sinkOperator,
                         executionEnvironment.getParallelism(),
                         false,
-                        List.of());
+                        new ArrayList<>());
         if (sinkFunction instanceof LineageVertexProvider) {
             transformation.setLineageVertex(
                     ((LineageVertexProvider) sinkFunction).getLineageVertex());
@@ -112,6 +114,12 @@ public class DataStreamSink<T> {
         } else {
             throw new IllegalStateException("There is no the LegacySinkTransformation.");
         }
+    }
+
+    @Internal
+    public DataStreamSink<T> addInputProperties(InputProperty inputProperty) {
+        transformation.addInputProperty(inputProperty);
+        return this;
     }
 
     /**

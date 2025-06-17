@@ -64,6 +64,7 @@ import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.annotation.JsonPro
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Collections;
 import java.util.List;
 
 /** {@link StreamExecNode} for a time interval stream join. */
@@ -265,7 +266,7 @@ public class StreamExecIntervalJoin extends ExecNodeBase<RowData>
                         returnTypeInfo,
                         leftParallelism,
                         false,
-                        getInputProperties());
+                        Collections.singletonList(getInputProperties().get(0)));
         if (shouldCreateUid) {
             filterAllLeftStream.setUid(createTransformationUid(FILTER_LEFT_TRANSFORMATION, config));
         }
@@ -284,7 +285,7 @@ public class StreamExecIntervalJoin extends ExecNodeBase<RowData>
                         returnTypeInfo,
                         rightParallelism,
                         false,
-                        getInputProperties());
+                        Collections.singletonList(getInputProperties().get(1)));
         if (shouldCreateUid) {
             filterAllRightStream.setUid(
                     createTransformationUid(FILTER_RIGHT_TRANSFORMATION, config));
@@ -304,7 +305,7 @@ public class StreamExecIntervalJoin extends ExecNodeBase<RowData>
                         returnTypeInfo,
                         leftParallelism,
                         false,
-                        getInputProperties());
+                        Collections.singletonList(getInputProperties().get(0)));
         if (shouldCreateUid) {
             padLeftStream.setUid(createTransformationUid(PAD_LEFT_TRANSFORMATION, config));
         }
@@ -322,7 +323,7 @@ public class StreamExecIntervalJoin extends ExecNodeBase<RowData>
                         returnTypeInfo,
                         rightParallelism,
                         false,
-                        getInputProperties());
+                        Collections.singletonList(getInputProperties().get(1)));
         if (shouldCreateUid) {
             padRightStream.setUid(createTransformationUid(PAD_RIGHT_TRANSFORMATION, config));
         }

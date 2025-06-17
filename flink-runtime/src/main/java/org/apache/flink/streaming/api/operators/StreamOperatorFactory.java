@@ -18,10 +18,14 @@
 package org.apache.flink.streaming.api.operators;
 
 import org.apache.flink.annotation.Experimental;
+import org.apache.flink.annotation.Internal;
 import org.apache.flink.annotation.PublicEvolving;
 import org.apache.flink.api.common.ExecutionConfig;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
+import org.apache.flink.configuration.ReadableConfig;
 import org.apache.flink.streaming.api.graph.StreamGraph;
+import org.apache.flink.streaming.api.graph.StreamNode;
+import org.apache.flink.streaming.api.graph.multinput.StreamExecNode;
 import org.apache.flink.streaming.runtime.tasks.StreamTask;
 
 import java.io.Serializable;
@@ -33,6 +37,13 @@ import java.io.Serializable;
  */
 @PublicEvolving
 public interface StreamOperatorFactory<OUT> extends Serializable {
+
+    @Internal
+    default void generateOperatorFactory(
+            ClassLoader classLoader,
+            ReadableConfig config,
+            StreamNode node,
+            StreamExecNode streamExecNode) {}
 
     /** Create the operator. Sets access to the context and the output. */
     <T extends StreamOperator<OUT>> T createStreamOperator(

@@ -224,7 +224,7 @@ public class VertexParallelismAndInputInfosDeciderUtils {
     public static List<BlockingInputInfo> getNonBroadcastInputInfos(
             List<BlockingInputInfo> consumedResults) {
         return consumedResults.stream()
-                .filter(resultInfo -> !resultInfo.isBroadcast())
+                .filter(resultInfo -> !resultInfo.isConsumingBroadcast())
                 .collect(Collectors.toList());
     }
 
@@ -337,7 +337,7 @@ public class VertexParallelismAndInputInfosDeciderUtils {
         final Map<IntermediateDataSetID, JobVertexInputInfo> vertexInputInfos = new HashMap<>();
         for (int i = 0; i < inputInfos.size(); ++i) {
             BlockingInputInfo inputInfo = inputInfos.get(i);
-            if (inputInfo.isBroadcast()) {
+            if (inputInfo.isConsumingBroadcast()) {
                 vertexInputInfos.put(
                         inputInfo.getResultId(),
                         createdJobVertexInputInfoForBroadcast(
@@ -356,7 +356,7 @@ public class VertexParallelismAndInputInfosDeciderUtils {
 
     public static JobVertexInputInfo createdJobVertexInputInfoForBroadcast(
             BlockingInputInfo inputInfo, int parallelism) {
-        checkArgument(inputInfo.isBroadcast());
+        checkArgument(inputInfo.isConsumingBroadcast());
         int numPartitions = inputInfo.getNumPartitions();
         List<ExecutionVertexInputInfo> executionVertexInputInfos = new ArrayList<>();
         for (int i = 0; i < parallelism; ++i) {
@@ -384,7 +384,7 @@ public class VertexParallelismAndInputInfosDeciderUtils {
             BlockingInputInfo inputInfo,
             List<IndexRange> subpartitionSliceRanges,
             List<SubpartitionSlice> subpartitionSlices) {
-        checkArgument(!inputInfo.isBroadcast());
+        checkArgument(!inputInfo.isConsumingBroadcast());
         int numPartitions = inputInfo.getNumPartitions();
         List<ExecutionVertexInputInfo> executionVertexInputInfos = new ArrayList<>();
         for (int i = 0; i < subpartitionSliceRanges.size(); ++i) {
@@ -395,7 +395,7 @@ public class VertexParallelismAndInputInfosDeciderUtils {
                             subpartitionSliceRange,
                             subpartitionSlices,
                             numPartitions,
-                            inputInfo.isPointwise());
+                            inputInfo.isConsumingPointwise());
             executionVertexInputInfos.add(
                     new ExecutionVertexInputInfo(i, consumedSubpartitionGroups));
         }
@@ -716,7 +716,7 @@ public class VertexParallelismAndInputInfosDeciderUtils {
             int parallelism, BlockingInputInfo inputInfo) {
         int sourceParallelism = inputInfo.getNumPartitions();
 
-        if (inputInfo.isPointwise()) {
+        if (inputInfo.isConsumingPointwise()) {
             return computeVertexInputInfoForPointwise(
                     sourceParallelism, parallelism, inputInfo::getNumSubpartitions, true);
         } else {
@@ -725,7 +725,7 @@ public class VertexParallelismAndInputInfosDeciderUtils {
                     parallelism,
                     inputInfo::getNumSubpartitions,
                     true,
-                    inputInfo.isBroadcast(),
+                    inputInfo.isConsumingBroadcast(),
                     inputInfo.isSingleSubpartitionContainsAllData());
         }
     }

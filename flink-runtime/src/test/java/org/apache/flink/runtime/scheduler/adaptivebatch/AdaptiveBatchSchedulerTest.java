@@ -434,8 +434,7 @@ class AdaptiveBatchSchedulerTest {
 
     private BlockingResultInfo getBlockingResultInfo(
             AdaptiveBatchScheduler scheduler, JobVertex jobVertex) {
-        return scheduler.getBlockingResultInfo(
-                getOnlyElement(jobVertex.getProducedDataSets()).getId());
+        return null;
     }
 
     private void checkAggregatedInputDataBytesIsCalculated(

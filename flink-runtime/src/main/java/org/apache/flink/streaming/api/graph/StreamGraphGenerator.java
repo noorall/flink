@@ -325,6 +325,7 @@ public class StreamGraphGenerator {
 
         if (shouldExecuteInBatchMode) {
             configureStreamGraphBatch(graph);
+            streamGraph.enableBufferTimeout(false);
             configuration.set(ExecutionOptions.BUFFER_TIMEOUT_ENABLED, false);
         } else {
             configureStreamGraphStreaming(graph);

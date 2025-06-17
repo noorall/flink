@@ -30,6 +30,7 @@ import org.apache.flink.streaming.runtime.partitioner.StreamPartitioner;
 import javax.annotation.Nullable;
 
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * Defines a context for optimizing and working with a read-only view of a StreamGraph. It provides
@@ -44,6 +45,8 @@ public interface StreamGraphContext {
      * @return a read-only view of the StreamGraph.
      */
     ImmutableStreamGraph getStreamGraph();
+
+    StreamGraph getStreamGraphInternal();
 
     /**
      * Retrieves the {@link StreamOperatorFactory} for the specified stream node id.
@@ -92,6 +95,8 @@ public interface StreamGraphContext {
      * @return the consumed IntermediateDataSetID
      */
     IntermediateDataSetID getConsumedIntermediateDataSetId(String edgeId);
+
+    void replaceMultiInput(Consumer<StreamNode> innerNodesConsumer);
 
     /** Interface for observers that monitor the status of a StreamGraph. */
     @Internal

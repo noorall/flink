@@ -178,4 +178,14 @@ public class AdaptiveJoinOperatorGenerator implements AdaptiveJoin {
         }
         return !leftIsBuild;
     }
+
+    @Override
+    public boolean leftIsBuild() {
+        return leftIsBuild;
+    }
+
+    @Override
+    public boolean originalLeftIsBuild() {
+        return originalLeftIsBuild;
+    }
 }

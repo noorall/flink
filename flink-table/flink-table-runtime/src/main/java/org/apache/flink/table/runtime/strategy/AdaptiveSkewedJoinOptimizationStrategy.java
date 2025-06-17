@@ -83,13 +83,11 @@ public class AdaptiveSkewedJoinOptimizationStrategy
     @Override
     public boolean onOperatorsFinished(
             OperatorsFinished operatorsFinished, StreamGraphContext context) throws Exception {
-        visitDownstreamAdaptiveJoinNode(operatorsFinished, context);
-
-        return true;
+        return visitDownstreamAdaptiveJoinNode(operatorsFinished, context);
     }
 
     @Override
-    void tryOptimizeAdaptiveJoin(
+    boolean tryOptimizeAdaptiveJoin(
             OperatorsFinished operatorsFinished,
             StreamGraphContext context,
             ImmutableStreamNode adaptiveJoinNode,
@@ -97,7 +95,7 @@ public class AdaptiveSkewedJoinOptimizationStrategy
             AdaptiveJoin adaptiveJoin) {
         if (!canPerformOptimization(context, adaptiveJoinNode)) {
             freeNodeStatistic(adaptiveJoinNode.getId());
-            return;
+            return false;
         }
         for (ImmutableStreamEdge edge : upstreamStreamEdges) {
             BlockingResultInfo resultInfo = getBlockingResultInfo(operatorsFinished, context, edge);
@@ -108,10 +106,13 @@ public class AdaptiveSkewedJoinOptimizationStrategy
                     ((AllToAllBlockingResultInfo) resultInfo).getAggregatedSubpartitionBytes());
         }
         if (context.checkUpstreamNodesFinished(adaptiveJoinNode, null)) {
-            applyAdaptiveSkewedJoinOptimization(
-                    context, adaptiveJoinNode, adaptiveJoin.getJoinType());
+            boolean optimized =
+                    applyAdaptiveSkewedJoinOptimization(
+                            context, adaptiveJoinNode, adaptiveJoin.getJoinType());
             freeNodeStatistic(adaptiveJoinNode.getId());
+            return optimized;
         }
+        return false;
     }
 
     private boolean canPerformOptimization(
@@ -164,7 +165,7 @@ public class AdaptiveSkewedJoinOptimizationStrategy
         }
     }
 
-    private void applyAdaptiveSkewedJoinOptimization(
+    private boolean applyAdaptiveSkewedJoinOptimization(
             StreamGraphContext context,
             ImmutableStreamNode adaptiveJoinNode,
             FlinkJoinType joinType) {
@@ -218,6 +219,7 @@ public class AdaptiveSkewedJoinOptimizationStrategy
                 isRightOptimizable
                         & existBytesLargerThanThreshold(rightInputSize, rightSkewedThreshold);
 
+        boolean optimized = false;
         if (isLeftOptimizable) {
             boolean isModificationSucceed =
                     tryModifyInputAndOutputEdges(context, adaptiveJoinNode, LEFT_INPUT_TYPE_NUMBER);
@@ -225,6 +227,7 @@ public class AdaptiveSkewedJoinOptimizationStrategy
                     "Apply skewed join optimization {} for left input of node {}.",
                     isModificationSucceed ? "succeeded" : "failed",
                     adaptiveJoinNode);
+            optimized = isModificationSucceed;
         }
         if (isRightOptimizable) {
             boolean isModificationSucceed =
@@ -234,7 +237,9 @@ public class AdaptiveSkewedJoinOptimizationStrategy
                     "Apply skewed join optimization {} for right input of node {}.",
                     isModificationSucceed ? "succeeded" : "failed",
                     adaptiveJoinNode);
+            optimized |= isModificationSucceed;
         }
+        return optimized;
     }
 
     private static boolean tryModifyInputAndOutputEdges(

@@ -91,12 +91,19 @@ public abstract class SimpleTransformationTranslator<OUT, T extends Transformati
     protected abstract Collection<Integer> translateForStreamingInternal(
             final T transformation, final Context context);
 
-    private void configure(final T transformation, final Context context) {
-        final StreamGraph streamGraph = context.getStreamGraph();
+    public static void configure(final Transformation<?> transformation, final Context context) {
+        configure(transformation, context.getStreamGraph(), context.getDefaultBufferTimeout());
+    }
+
+    public static void configure(
+            final Transformation<?> transformation,
+            final StreamGraph streamGraph,
+            final long defaultBufferTimeout) {
+
         final int transformationId = transformation.getId();
 
         StreamGraphUtils.configureBufferTimeout(
-                streamGraph, transformationId, transformation, context.getDefaultBufferTimeout());
+                streamGraph, transformationId, transformation, defaultBufferTimeout);
 
         if (transformation.getUid() != null) {
             streamGraph.setTransformationUID(transformationId, transformation.getUid());

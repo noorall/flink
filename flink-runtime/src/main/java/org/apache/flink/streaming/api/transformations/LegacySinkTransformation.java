@@ -89,16 +89,6 @@ public class LegacySinkTransformation<T> extends TransformationWithLineage<T> {
             Transformation<T> input,
             String name,
             StreamOperatorFactory<Object> operatorFactory,
-            int parallelism) {
-        super(name, input.getOutputType(), parallelism);
-        this.input = input;
-        this.operatorFactory = operatorFactory;
-    }
-
-    public LegacySinkTransformation(
-            Transformation<T> input,
-            String name,
-            StreamOperatorFactory<Object> operatorFactory,
             int parallelism,
             boolean parallelismConfigured,
             List<InputProperty> inputProperties) {

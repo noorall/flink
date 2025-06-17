@@ -22,15 +22,18 @@ import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.runtime.executiongraph.IndexRange;
 import org.apache.flink.runtime.executiongraph.ResultPartitionBytes;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
+import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import javax.annotation.Nullable;
 
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -41,7 +44,7 @@ public class AllToAllBlockingResultInfo extends AbstractBlockingResultInfo {
 
     private final boolean singleSubpartitionContainsAllData;
 
-    private boolean isBroadcast;
+    private Set<JobVertexID> broadcastConsumerJobVertices = new HashSet<>();
 
     /**
      * Aggregated subpartition bytes, which aggregates the subpartition bytes with the same
@@ -62,8 +65,8 @@ public class AllToAllBlockingResultInfo extends AbstractBlockingResultInfo {
                 numOfPartitions,
                 numOfSubpartitions,
                 singleSubpartitionContainsAllData,
+                new HashSet<>(),
                 new HashMap<>());
-        this.isBroadcast = isBroadcast;
     }
 
     AllToAllBlockingResultInfo(
@@ -71,15 +74,16 @@ public class AllToAllBlockingResultInfo extends AbstractBlockingResultInfo {
             int numOfPartitions,
             int numOfSubpartitions,
             boolean singleSubpartitionContainsAllData,
+            Set<JobVertexID> broadcastConsumerJobVertices,
             Map<Integer, long[]> subpartitionBytesByPartitionIndex) {
         super(resultId, numOfPartitions, numOfSubpartitions, subpartitionBytesByPartitionIndex);
         this.singleSubpartitionContainsAllData = singleSubpartitionContainsAllData;
-        this.isBroadcast = singleSubpartitionContainsAllData;
+        this.broadcastConsumerJobVertices = broadcastConsumerJobVertices;
     }
 
     @Override
-    public boolean isBroadcast() {
-        return isBroadcast;
+    public boolean isConsumingBroadcast(JobVertexID jobVertexId) {
+        return broadcastConsumerJobVertices.contains(jobVertexId);
     }
 
     @Override
@@ -87,12 +91,12 @@ public class AllToAllBlockingResultInfo extends AbstractBlockingResultInfo {
         return singleSubpartitionContainsAllData;
     }
 
-    void setBroadcast(boolean isBroadcast) {
-        this.isBroadcast = isBroadcast;
+    void addBroadcastConsumingJobVertex(JobVertexID jobVertexId) {
+        broadcastConsumerJobVertices.add(jobVertexId);
     }
 
     @Override
-    public boolean isPointwise() {
+    public boolean isConsumingPointwise() {
         return false;
     }
 
@@ -209,5 +213,17 @@ public class AllToAllBlockingResultInfo extends AbstractBlockingResultInfo {
             aggregatedSubpartitionBytes = getAggregatedSubpartitionBytesInternal();
         }
         return Collections.unmodifiableList(aggregatedSubpartitionBytes);
+    }
+
+    @Override
+    public String toString() {
+        return "AllToAllBlockingResultInfo{"
+                + "singleSubpartitionContainsAllData="
+                + singleSubpartitionContainsAllData
+                + ", broadcastConsumerJobVertices="
+                + broadcastConsumerJobVertices
+                + ", aggregatedSubpartitionBytes="
+                + aggregatedSubpartitionBytes
+                + '}';
     }
 }

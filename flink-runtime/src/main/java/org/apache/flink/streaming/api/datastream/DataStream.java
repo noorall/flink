@@ -87,6 +87,7 @@ import org.apache.flink.streaming.runtime.partitioner.RescalePartitioner;
 import org.apache.flink.streaming.runtime.partitioner.ShufflePartitioner;
 import org.apache.flink.streaming.runtime.partitioner.StreamPartitioner;
 import org.apache.flink.streaming.util.keys.KeySelectorUtil;
+import org.apache.flink.table.planner.plan.nodes.exec.InputProperty;
 import org.apache.flink.util.CloseableIterator;
 import org.apache.flink.util.Preconditions;
 import org.apache.flink.util.Utils;
@@ -837,7 +838,7 @@ public class DataStream<T> {
                         outTypeInfo,
                         environment.getParallelism(),
                         false,
-                        List.of());
+                        new ArrayList<>());
 
         @SuppressWarnings({"unchecked", "rawtypes"})
         SingleOutputStreamOperator<R> returnStream =
@@ -1062,6 +1063,12 @@ public class DataStream<T> {
     @PublicEvolving
     public PartitionWindowedStream<T> fullWindowPartition() {
         return new NonKeyedPartitionWindowedStream<>(environment, this);
+    }
+
+    @Internal
+    public DataStream<T> addInputProperties(InputProperty property) {
+        transformation.addInputProperty(property);
+        return this;
     }
 
     /**

@@ -18,6 +18,7 @@
 
 package org.apache.flink.table.runtime.operators.multipleinput.output;
 
+import org.apache.flink.annotation.Internal;
 import org.apache.flink.streaming.api.operators.Output;
 import org.apache.flink.streaming.api.operators.StreamOperator;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
@@ -27,6 +28,7 @@ import org.apache.flink.table.data.RowData;
  * Base {@link Output} that can be used to emit elements and other messages in {@link
  * MultipleInputStreamOperatorBase}.
  */
+@Internal
 public abstract class OutputBase implements Output<StreamRecord<RowData>> {
     private final StreamOperator<?> operator;
 

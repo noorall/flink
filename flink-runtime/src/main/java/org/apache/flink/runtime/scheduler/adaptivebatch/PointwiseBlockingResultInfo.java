@@ -20,6 +20,7 @@ package org.apache.flink.runtime.scheduler.adaptivebatch;
 
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
+import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -45,7 +46,7 @@ public class PointwiseBlockingResultInfo extends AbstractBlockingResultInfo {
     }
 
     @Override
-    public boolean isBroadcast() {
+    public boolean isConsumingBroadcast(JobVertexID jobVertexId) {
         return false;
     }
 
@@ -55,7 +56,7 @@ public class PointwiseBlockingResultInfo extends AbstractBlockingResultInfo {
     }
 
     @Override
-    public boolean isPointwise() {
+    public boolean isConsumingPointwise() {
         return true;
     }
 

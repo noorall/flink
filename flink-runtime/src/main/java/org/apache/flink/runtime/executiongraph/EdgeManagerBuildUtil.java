@@ -48,7 +48,7 @@ public class EdgeManagerBuildUtil {
     static void connectVertexToResult(
             ExecutionJobVertex vertex, IntermediateResult intermediateResult) {
         final DistributionPattern distributionPattern =
-                intermediateResult.getConsumingDistributionPattern();
+                intermediateResult.getConsumingDistributionPattern(vertex.getJobVertexId());
         final JobVertexInputInfo jobVertexInputInfo =
                 vertex.getGraph()
                         .getJobVertexInputInfo(vertex.getJobVertexId(), intermediateResult.getId());

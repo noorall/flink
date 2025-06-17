@@ -30,8 +30,10 @@ import org.apache.flink.streaming.api.graph.StreamNode;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /** Helper class to help maintain the information of an operator chain. */
 @Internal
@@ -48,6 +50,7 @@ public class OperatorChainInfo {
 
     private final List<OperatorCoordinator.Provider> coordinatorProviders;
     private final List<StreamNode> chainedNodes;
+    private final Set<Integer> chainedNodeIds;
     private final List<StreamEdge> transitiveOutEdges;
     private final List<StreamEdge> transitiveInEdges;
 
@@ -65,6 +68,8 @@ public class OperatorChainInfo {
         this.transitiveOutEdges = new ArrayList<>();
         this.transitiveInEdges = new ArrayList<>();
         this.chainedOperatorInfos = new HashMap<>();
+
+        this.chainedNodeIds = new HashSet<>();
     }
 
     public Integer getStartNodeId() {
@@ -121,6 +126,7 @@ public class OperatorChainInfo {
 
     public void recordChainedNode(StreamNode streamNode) {
         chainedNodes.add(streamNode);
+        chainedNodeIds.add(streamNode.getId());
     }
 
     public OperatorChainInfo newChain(Integer startNodeId) {
@@ -129,6 +135,10 @@ public class OperatorChainInfo {
 
     public List<StreamNode> getAllChainedNodes() {
         return chainedNodes;
+    }
+
+    public Set<Integer> getAllChainedNodeIds() {
+        return chainedNodeIds;
     }
 
     public boolean hasFormatContainer() {

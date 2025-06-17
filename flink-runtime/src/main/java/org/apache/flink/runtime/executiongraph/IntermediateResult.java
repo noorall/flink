@@ -37,6 +37,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static org.apache.flink.util.Preconditions.checkArgument;
@@ -198,8 +199,20 @@ public class IntermediateResult {
                 intermediateDataSet);
     }
 
-    public DistributionPattern getConsumingDistributionPattern() {
+    public DistributionPattern getProducingDistributionPattern() {
         return intermediateDataSet.getDistributionPattern();
+    }
+
+    public DistributionPattern getConsumingDistributionPattern(JobVertexID consumerId) {
+        return intermediateDataSet.getDistributionPattern(consumerId);
+    }
+
+    public Set<DistributionPattern> getConsumingDistributionPatterns() {
+        return intermediateDataSet.getConsumingDistributionPatterns();
+    }
+
+    public Set<JobVertexID> getConsumingBroadcastVertices() {
+        return intermediateDataSet.getConsumingBroadcastVertices();
     }
 
     /**
@@ -212,12 +225,20 @@ public class IntermediateResult {
      * @return true if the intermediate data set is using a broadcast distribution pattern; false
      *     otherwise.
      */
-    public boolean isBroadcast() {
+    public boolean isProducingBroadcast() {
         return intermediateDataSet.isBroadcast();
     }
 
-    public boolean isForward() {
+    public boolean isConsumingBroadcast(JobVertexID consumerId) {
+        return intermediateDataSet.isBroadcast(consumerId);
+    }
+
+    public boolean isProducingForward() {
         return intermediateDataSet.isForward();
+    }
+
+    public boolean isConsumingForward(JobVertexID consumerId) {
+        return intermediateDataSet.isForward(consumerId);
     }
 
     /**

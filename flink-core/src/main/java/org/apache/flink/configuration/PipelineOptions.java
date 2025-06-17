@@ -18,7 +18,9 @@
 
 package org.apache.flink.configuration;
 
+import org.apache.flink.annotation.Internal;
 import org.apache.flink.annotation.PublicEvolving;
+import org.apache.flink.annotation.docs.Documentation;
 import org.apache.flink.api.common.ExecutionConfig.ClosureCleanerLevel;
 import org.apache.flink.configuration.description.Description;
 import org.apache.flink.configuration.description.TextElement;
@@ -258,6 +260,16 @@ public class PipelineOptions {
                     .withDeprecatedKeys("pipeline.operator-chaining")
                     .withDescription(
                             "Operator chaining allows non-shuffle operations to be co-located in the same thread "
+                                    + "fully avoiding serialization and de-serialization.");
+
+    @Internal
+    @Documentation.ExcludeFromDocumentation("This is an internal config option.")
+    public static final ConfigOption<Boolean> MULTI_INPUT_OPERATOR_CHAINING =
+            key("pipeline.multi-input-operator-chaining.enabled")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withDescription(
+                            "MultiInput Operator chaining allows non-shuffle operations to be co-located in the same thread "
                                     + "fully avoiding serialization and de-serialization.");
 
     public static final ConfigOption<Boolean>

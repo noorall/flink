@@ -19,6 +19,7 @@
 package org.apache.flink.runtime.executiongraph;
 
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
+import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 public interface IntermediateResultInfo {
     /**
@@ -45,14 +46,14 @@ public interface IntermediateResultInfo {
      * @return true if the intermediate data set is using a broadcast distribution pattern; false
      *     otherwise.
      */
-    boolean isBroadcast();
+    boolean isConsumingBroadcast(JobVertexID consumerId);
 
     /**
      * Whether it is a pointwise result.
      *
      * @return whether it is a pointwise result
      */
-    boolean isPointwise();
+    boolean isConsumingPointwise();
 
     /**
      * Get number of partitions for this result.

@@ -168,7 +168,7 @@ public class AllToAllVertexInputInfoComputer {
             // This computer is only used in the adaptive batch scenario, where isDynamicGraph
             // should always be true.
             return VertexInputInfoComputationUtils.computeVertexInputInfos(
-                    parallelism, inputInfos, true);
+                    parallelism, inputInfos, true, jobVertexId);
         }
 
         // Divide the data into balanced n parts and describe each part by SubpartitionSlice.
@@ -193,7 +193,7 @@ public class AllToAllVertexInputInfoComputer {
             // This computer is only used in the adaptive batch scenario, where isDynamicGraph
             // should always be true.
             return VertexInputInfoComputationUtils.computeVertexInputInfos(
-                    parallelism, inputInfos, true);
+                    parallelism, inputInfos, true, jobVertexId);
         }
 
         List<IndexRange> subpartitionSliceRanges = optionalSubpartitionSliceRanges.get();
@@ -380,7 +380,7 @@ public class AllToAllVertexInputInfoComputer {
 
     private JobVertexInputInfo computeVertexInputInfoForInputWithoutInterKeysCorrelation(
             BlockingInputInfo inputInfo, int parallelism, long dataVolumePerTask) {
-        if (inputInfo.isBroadcast()) {
+        if (inputInfo.isConsumingBroadcast()) {
             return createdJobVertexInputInfoForBroadcast(inputInfo, parallelism);
         }
 

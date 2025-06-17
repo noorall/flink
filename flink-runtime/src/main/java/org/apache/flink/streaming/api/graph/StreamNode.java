@@ -24,6 +24,7 @@ import org.apache.flink.api.common.attribute.Attribute;
 import org.apache.flink.api.common.io.InputFormat;
 import org.apache.flink.api.common.io.OutputFormat;
 import org.apache.flink.api.common.operators.ResourceSpec;
+import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.core.memory.ManagedMemoryUseCase;
@@ -49,6 +50,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.apache.flink.util.Preconditions.checkArgument;
 import static org.apache.flink.util.Preconditions.checkNotNull;
@@ -61,6 +63,8 @@ public class StreamNode implements Serializable {
     private static final long serialVersionUID = 1L;
 
     private final int id;
+    private @Nullable List<TypeInformation<?>> inTypeInfos;
+    private final @Nullable TypeInformation<?> outTypeInfo;
     private int parallelism;
 
     /**
@@ -126,6 +130,8 @@ public class StreamNode implements Serializable {
                 operator == null ? null : SimpleOperatorFactory.of(operator),
                 operatorName,
                 jobVertexClass,
+                null,
+                null,
                 List.of());
     }
 
@@ -136,6 +142,8 @@ public class StreamNode implements Serializable {
             @Nullable StreamOperatorFactory<?> operatorFactory,
             String operatorName,
             Class<? extends TaskInvokable> jobVertexClass,
+            @Nullable List<TypeInformation<?>> inTypeInfos,
+            @Nullable TypeInformation<?> outTypeInfo,
             List<InputProperty> inputProperties) {
         this.id = id;
         this.operatorName = operatorName;
@@ -145,6 +153,20 @@ public class StreamNode implements Serializable {
         this.slotSharingGroup = slotSharingGroup;
         this.coLocationGroup = coLocationGroup;
         this.inputProperties = checkNotNull(inputProperties);
+        this.inTypeInfos = inTypeInfos;
+        this.outTypeInfo = outTypeInfo;
+    }
+
+    public List<TypeInformation<?>> getInTypeInfos() {
+        return inTypeInfos;
+    }
+
+    public void setInTypeInfos(@Nullable List<TypeInformation<?>> inTypeInfos) {
+        this.inTypeInfos = inTypeInfos;
+    }
+
+    public TypeInformation<?> getOutTypeInfo() {
+        return outTypeInfo;
     }
 
     public void addInEdge(StreamEdge inEdge) {
@@ -426,7 +448,7 @@ public class StreamNode implements Serializable {
         }
     }
 
-    boolean isParallelismConfigured() {
+    public boolean isParallelismConfigured() {
         return parallelismConfigured;
     }
 
@@ -479,6 +501,48 @@ public class StreamNode implements Serializable {
     }
 
     public List<InputProperty> getInputProperties() {
-        return Collections.unmodifiableList(inputProperties);
+        return inputProperties;
+    }
+
+    public void removeOutEdge(StreamEdge edge) {
+        outEdges.remove(edge);
+    }
+
+    public void removeInEdge(StreamEdge edge) {
+        inEdges.remove(edge);
+    }
+
+    private Map<Integer, InputProperty> inputPropertiesByTypeNumber;
+
+    public Map<Integer, InputProperty> getInputPropertiesByTypeNumber() {
+        if (inputPropertiesByTypeNumber == null) {
+            List<Integer> typeNumbers =
+                    inEdges.stream()
+                            .map(StreamEdge::getTypeNumber)
+                            .distinct()
+                            .collect(Collectors.toList());
+
+            inputPropertiesByTypeNumber = new HashMap<>();
+            for (int i = 0; i < typeNumbers.size(); i++) {
+                inputPropertiesByTypeNumber.put(typeNumbers.get(i), inputProperties.get(i));
+            }
+        }
+        return inputPropertiesByTypeNumber;
+    }
+
+    public void validateInputProperties() {
+        Set<Integer> typeNumbers =
+                inEdges.stream().map(StreamEdge::getTypeNumber).collect(Collectors.toSet());
+        checkState(typeNumbers.size() == inputProperties.size() || inputProperties.isEmpty());
+    }
+
+    private boolean isMultiInput;
+
+    public void setMultiInputNode(boolean isMultiInput) {
+        this.isMultiInput = isMultiInput;
+    }
+
+    public boolean isMultiInputNode() {
+        return false;
     }
 }

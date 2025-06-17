@@ -46,7 +46,7 @@ import org.apache.flink.streaming.api.transformations.TwoInputTransformation;
 import org.apache.flink.streaming.util.keys.KeySelectorUtil;
 import org.apache.flink.util.Utils;
 
-import java.util.List;
+import java.util.ArrayList;
 
 import static java.util.Objects.requireNonNull;
 
@@ -500,7 +500,7 @@ public class ConnectedStreams<IN1, IN2> {
                         outTypeInfo,
                         environment.getParallelism(),
                         false,
-                        List.of());
+                        new ArrayList<>());
 
         TypeInformation<?> keyType = null;
         if (inputStream1 instanceof KeyedStream) {

@@ -110,6 +110,10 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
 @Internal
 public abstract class Transformation<T> {
 
+    public void addInputProperty(InputProperty inputProperty) {
+        this.inputProperties.add(inputProperty);
+    }
+
     // Has to be equal to StreamGraphGenerator.UPPER_BOUND_MAX_PARALLELISM
     public static final int UPPER_BOUND_MAX_PARALLELISM = 1 << 15;
 
@@ -125,7 +129,7 @@ public abstract class Transformation<T> {
         return ID_COUNTER.incrementAndGet();
     }
 
-    protected final int id;
+    protected int id;
 
     protected String name;
 
@@ -676,5 +680,9 @@ public abstract class Transformation<T> {
 
     public Attribute getAttribute() {
         return attribute;
+    }
+
+    public void setTransformationId(int i) {
+        this.id = i;
     }
 }

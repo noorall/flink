@@ -18,6 +18,7 @@
 package org.apache.flink.streaming.api.datastream;
 
 import org.apache.flink.annotation.Experimental;
+import org.apache.flink.annotation.Internal;
 import org.apache.flink.annotation.Public;
 import org.apache.flink.annotation.PublicEvolving;
 import org.apache.flink.api.common.functions.InvalidTypesException;
@@ -31,6 +32,7 @@ import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.operators.ChainingStrategy;
 import org.apache.flink.streaming.api.transformations.PhysicalTransformation;
 import org.apache.flink.streaming.api.transformations.SideOutputTransformation;
+import org.apache.flink.table.planner.plan.nodes.exec.InputProperty;
 import org.apache.flink.util.OutputTag;
 
 import java.util.HashMap;
@@ -140,6 +142,12 @@ public class SingleOutputStreamOperator<T> extends DataStream<T> {
         OperatorValidationUtils.validateParallelism(parallelism, canBeParallel());
         transformation.setParallelism(parallelism);
 
+        return this;
+    }
+
+    @Internal
+    public SingleOutputStreamOperator<T> addInputProperties(InputProperty inputProperty) {
+        transformation.addInputProperty(inputProperty);
         return this;
     }
 

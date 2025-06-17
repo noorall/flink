@@ -21,6 +21,7 @@ package org.apache.flink.runtime.scheduler.adaptivebatch;
 import org.apache.flink.runtime.executiongraph.IndexRange;
 import org.apache.flink.runtime.executiongraph.ResultPartitionBytes;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
+import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import java.util.List;
 import java.util.Map;
@@ -53,7 +54,10 @@ public class BlockingInputInfo implements BlockingResultInfo {
      */
     private final boolean intraInputKeyCorrelated;
 
+    private final JobVertexID jobVertexId;
+
     public BlockingInputInfo(
+            JobVertexID jobVertexId,
             BlockingResultInfo blockingResultInfo,
             int inputTypeNumber,
             boolean interInputsKeysCorrelated,
@@ -62,6 +66,7 @@ public class BlockingInputInfo implements BlockingResultInfo {
         this.inputTypeNumber = inputTypeNumber;
         this.interInputsKeysCorrelated = interInputsKeysCorrelated;
         this.intraInputKeyCorrelated = intraInputKeyCorrelated;
+        this.jobVertexId = jobVertexId;
     }
 
     public int getInputTypeNumber() {
@@ -81,14 +86,18 @@ public class BlockingInputInfo implements BlockingResultInfo {
         return ((AllToAllBlockingResultInfo) blockingResultInfo).getAggregatedSubpartitionBytes();
     }
 
-    @Override
-    public boolean isBroadcast() {
-        return blockingResultInfo.isBroadcast();
+    public boolean isConsumingBroadcast() {
+        return blockingResultInfo.isConsumingBroadcast(this.jobVertexId);
     }
 
     @Override
-    public boolean isPointwise() {
-        return blockingResultInfo.isPointwise();
+    public boolean isConsumingBroadcast(JobVertexID jobVertexId) {
+        return isConsumingBroadcast();
+    }
+
+    @Override
+    public boolean isConsumingPointwise() {
+        return blockingResultInfo.isConsumingPointwise();
     }
 
     @Override
@@ -135,5 +144,21 @@ public class BlockingInputInfo implements BlockingResultInfo {
     @Override
     public void resetPartitionInfo(int partitionIndex) {
         throw new UnsupportedOperationException("Not allowed to modify read-only view.");
+    }
+
+    @Override
+    public String toString() {
+        return "BlockingInputInfo{"
+                + "blockingResultInfo="
+                + blockingResultInfo
+                + ", inputTypeNumber="
+                + inputTypeNumber
+                + ", interInputsKeysCorrelated="
+                + interInputsKeysCorrelated
+                + ", intraInputKeyCorrelated="
+                + intraInputKeyCorrelated
+                + ", jobVertexId="
+                + jobVertexId
+                + '}';
     }
 }
