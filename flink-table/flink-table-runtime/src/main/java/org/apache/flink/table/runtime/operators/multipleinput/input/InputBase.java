@@ -21,14 +21,13 @@ package org.apache.flink.table.runtime.operators.multipleinput.input;
 import org.apache.flink.streaming.api.operators.Input;
 import org.apache.flink.streaming.api.operators.KeyContextHandler;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
-import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.runtime.operators.multipleinput.MultipleInputStreamOperatorBase;
 
 /** Base {@link Input} used in {@link MultipleInputStreamOperatorBase}. */
-public abstract class InputBase implements Input<RowData>, KeyContextHandler {
+public abstract class InputBase<IN> implements Input<IN>, KeyContextHandler {
 
     @Override
-    public void setKeyContextElement(StreamRecord<RowData> record) throws Exception {
+    public void setKeyContextElement(StreamRecord<IN> record) throws Exception {
         // do nothing
     }
 

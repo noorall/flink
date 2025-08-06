@@ -26,7 +26,6 @@ import org.apache.flink.streaming.runtime.streamrecord.RecordAttributes;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
 import org.apache.flink.streaming.runtime.tasks.OperatorChain;
 import org.apache.flink.streaming.runtime.watermarkstatus.WatermarkStatus;
-import org.apache.flink.table.data.RowData;
 import org.apache.flink.util.OutputTag;
 import org.apache.flink.util.XORShiftRandom;
 
@@ -38,31 +37,31 @@ import java.util.Random;
  * <p>The functionality of this class is similar to {@link
  * OperatorChain#BroadcastingOutputCollector}.
  */
-public class BroadcastingOutput implements Output<StreamRecord<RowData>> {
-    protected final Output<StreamRecord<RowData>>[] outputs;
+public class BroadcastingOutput<OUT> implements Output<StreamRecord<OUT>> {
+    protected final Output<StreamRecord<OUT>>[] outputs;
     private final Random random = new XORShiftRandom();
 
-    public BroadcastingOutput(Output<StreamRecord<RowData>>[] outputs) {
+    public BroadcastingOutput(Output<StreamRecord<OUT>>[] outputs) {
         this.outputs = outputs;
     }
 
     @Override
     public void emitWatermark(Watermark mark) {
-        for (Output<StreamRecord<RowData>> output : outputs) {
+        for (Output<StreamRecord<OUT>> output : outputs) {
             output.emitWatermark(mark);
         }
     }
 
     @Override
     public void emitWatermarkStatus(WatermarkStatus watermarkStatus) {
-        for (Output<StreamRecord<RowData>> output : outputs) {
+        for (Output<StreamRecord<OUT>> output : outputs) {
             output.emitWatermarkStatus(watermarkStatus);
         }
     }
 
     @Override
     public <X> void collect(OutputTag<X> outputTag, StreamRecord<X> record) {
-        for (Output<StreamRecord<RowData>> output : outputs) {
+        for (Output<StreamRecord<OUT>> output : outputs) {
             output.collect(outputTag, record);
         }
     }
@@ -80,29 +79,29 @@ public class BroadcastingOutput implements Output<StreamRecord<RowData>> {
     }
 
     @Override
-    public void collect(StreamRecord<RowData> record) {
-        for (Output<StreamRecord<RowData>> output : outputs) {
+    public void collect(StreamRecord<OUT> record) {
+        for (Output<StreamRecord<OUT>> output : outputs) {
             output.collect(record);
         }
     }
 
     @Override
     public void close() {
-        for (Output<StreamRecord<RowData>> output : outputs) {
+        for (Output<StreamRecord<OUT>> output : outputs) {
             output.close();
         }
     }
 
     @Override
     public void emitRecordAttributes(RecordAttributes recordAttributes) {
-        for (Output<StreamRecord<RowData>> output : outputs) {
+        for (Output<StreamRecord<OUT>> output : outputs) {
             output.emitRecordAttributes(recordAttributes);
         }
     }
 
     @Override
     public void emitWatermark(WatermarkEvent watermark) {
-        for (Output<StreamRecord<RowData>> output : outputs) {
+        for (Output<StreamRecord<OUT>> output : outputs) {
             output.emitWatermark(watermark);
         }
     }

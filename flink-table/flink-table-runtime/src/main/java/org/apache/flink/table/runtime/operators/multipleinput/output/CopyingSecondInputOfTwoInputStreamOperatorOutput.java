@@ -27,21 +27,20 @@ import org.apache.flink.streaming.runtime.streamrecord.LatencyMarker;
 import org.apache.flink.streaming.runtime.streamrecord.RecordAttributes;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
 import org.apache.flink.streaming.runtime.watermarkstatus.WatermarkStatus;
-import org.apache.flink.table.data.RowData;
 import org.apache.flink.util.OutputTag;
 
 /**
  * An {@link Output} that can be used to emit copying elements and other messages for the second
  * input of {@link TwoInputStreamOperator}.
  */
-public class CopyingSecondInputOfTwoInputStreamOperatorOutput extends OutputBase {
+public class CopyingSecondInputOfTwoInputStreamOperatorOutput<IN1, IN2, OUT> extends OutputBase<IN2> {
 
-    private final TwoInputStreamOperator<RowData, RowData, RowData> operator;
-    private final TypeSerializer<RowData> serializer;
+    private final TwoInputStreamOperator<IN1, IN2, OUT> operator;
+    private final TypeSerializer<IN2> serializer;
 
     public CopyingSecondInputOfTwoInputStreamOperatorOutput(
-            TwoInputStreamOperator<RowData, RowData, RowData> operator,
-            TypeSerializer<RowData> serializer) {
+            TwoInputStreamOperator<IN1, IN2, OUT> operator,
+            TypeSerializer<IN2> serializer) {
         super(operator);
         this.operator = operator;
         this.serializer = serializer;
@@ -93,7 +92,7 @@ public class CopyingSecondInputOfTwoInputStreamOperatorOutput extends OutputBase
     }
 
     @Override
-    public void collect(StreamRecord<RowData> record) {
+    public void collect(StreamRecord<IN2> record) {
         pushToOperator(record);
     }
 
@@ -107,8 +106,8 @@ public class CopyingSecondInputOfTwoInputStreamOperatorOutput extends OutputBase
             // we know that the given outputTag matches our OutputTag so the record
             // must be of the type that our operator expects.
             @SuppressWarnings("unchecked")
-            StreamRecord<RowData> castRecord = (StreamRecord<RowData>) record;
-            StreamRecord<RowData> copy = castRecord.copy(serializer.copy(castRecord.getValue()));
+            StreamRecord<IN2> castRecord = (StreamRecord<IN2>) record;
+            StreamRecord<IN2> copy = castRecord.copy(serializer.copy(castRecord.getValue()));
 
             operator.processElement2(copy);
         } catch (Exception e) {

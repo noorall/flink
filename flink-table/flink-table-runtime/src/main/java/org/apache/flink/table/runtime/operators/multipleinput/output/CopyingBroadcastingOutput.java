@@ -21,7 +21,6 @@ package org.apache.flink.table.runtime.operators.multipleinput.output;
 import org.apache.flink.streaming.api.operators.Output;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
 import org.apache.flink.streaming.runtime.tasks.OperatorChain;
-import org.apache.flink.table.data.RowData;
 import org.apache.flink.util.OutputTag;
 
 /**
@@ -31,16 +30,16 @@ import org.apache.flink.util.OutputTag;
  * <p>The functionality of this class is similar to {@link
  * OperatorChain#CopyingBroadcastingOutputCollector}.
  */
-public class CopyingBroadcastingOutput extends BroadcastingOutput {
+public class CopyingBroadcastingOutput<OUT> extends BroadcastingOutput<OUT> {
 
-    public CopyingBroadcastingOutput(Output<StreamRecord<RowData>>[] outputs) {
+    public CopyingBroadcastingOutput(Output<StreamRecord<OUT>>[] outputs) {
         super(outputs);
     }
 
     @Override
-    public void collect(StreamRecord<RowData> record) {
+    public void collect(StreamRecord<OUT> record) {
         for (int i = 0; i < outputs.length - 1; i++) {
-            StreamRecord<RowData> shallowCopy = record.copy(record.getValue());
+            StreamRecord<OUT> shallowCopy = record.copy(record.getValue());
             outputs[i].collect(shallowCopy);
         }
 

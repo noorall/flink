@@ -25,5 +25,5 @@ import java.util.List;
 /** Interface for stream operators with multiple {@link Input}s. */
 @PublicEvolving
 public interface MultipleInputStreamOperator<OUT> extends StreamOperator<OUT> {
-    List<Input> getInputs();
+    List<Input<?>> getInputs();
 }

@@ -51,7 +51,7 @@ class TableOperatorWrapperTest extends MultipleInputTestBase {
         assertThat(wrapper1.getInputEdges()).isEmpty();
         assertThat(wrapper1.getInputWrappers()).isEmpty();
         assertThat(wrapper1.getOutputWrappers()).containsExactly(wrapper3);
-        assertThat(wrapper1.getOutputEdges()).containsExactly(new Edge<RowData>(
+        assertThat(wrapper1.getOutputEdges()).containsExactly(new Edge(
                 wrapper1,
                 wrapper3,
                 1));
@@ -59,7 +59,7 @@ class TableOperatorWrapperTest extends MultipleInputTestBase {
         assertThat(wrapper2.getInputEdges()).isEmpty();
         assertThat(wrapper2.getInputWrappers()).isEmpty();
         assertThat(wrapper2.getOutputWrappers()).containsExactly(wrapper3);
-        assertThat(wrapper2.getOutputEdges()).containsExactly(new Edge<>(
+        assertThat(wrapper2.getOutputEdges()).containsExactly(new Edge(
                 wrapper2,
                 wrapper3,
                 2));
@@ -70,8 +70,8 @@ class TableOperatorWrapperTest extends MultipleInputTestBase {
         assertThat(wrapper3.getInputEdges())
                 .isEqualTo(
                         Arrays.asList(
-                                new Edge<>(wrapper1, wrapper3, 1),
-                                new Edge<>(wrapper2, wrapper3, 2)));
+                                new Edge(wrapper1, wrapper3, 1),
+                                new Edge(wrapper2, wrapper3, 2)));
     }
 
     @Test

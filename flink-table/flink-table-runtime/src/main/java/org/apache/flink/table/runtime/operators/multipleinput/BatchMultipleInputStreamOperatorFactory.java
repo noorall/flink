@@ -21,24 +21,23 @@ package org.apache.flink.table.runtime.operators.multipleinput;
 import org.apache.flink.streaming.api.operators.AbstractStreamOperatorFactory;
 import org.apache.flink.streaming.api.operators.StreamOperator;
 import org.apache.flink.streaming.api.operators.StreamOperatorParameters;
-import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.runtime.operators.multipleinput.input.InputSpec;
 
 import java.util.List;
 
 /** The factory to create {@link BatchMultipleInputStreamOperator}. */
-public class BatchMultipleInputStreamOperatorFactory
-        extends AbstractStreamOperatorFactory<RowData> {
+public class BatchMultipleInputStreamOperatorFactory<OUT>
+        extends AbstractStreamOperatorFactory<OUT> {
     private static final long serialVersionUID = 1L;
 
     private final List<InputSpec> inputSpecs;
-    private final List<TableOperatorWrapper<?, RowData>> headWrappers;
-    private final TableOperatorWrapper<?, RowData> tailWrapper;
+    private final List<TableOperatorWrapper<?, ?>> headWrappers;
+    private final TableOperatorWrapper<?, OUT> tailWrapper;
 
     public BatchMultipleInputStreamOperatorFactory(
             List<InputSpec> inputSpecs,
-            List<TableOperatorWrapper<?, RowData>> headWrappers,
-            TableOperatorWrapper<?, RowData> tailWrapper) {
+            List<TableOperatorWrapper<?, ?>> headWrappers,
+            TableOperatorWrapper<?, OUT> tailWrapper) {
         this.inputSpecs = inputSpecs;
         this.headWrappers = headWrappers;
         this.tailWrapper = tailWrapper;
@@ -46,15 +45,15 @@ public class BatchMultipleInputStreamOperatorFactory
 
     @SuppressWarnings("unchecked")
     @Override
-    public <T extends StreamOperator<RowData>> T createStreamOperator(
-            StreamOperatorParameters<RowData> parameters) {
+    public <T extends StreamOperator<OUT>> T createStreamOperator(
+            StreamOperatorParameters<OUT> parameters) {
         return (T)
-                new BatchMultipleInputStreamOperator(
+                new BatchMultipleInputStreamOperator<>(
                         parameters, inputSpecs, headWrappers, tailWrapper);
     }
 
     @Override
-    public Class<? extends StreamOperator<RowData>> getStreamOperatorClass(ClassLoader classLoader) {
+    public Class<? extends StreamOperator> getStreamOperatorClass(ClassLoader classLoader) {
         return BatchMultipleInputStreamOperator.class;
     }
 }

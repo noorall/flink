@@ -22,21 +22,20 @@ import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.streaming.api.operators.Output;
 import org.apache.flink.streaming.api.operators.TwoInputStreamOperator;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
-import org.apache.flink.table.data.RowData;
 
 /**
  * An {@link Output} that can be used to emit copying elements and other messages for the first
  * input of {@link TwoInputStreamOperator}.
  */
-public class CopyingFirstInputOfTwoInputStreamOperatorOutput
-        extends FirstInputOfTwoInputStreamOperatorOutput {
+public class CopyingFirstInputOfTwoInputStreamOperatorOutput<IN1, IN2, OUT>
+        extends FirstInputOfTwoInputStreamOperatorOutput<IN1, IN2, OUT> {
 
-    private final TwoInputStreamOperator<RowData, RowData, RowData> operator;
-    private final TypeSerializer<RowData> serializer;
+    private final TwoInputStreamOperator<IN1, IN2, OUT> operator;
+    private final TypeSerializer<IN1> serializer;
 
     public CopyingFirstInputOfTwoInputStreamOperatorOutput(
-            TwoInputStreamOperator<RowData, RowData, RowData> operator,
-            TypeSerializer<RowData> serializer) {
+            TwoInputStreamOperator<IN1, IN2, OUT> operator,
+            TypeSerializer<IN1> serializer) {
         super(operator);
         this.operator = operator;
         this.serializer = serializer;
@@ -47,8 +46,8 @@ public class CopyingFirstInputOfTwoInputStreamOperatorOutput
             // we know that the given outputTag matches our OutputTag so the record
             // must be of the type that our operator expects.
             @SuppressWarnings("unchecked")
-            StreamRecord<RowData> castRecord = (StreamRecord<RowData>) record;
-            StreamRecord<RowData> copy = castRecord.copy(serializer.copy(castRecord.getValue()));
+            StreamRecord<IN1> castRecord = (StreamRecord<IN1>) record;
+            StreamRecord<IN1> copy = castRecord.copy(serializer.copy(castRecord.getValue()));
 
             operator.processElement1(copy);
         } catch (Exception e) {

@@ -26,19 +26,18 @@ import org.apache.flink.streaming.runtime.streamrecord.LatencyMarker;
 import org.apache.flink.streaming.runtime.streamrecord.RecordAttributes;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
 import org.apache.flink.streaming.runtime.watermarkstatus.WatermarkStatus;
-import org.apache.flink.table.data.RowData;
 import org.apache.flink.util.OutputTag;
 
 /**
  * An {@link Output} that can be used to emit elements and other messages for the first input of
  * {@link TwoInputStreamOperator}.
  */
-public class FirstInputOfTwoInputStreamOperatorOutput extends OutputBase {
+public class FirstInputOfTwoInputStreamOperatorOutput<IN1, IN2, OUT> extends OutputBase<IN1> {
 
-    private final TwoInputStreamOperator<RowData, RowData, RowData> operator;
+    private final TwoInputStreamOperator<IN1, IN2, OUT> operator;
 
     public FirstInputOfTwoInputStreamOperatorOutput(
-            TwoInputStreamOperator<RowData, RowData, RowData> operator) {
+            TwoInputStreamOperator<IN1, IN2, OUT> operator) {
         super(operator);
         this.operator = operator;
     }
@@ -89,7 +88,7 @@ public class FirstInputOfTwoInputStreamOperatorOutput extends OutputBase {
     }
 
     @Override
-    public void collect(StreamRecord<RowData> record) {
+    public void collect(StreamRecord<IN1> record) {
         pushToOperator(record);
     }
 
@@ -103,7 +102,7 @@ public class FirstInputOfTwoInputStreamOperatorOutput extends OutputBase {
             // we know that the given outputTag matches our OutputTag so the record
             // must be of the type that our operator expects.
             @SuppressWarnings("unchecked")
-            StreamRecord<RowData> castRecord = (StreamRecord<RowData>) record;
+            StreamRecord<IN1> castRecord = (StreamRecord<IN1>) record;
 
             operator.processElement1(castRecord);
         } catch (Exception e) {

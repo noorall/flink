@@ -26,20 +26,19 @@ import org.apache.flink.streaming.runtime.operators.asyncprocessing.AsyncStatePr
 import org.apache.flink.streaming.runtime.streamrecord.LatencyMarker;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
 import org.apache.flink.streaming.runtime.watermarkstatus.WatermarkStatus;
-import org.apache.flink.table.data.RowData;
 import org.apache.flink.util.function.ThrowingConsumer;
 
 /** {@link Input} for the second input of {@link TwoInputStreamOperator}. */
-public class SecondInputOfTwoInput extends InputBase implements AsyncStateProcessing {
+public class SecondInputOfTwoInput<IN1, IN2, OUT> extends InputBase<IN2> implements AsyncStateProcessing {
 
-    private final TwoInputStreamOperator<RowData, RowData, RowData> operator;
+    private final TwoInputStreamOperator<IN1, IN2, OUT> operator;
 
-    public SecondInputOfTwoInput(TwoInputStreamOperator<RowData, RowData, RowData> operator) {
+    public SecondInputOfTwoInput(TwoInputStreamOperator<IN1, IN2, OUT> operator) {
         this.operator = operator;
     }
 
     @Override
-    public void processElement(StreamRecord<RowData> element) throws Exception {
+    public void processElement(StreamRecord<IN2> element) throws Exception {
         operator.processElement2(element);
     }
 

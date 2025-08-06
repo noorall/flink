@@ -61,7 +61,8 @@ class OutputTest extends MultipleInputTestBase {
     @Test
     void testOneInput() throws Exception {
         TestingOneInputStreamOperator op = createOneInputStreamOperator();
-        OneInputStreamOperatorOutput output = new OneInputStreamOperatorOutput(op);
+        OneInputStreamOperatorOutput<RowData, RowData> output = new OneInputStreamOperatorOutput<>(
+                op);
 
         output.collect(element);
         assertThat(op.getCurrentElement()).isEqualTo(element);
@@ -76,8 +77,8 @@ class OutputTest extends MultipleInputTestBase {
     @Test
     void testCopyingOneInput() throws Exception {
         TestingOneInputStreamOperator op = createOneInputStreamOperator();
-        CopyingOneInputStreamOperatorOutput output =
-                new CopyingOneInputStreamOperatorOutput(op, serializer);
+        CopyingOneInputStreamOperatorOutput<RowData, RowData> output =
+                new CopyingOneInputStreamOperatorOutput<>(op, serializer);
 
         output.collect(element);
         assertThat(op.getCurrentElement()).isNotSameAs(element);
@@ -93,8 +94,8 @@ class OutputTest extends MultipleInputTestBase {
     @Test
     void testFirstInputOfTwoInput() throws Exception {
         TestingTwoInputStreamOperator op = createTwoInputStreamOperator();
-        FirstInputOfTwoInputStreamOperatorOutput output =
-                new FirstInputOfTwoInputStreamOperatorOutput(op);
+        FirstInputOfTwoInputStreamOperatorOutput<RowData, RowData, RowData> output =
+                new FirstInputOfTwoInputStreamOperatorOutput<>(op);
 
         output.collect(element);
         assertThat(op.getCurrentElement1()).isEqualTo(element);
@@ -112,8 +113,8 @@ class OutputTest extends MultipleInputTestBase {
     @Test
     void testCopyingFirstInputOfTwoInput() throws Exception {
         TestingTwoInputStreamOperator op = createTwoInputStreamOperator();
-        CopyingFirstInputOfTwoInputStreamOperatorOutput output =
-                new CopyingFirstInputOfTwoInputStreamOperatorOutput(op, serializer);
+        CopyingFirstInputOfTwoInputStreamOperatorOutput<RowData, RowData, RowData> output =
+                new CopyingFirstInputOfTwoInputStreamOperatorOutput<>(op, serializer);
 
         output.collect(element);
         assertThat(op.getCurrentElement1()).isNotSameAs(element);
@@ -132,8 +133,8 @@ class OutputTest extends MultipleInputTestBase {
     @Test
     void testSecondInputOfTwoInput() throws Exception {
         TestingTwoInputStreamOperator op = createTwoInputStreamOperator();
-        SecondInputOfTwoInputStreamOperatorOutput output =
-                new SecondInputOfTwoInputStreamOperatorOutput(op);
+        SecondInputOfTwoInputStreamOperatorOutput<RowData, RowData, RowData> output =
+                new SecondInputOfTwoInputStreamOperatorOutput<>(op);
 
         output.collect(element);
         assertThat(op.getCurrentElement2()).isEqualTo(element);
@@ -151,8 +152,8 @@ class OutputTest extends MultipleInputTestBase {
     @Test
     void testCopyingSecondInputOfTwoInput() throws Exception {
         TestingTwoInputStreamOperator op = createTwoInputStreamOperator();
-        CopyingSecondInputOfTwoInputStreamOperatorOutput output =
-                new CopyingSecondInputOfTwoInputStreamOperatorOutput(op, serializer);
+        CopyingSecondInputOfTwoInputStreamOperatorOutput<RowData, RowData, RowData> output =
+                new CopyingSecondInputOfTwoInputStreamOperatorOutput<>(op, serializer);
 
         output.collect(element);
         assertThat(op.getCurrentElement2()).isNotSameAs(element);
@@ -172,11 +173,11 @@ class OutputTest extends MultipleInputTestBase {
     void testBroadcasting() throws Exception {
         TestingOneInputStreamOperator op1 = createOneInputStreamOperator();
         TestingOneInputStreamOperator op2 = createOneInputStreamOperator();
-        BroadcastingOutput output =
-                new BroadcastingOutput(
-                        new Output[] {
-                            new OneInputStreamOperatorOutput(op1),
-                            new OneInputStreamOperatorOutput(op2)
+        BroadcastingOutput<RowData> output =
+                new BroadcastingOutput<RowData>(
+                        new Output[]{
+                                new OneInputStreamOperatorOutput(op1),
+                                new OneInputStreamOperatorOutput(op2)
                         });
 
         output.collect(element);
@@ -201,11 +202,11 @@ class OutputTest extends MultipleInputTestBase {
     void testCopyingBroadcasting() throws Exception {
         TestingOneInputStreamOperator op1 = createOneInputStreamOperator();
         TestingOneInputStreamOperator op2 = createOneInputStreamOperator();
-        CopyingBroadcastingOutput output =
-                new CopyingBroadcastingOutput(
-                        new Output[] {
-                            new OneInputStreamOperatorOutput(op1),
-                            new OneInputStreamOperatorOutput(op2)
+        CopyingBroadcastingOutput<RowData> output =
+                new CopyingBroadcastingOutput<RowData>(
+                        new Output[]{
+                                new OneInputStreamOperatorOutput(op1),
+                                new OneInputStreamOperatorOutput(op2)
                         });
 
         output.collect(element);

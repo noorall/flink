@@ -22,19 +22,18 @@ import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.streaming.api.operators.OneInputStreamOperator;
 import org.apache.flink.streaming.api.operators.Output;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
-import org.apache.flink.table.data.RowData;
 
 /**
  * An {@link Output} that can be used to emit copying elements and other messages for {@link
  * OneInputStreamOperator}.
  */
-public class CopyingOneInputStreamOperatorOutput extends OneInputStreamOperatorOutput {
+public class CopyingOneInputStreamOperatorOutput<IN, OUT> extends OneInputStreamOperatorOutput<IN, OUT> {
 
-    private final OneInputStreamOperator<RowData, RowData> operator;
-    private final TypeSerializer<RowData> serializer;
+    private final OneInputStreamOperator<IN, OUT> operator;
+    private final TypeSerializer<IN> serializer;
 
     public CopyingOneInputStreamOperatorOutput(
-            OneInputStreamOperator<RowData, RowData> operator, TypeSerializer<RowData> serializer) {
+            OneInputStreamOperator<IN, OUT> operator, TypeSerializer<IN> serializer) {
         super(operator);
         this.operator = operator;
         this.serializer = serializer;
@@ -45,8 +44,8 @@ public class CopyingOneInputStreamOperatorOutput extends OneInputStreamOperatorO
             // we know that the given outputTag matches our OutputTag so the record
             // must be of the type that our operator expects.
             @SuppressWarnings("unchecked")
-            StreamRecord<RowData> castRecord = (StreamRecord<RowData>) record;
-            StreamRecord<RowData> copy = castRecord.copy(serializer.copy(castRecord.getValue()));
+            StreamRecord<IN> castRecord = (StreamRecord<IN>) record;
+            StreamRecord<IN> copy = castRecord.copy(serializer.copy(castRecord.getValue()));
 
             operator.processElement(copy);
         } catch (Exception e) {

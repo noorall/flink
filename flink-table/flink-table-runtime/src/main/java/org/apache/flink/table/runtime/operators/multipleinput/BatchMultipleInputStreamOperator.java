@@ -25,7 +25,6 @@ import org.apache.flink.streaming.api.operators.BoundedMultiInput;
 import org.apache.flink.streaming.api.operators.InputSelectable;
 import org.apache.flink.streaming.api.operators.InputSelection;
 import org.apache.flink.streaming.api.operators.StreamOperatorParameters;
-import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.runtime.operators.multipleinput.input.InputSelectionHandler;
 import org.apache.flink.table.runtime.operators.multipleinput.input.InputSpec;
 
@@ -34,17 +33,17 @@ import java.util.List;
 import static org.apache.flink.util.Preconditions.checkState;
 
 /** A {@link MultipleInputStreamOperatorBase} to handle batch operators. */
-public class BatchMultipleInputStreamOperator extends MultipleInputStreamOperatorBase
+public class BatchMultipleInputStreamOperator<OUT> extends MultipleInputStreamOperatorBase<OUT>
         implements BoundedMultiInput, InputSelectable {
     private static final long serialVersionUID = 1L;
 
     private final InputSelectionHandler inputSelectionHandler;
 
     public BatchMultipleInputStreamOperator(
-            StreamOperatorParameters<RowData> parameters,
+            StreamOperatorParameters<OUT> parameters,
             List<InputSpec> inputSpecs,
-            List<TableOperatorWrapper<?, RowData>> headWrapper,
-            TableOperatorWrapper<?, RowData> tailWrapper) {
+            List<TableOperatorWrapper<?, ?>> headWrapper,
+            TableOperatorWrapper<?, OUT> tailWrapper) {
         super(parameters, inputSpecs, headWrapper, tailWrapper);
         inputSelectionHandler = InputSelectionHandler.fromInputSpecs(inputSpecs);
     }
@@ -62,8 +61,8 @@ public class BatchMultipleInputStreamOperator extends MultipleInputStreamOperato
     }
 
     protected StreamConfig createStreamConfig(
-            StreamOperatorParameters<RowData> multipleInputOperatorParameters,
-            TableOperatorWrapper<?, RowData> wrapper) {
+            StreamOperatorParameters<OUT> multipleInputOperatorParameters,
+            TableOperatorWrapper<?, ?> wrapper) {
         StreamConfig streamConfig =
                 super.createStreamConfig(multipleInputOperatorParameters, wrapper);
         checkState(wrapper.getManagedMemoryFraction() >= 0);

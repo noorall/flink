@@ -52,7 +52,7 @@ class InputTest extends MultipleInputTestBase {
     @Test
     void testOneInput() throws Exception {
         TestingOneInputStreamOperator op = createOneInputStreamOperator();
-        OneInput input = new OneInput(op);
+        OneInput<RowData, RowData> input = new OneInput<>(op);
 
         input.processElement(element);
         assertThat(op.getCurrentElement()).isEqualTo(element);
@@ -67,7 +67,7 @@ class InputTest extends MultipleInputTestBase {
     @Test
     void testFirstInputOfTwoInput() throws Exception {
         TestingTwoInputStreamOperator op = createTwoInputStreamOperator();
-        FirstInputOfTwoInput input = new FirstInputOfTwoInput(op);
+        FirstInputOfTwoInput<RowData, RowData, RowData> input = new FirstInputOfTwoInput<>(op);
 
         input.processElement(element);
         assertThat(op.getCurrentElement1()).isEqualTo(element);
@@ -85,7 +85,7 @@ class InputTest extends MultipleInputTestBase {
     @Test
     void testSecondInputOfTwoInput() throws Exception {
         TestingTwoInputStreamOperator op = createTwoInputStreamOperator();
-        SecondInputOfTwoInput input = new SecondInputOfTwoInput(op);
+        SecondInputOfTwoInput<RowData, RowData, RowData> input = new SecondInputOfTwoInput<>(op);
 
         input.processElement(element);
         assertThat(op.getCurrentElement2()).isEqualTo(element);
