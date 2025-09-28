@@ -264,7 +264,11 @@ public class BatchJobRecoveryTest {
         }
 
         waitUntilWriteExecutionVertexFinishedEventPersisted(5);
-        runInMainThread(() -> jobEventStore.stop(false));
+        runInMainThread(
+                () -> {
+                    scheduler.cancel();
+                    jobEventStore.stop(false);
+                });
 
         // register all produced partitions
         registerPartitions(scheduler);
@@ -360,7 +364,11 @@ public class BatchJobRecoveryTest {
                 getCurrentAttemptIds(scheduler.getExecutionJobVertex(MIDDLE_ID));
 
         waitUntilWriteExecutionVertexFinishedEventPersisted(6);
-        runInMainThread(() -> jobEventStore.stop(false));
+        runInMainThread(
+                () -> {
+                    scheduler.cancel();
+                    jobEventStore.stop(false);
+                });
 
         // register partitions, the partition of source task 0 is lost, and it will be restarted
         // if middle task 0 need be restarted.
@@ -462,6 +470,7 @@ public class BatchJobRecoveryTest {
         waitUntilWriteExecutionVertexFinishedEventPersisted(5);
         runInMainThread(
                 () -> {
+                    scheduler.cancel();
                     jobEventStore.stop(false);
                 });
 
@@ -548,7 +557,11 @@ public class BatchJobRecoveryTest {
                 getCurrentAttemptIds(scheduler.getExecutionJobVertex(SOURCE_ID));
 
         waitUntilWriteExecutionVertexFinishedEventPersisted(5);
-        runInMainThread(() -> jobEventStore.stop(false));
+        runInMainThread(
+                () -> {
+                    scheduler.cancel();
+                    jobEventStore.stop(false);
+                });
 
         int losePartitionsTaskIndex = 0;
 
@@ -619,7 +632,11 @@ public class BatchJobRecoveryTest {
                 getCurrentAttemptIds(scheduler.getExecutionJobVertex(SINK_ID));
 
         waitUntilWriteExecutionVertexFinishedEventPersisted(12);
-        runInMainThread(() -> jobEventStore.stop(false));
+        runInMainThread(
+                () -> {
+                    scheduler.cancel();
+                    jobEventStore.stop(false);
+                });
 
         // start a new scheduler and try to recover.
         AdaptiveBatchScheduler newScheduler = createScheduler(jobGraph);
@@ -682,6 +699,7 @@ public class BatchJobRecoveryTest {
         waitUntilWriteExecutionVertexFinishedEventPersisted(5);
         runInMainThread(
                 () -> {
+                    scheduler.cancel();
                     jobEventStore.stop(false);
                 });
 
