@@ -28,6 +28,7 @@ import org.apache.flink.streaming.api.graph.util.ImmutableStreamEdge;
 import org.apache.flink.streaming.api.graph.util.ImmutableStreamGraph;
 import org.apache.flink.streaming.api.graph.util.ImmutableStreamNode;
 import org.apache.flink.streaming.api.graph.util.StreamEdgeUpdateRequestInfo;
+import org.apache.flink.streaming.api.graph.util.StreamGraphUpdateRequestInfo;
 import org.apache.flink.streaming.api.graph.util.StreamNodeUpdateRequestInfo;
 import org.apache.flink.streaming.api.operators.StreamOperatorFactory;
 import org.apache.flink.streaming.runtime.partitioner.ForwardForConsecutiveHashPartitioner;
@@ -85,7 +86,8 @@ public class DefaultStreamGraphContext implements StreamGraphContext {
     private final Map<String, IntermediateDataSet> consumerEdgeIdToIntermediateDataSetMap;
     private final Set<Integer> finishedStreamNodeIds;
 
-    @Nullable private final StreamGraphUpdateListener streamGraphUpdateListener;
+    @Nullable
+    private final StreamGraphUpdateListener streamGraphUpdateListener;
     private final Set<StreamNode> frozenNodes;
     private final ClassLoader userClassloader;
 
@@ -108,7 +110,8 @@ public class DefaultStreamGraphContext implements StreamGraphContext {
                 finishedStreamNodeIds,
                 userClassloader,
                 null,
-                ignored -> {});
+                ignored -> {
+                });
     }
 
     public DefaultStreamGraphContext(
@@ -145,6 +148,11 @@ public class DefaultStreamGraphContext implements StreamGraphContext {
     @Override
     public StreamGraph getStreamGraphInternal() {
         return streamGraph;
+    }
+
+    @Override
+    public Set<Integer> getFrozenNodeIds() {
+        return frozenNodes.stream().map(StreamNode::getId).collect(Collectors.toSet());
     }
 
     @Override
@@ -210,6 +218,12 @@ public class DefaultStreamGraphContext implements StreamGraphContext {
             streamGraphUpdateListener.onStreamGraphUpdated();
         }
 
+        return true;
+    }
+
+    @Override
+    public boolean modifyStreamGraph(StreamGraphUpdateRequestInfo requestInfo) {
+        
         return true;
     }
 
@@ -285,8 +299,8 @@ public class DefaultStreamGraphContext implements StreamGraphContext {
             }
             if (newPartitioner.getClass().equals(ForwardPartitioner.class)
                     && !canTargetMergeIntoSourceForwardGroup(
-                            steamNodeIdToForwardGroupMap.get(targetEdge.getSourceId()),
-                            steamNodeIdToForwardGroupMap.get(targetEdge.getTargetId()))) {
+                    steamNodeIdToForwardGroupMap.get(targetEdge.getSourceId()),
+                    steamNodeIdToForwardGroupMap.get(targetEdge.getTargetId()))) {
                 LOG.info(
                         "Skip modifying edge {} because forward groups can not be merged.",
                         targetEdge);
@@ -370,8 +384,8 @@ public class DefaultStreamGraphContext implements StreamGraphContext {
             return !frozenNodeToStartNodeMap.containsKey(sourceNodeId)
                     && StreamingJobGraphGenerator.isChainable(targetEdge, streamGraph, true)
                     && canTargetMergeIntoSourceForwardGroup(
-                            steamNodeIdToForwardGroupMap.get(sourceNodeId),
-                            steamNodeIdToForwardGroupMap.get(targetNodeId));
+                    steamNodeIdToForwardGroupMap.get(sourceNodeId),
+                    steamNodeIdToForwardGroupMap.get(targetNodeId));
         } else if (targetEdge.getPartitioner() instanceof ForwardForConsecutiveHashPartitioner) {
             return canTargetMergeIntoSourceForwardGroup(
                     steamNodeIdToForwardGroupMap.get(sourceNodeId),
@@ -443,6 +457,8 @@ public class DefaultStreamGraphContext implements StreamGraphContext {
         throw new RuntimeException(
                 String.format(
                         "Stream edge with id '%s' is not found whose source id is %d, target id is %d.",
-                        edgeId, sourceId, targetId));
+                        edgeId,
+                        sourceId,
+                        targetId));
     }
 }

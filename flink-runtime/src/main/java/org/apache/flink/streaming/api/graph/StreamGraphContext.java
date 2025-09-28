@@ -23,6 +23,7 @@ import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 import org.apache.flink.streaming.api.graph.util.ImmutableStreamGraph;
 import org.apache.flink.streaming.api.graph.util.ImmutableStreamNode;
 import org.apache.flink.streaming.api.graph.util.StreamEdgeUpdateRequestInfo;
+import org.apache.flink.streaming.api.graph.util.StreamGraphUpdateRequestInfo;
 import org.apache.flink.streaming.api.graph.util.StreamNodeUpdateRequestInfo;
 import org.apache.flink.streaming.api.operators.StreamOperatorFactory;
 import org.apache.flink.streaming.runtime.partitioner.StreamPartitioner;
@@ -30,6 +31,7 @@ import org.apache.flink.streaming.runtime.partitioner.StreamPartitioner;
 import javax.annotation.Nullable;
 
 import java.util.List;
+import java.util.Set;
 import java.util.function.Consumer;
 
 /**
@@ -48,12 +50,15 @@ public interface StreamGraphContext {
 
     StreamGraph getStreamGraphInternal();
 
+    Set<Integer> getFrozenNodeIds();
+
     /**
      * Retrieves the {@link StreamOperatorFactory} for the specified stream node id.
      *
      * @param streamNodeId the id of the stream node
+     *
      * @return the {@link StreamOperatorFactory} associated with the given {@code streamNodeId}, or
-     *     {@code null} if no operator factory is available.
+     *         {@code null} if no operator factory is available.
      */
     @Nullable
     StreamOperatorFactory<?> getOperatorFactory(Integer streamNodeId);
@@ -66,6 +71,7 @@ public interface StreamGraphContext {
      * maintaining the consistency of the StreamGraph.
      *
      * @param requestInfos the stream edges to be modified.
+     *
      * @return true if all modifications were successful and applied atomically, false otherwise.
      */
     boolean modifyStreamEdge(List<StreamEdgeUpdateRequestInfo> requestInfos);
@@ -74,15 +80,19 @@ public interface StreamGraphContext {
      * Modifies stream nodes within the StreamGraph.
      *
      * @param requestInfos the stream nodes to be modified.
+     *
      * @return true if the modification was successful, false otherwise.
      */
     boolean modifyStreamNode(List<StreamNodeUpdateRequestInfo> requestInfos);
+
+    boolean modifyStreamGraph(StreamGraphUpdateRequestInfo requestInfo);
 
     /**
      * Check if the upstream nodes of the stream node with the specified type number have finished.
      * If the type number is null, evaluate the completion of all upstream processes.
      *
      * @param streamNode the stream node that needs to be determined.
+     *
      * @return true if all upstream nodes are finished, false otherwise.
      */
     boolean checkUpstreamNodesFinished(
@@ -92,6 +102,7 @@ public interface StreamGraphContext {
      * Retrieves the IntermediateDataSetID consumed by the specified edge.
      *
      * @param edgeId id of the edge
+     *
      * @return the consumed IntermediateDataSetID
      */
     IntermediateDataSetID getConsumedIntermediateDataSetId(String edgeId);
@@ -111,6 +122,7 @@ public interface StreamGraphContext {
      * @param edgeId id of the edge
      * @param sourceId source node id of the edge
      * @param targetId target node id of the edge
+     *
      * @return the output partitioner
      */
     @Nullable

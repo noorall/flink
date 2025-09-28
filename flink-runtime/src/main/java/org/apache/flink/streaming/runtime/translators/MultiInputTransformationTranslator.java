@@ -120,6 +120,7 @@ public class MultiInputTransformationTranslator<OUT>
         for (int i = 0; i < inputTransformations.size(); i++) {
             final Transformation<?> inputTransformation = inputTransformations.get(i);
             final Collection<Integer> inputIds = context.getStreamNodeIds(inputTransformation);
+            // 对于union的情况
             for (Integer inputId : inputIds) {
                 streamGraph.addEdge(inputId, transformationId, i + 1);
             }

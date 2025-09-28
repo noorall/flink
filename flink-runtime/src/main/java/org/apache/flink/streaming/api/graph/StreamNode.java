@@ -88,7 +88,8 @@ public class StreamNode implements Serializable {
 
     // Mark the operator factory as transient because we will manually parallelize its serialization
     // when serializing StreamGraph.
-    private @Nullable transient StreamOperatorFactory<?> operatorFactory;
+    private @Nullable
+    transient StreamOperatorFactory<?> operatorFactory;
     private TypeSerializer<?>[] typeSerializersIn = new TypeSerializer[0];
     private TypeSerializer<?> typeSerializerOut;
 
@@ -243,7 +244,7 @@ public class StreamNode implements Serializable {
         setParallelism(parallelism, true);
     }
 
-    void setParallelism(Integer parallelism, boolean parallelismConfigured) {
+    public void setParallelism(Integer parallelism, boolean parallelismConfigured) {
         this.parallelism = parallelism;
         this.parallelismConfigured =
                 parallelismConfigured && parallelism != ExecutionConfig.PARALLELISM_DEFAULT;
@@ -387,7 +388,7 @@ public class StreamNode implements Serializable {
     public boolean isSameSlotSharingGroup(StreamNode downstreamVertex) {
         return (slotSharingGroup == null && downstreamVertex.slotSharingGroup == null)
                 || (slotSharingGroup != null
-                        && slotSharingGroup.equals(downstreamVertex.slotSharingGroup));
+                && slotSharingGroup.equals(downstreamVertex.slotSharingGroup));
     }
 
     @Override

@@ -30,6 +30,8 @@ public class StreamEdgeUpdateRequestInfo {
     private final Integer sourceId;
     private final Integer targetId;
 
+    // properties can be updated
+
     private StreamPartitioner<?> outputPartitioner;
 
     // The type number for the input of co-tasks.
@@ -38,7 +40,14 @@ public class StreamEdgeUpdateRequestInfo {
     private int typeNumber;
 
     // Null means no modifications will be applied to it
-    @Nullable private Boolean intraInputKeyCorrelated;
+    @Nullable
+    private Boolean intraInputKeyCorrelated;
+
+    @Nullable
+    private Integer newTargetId;
+
+    @Nullable
+    private Integer newSourceId;
 
     public StreamEdgeUpdateRequestInfo(String edgeId, Integer sourceId, Integer targetId) {
         this.edgeId = edgeId;
@@ -60,6 +69,16 @@ public class StreamEdgeUpdateRequestInfo {
     public StreamEdgeUpdateRequestInfo withIntraInputKeyCorrelated(
             boolean intraInputKeyCorrelated) {
         this.intraInputKeyCorrelated = intraInputKeyCorrelated;
+        return this;
+    }
+
+    public StreamEdgeUpdateRequestInfo withNewTargetId(int newTargetId) {
+        this.newTargetId = newTargetId;
+        return this;
+    }
+
+    public StreamEdgeUpdateRequestInfo withNewSourceId(int newSourceId) {
+        this.newSourceId = newSourceId;
         return this;
     }
 

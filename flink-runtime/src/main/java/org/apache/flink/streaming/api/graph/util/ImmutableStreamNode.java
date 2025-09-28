@@ -19,10 +19,14 @@
 package org.apache.flink.streaming.api.graph.util;
 
 import org.apache.flink.annotation.Internal;
+import org.apache.flink.api.common.operators.ResourceSpec;
+import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
+import org.apache.flink.core.memory.ManagedMemoryUseCase;
 import org.apache.flink.streaming.api.graph.StreamEdge;
 import org.apache.flink.streaming.api.graph.StreamNode;
 import org.apache.flink.streaming.api.operators.StreamOperatorFactory;
+import org.apache.flink.table.planner.plan.nodes.exec.InputProperty;
 
 import javax.annotation.Nullable;
 
@@ -30,7 +34,10 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+
+import static org.apache.flink.util.Preconditions.checkNotNull;
 
 /** Helper class that provides read-only StreamNode. */
 @Internal
@@ -83,6 +90,44 @@ public class ImmutableStreamNode {
         return Arrays.stream(streamNode.getTypeSerializersIn())
                 .filter(Objects::nonNull)
                 .toArray(TypeSerializer<?>[]::new);
+    }
+
+    public List<InputProperty> getInputProperties() {
+        return Collections.unmodifiableList(streamNode.getInputProperties());
+    }
+
+    public boolean isParallelismConfigured() {
+        return streamNode.isParallelismConfigured();
+    }
+
+    public String getOperatorName() {
+        return streamNode.getOperatorName();
+    }
+
+    public ResourceSpec getMinResources() {
+        return streamNode.getMinResources();
+    }
+
+    public ResourceSpec getPreferredResources() {
+        return streamNode.getPreferredResources();
+    }
+
+    public Map<ManagedMemoryUseCase, Integer> getManagedMemoryOperatorScopeUseCaseWeights() {
+        return Collections.unmodifiableMap(streamNode.getManagedMemoryOperatorScopeUseCaseWeights());
+    }
+
+    public List<TypeInformation<?>> getInTypeInfos() {
+        List<TypeInformation<?>> inTypeInfos = streamNode.getInTypeInfos();
+        checkNotNull(inTypeInfos);
+        return Collections.unmodifiableList(inTypeInfos);
+    }
+
+    public TypeInformation<?> getOutTypeInfo() {
+        return checkNotNull(streamNode.getOutTypeInfo());
+    }
+
+    public String getSlotSharingGroup() {
+        return streamNode.getSlotSharingGroup();
     }
 
     @Override

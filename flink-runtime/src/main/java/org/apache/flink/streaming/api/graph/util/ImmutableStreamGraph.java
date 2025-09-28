@@ -22,8 +22,12 @@ import org.apache.flink.annotation.Internal;
 import org.apache.flink.configuration.ReadableConfig;
 import org.apache.flink.streaming.api.graph.StreamGraph;
 
+import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /** Helper class that provides read-only StreamGraph. */
 @Internal
@@ -53,5 +57,18 @@ public class ImmutableStreamGraph {
 
     public ClassLoader getUserClassLoader() {
         return userClassloader;
+    }
+
+    public List<ImmutableStreamNode> getStreamNodesSortedTopologicallyFromSources() {
+        return streamGraph
+                .getStreamNodesSortedTopologicallyFromSources()
+                .stream()
+                .map(n -> getStreamNode(n.getId()))
+                .collect(
+                        Collectors.toList());
+    }
+
+    public Collection<Integer> getSinkIDs() {
+        return Collections.unmodifiableCollection(streamGraph.getSinkIDs());
     }
 }
